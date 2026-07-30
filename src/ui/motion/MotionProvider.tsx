@@ -1,22 +1,11 @@
 import { MotionConfig } from "motion/react";
 import {
-  createContext,
   type PropsWithChildren,
-  useContext,
   useEffect,
   useMemo,
   useState,
 } from "react";
-
-type QuestMotion = {
-  duration: number;
-  reduced: boolean;
-};
-
-const MotionContext = createContext<QuestMotion>({
-  duration: 0.24,
-  reduced: false,
-});
+import { QuestMotionContext } from "./motionContext";
 
 function systemPrefersReducedMotion() {
   return (
@@ -47,14 +36,10 @@ export function MotionProvider({
   );
 
   return (
-    <MotionContext.Provider value={value}>
+    <QuestMotionContext.Provider value={value}>
       <MotionConfig reducedMotion={reduced ? "always" : "user"}>
         {children}
       </MotionConfig>
-    </MotionContext.Provider>
+    </QuestMotionContext.Provider>
   );
-}
-
-export function useQuestMotion() {
-  return useContext(MotionContext);
 }

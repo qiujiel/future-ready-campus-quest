@@ -3,7 +3,8 @@ import { useRef, useState } from "react";
 import { Button } from "../../src/ui/Button";
 import { Card } from "../../src/ui/Card";
 import { Dialog } from "../../src/ui/Dialog";
-import { MotionProvider, useQuestMotion } from "../../src/ui/motion/MotionProvider";
+import { MotionProvider } from "../../src/ui/motion/MotionProvider";
+import { useQuestMotion } from "../../src/ui/motion/motionContext";
 import { StatusPill } from "../../src/ui/StatusPill";
 import { ToastRegion } from "../../src/ui/ToastRegion";
 

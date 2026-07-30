@@ -35,10 +35,11 @@ export function Dialog({
   useEffect(() => {
     if (!open) return;
     const fallbackFocus = document.activeElement as HTMLElement | null;
+    const returnTarget = returnFocusRef?.current ?? fallbackFocus;
     const first = panelRef.current?.querySelector<HTMLElement>(focusableSelector);
     first?.focus();
     return () => {
-      (returnFocusRef?.current ?? fallbackFocus)?.focus();
+      returnTarget?.focus();
     };
   }, [open, returnFocusRef]);
 

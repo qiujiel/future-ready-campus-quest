@@ -389,6 +389,136 @@ button:disabled {
   background: #dff7ed;
 }
 
+.join-journey {
+  gap: 1.25rem;
+}
+
+.join-step {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  gap: 0.85rem;
+  border-top: 1px solid rgb(21 33 61 / 18%);
+  padding-top: 1.25rem;
+}
+
+.join-step:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.join-step__number {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  margin: 0;
+  border: 2px solid var(--color-ink);
+  border-radius: 50%;
+  background: var(--color-sun);
+  font-weight: 900;
+}
+
+.join-step h2 {
+  margin: 0;
+  font-size: clamp(1.15rem, 4vw, 1.45rem);
+}
+
+.join-step p {
+  margin-block: 0.45rem 0.9rem;
+  line-height: 1.5;
+}
+
+.join-fields {
+  display: grid;
+  gap: 1rem;
+}
+
+.group-studio {
+  min-height: 100vh;
+  padding-block: max(2rem, env(safe-area-inset-top))
+    max(2rem, env(safe-area-inset-bottom));
+}
+
+.group-studio__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.group-studio__header h1 {
+  font-size: clamp(2rem, 7vw, 4.2rem);
+}
+
+.group-avatar {
+  display: grid;
+  width: clamp(4.5rem, 18vw, 7rem);
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 3px solid var(--color-ink);
+  border-radius: 34% 66% 58% 42%;
+  background: var(--color-sun);
+  box-shadow: 5px 5px 0 var(--color-ink);
+  font-size: clamp(1.8rem, 7vw, 3rem);
+  font-weight: 950;
+}
+
+.group-studio__grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.member-list {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.member-list li {
+  border-radius: var(--radius-control);
+  padding: 0.7rem 0.85rem;
+  background: var(--color-info-soft);
+  font-weight: 750;
+}
+
+.group-lock-note {
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-control);
+  padding: 0.8rem 1rem;
+  background: var(--color-warning-soft);
+  font-weight: 750;
+}
+
+.group-image-uploader {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.group-image-uploader label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 750;
+}
+
+.group-image-preview {
+  width: min(12rem, 100%);
+  aspect-ratio: 1;
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-card);
+  object-fit: cover;
+}
+
+@media (min-width: 48rem) {
+  .join-fields,
+  .group-studio__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .control-panel h2,
 .privacy-card h2 {
   margin-top: 0;

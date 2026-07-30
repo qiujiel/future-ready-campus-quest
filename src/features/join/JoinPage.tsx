@@ -4,6 +4,23 @@ import {
   type AuthGateway,
   supabaseAuthGateway,
 } from "../../shared/api/authGateway";
+import { Button } from "../../ui/Button";
+import { GroupPicker } from "./GroupPicker";
+import { IdentityForm } from "./IdentityForm";
+
+function joinErrorMessage(error: unknown) {
+  const code = error instanceof Error ? error.message : "";
+  if (code.includes("JOIN_WINDOW_EXPIRED") || code.includes("JOIN_WINDOW_CLOSED")) {
+    return "This joining window has closed. Ask your teacher to reopen joining.";
+  }
+  if (code.includes("GROUP_NOT_FOUND")) {
+    return "Check the assigned group number and try again.";
+  }
+  if (code.includes("GROUP_FULL")) {
+    return "Your assigned group is full. Ask your teacher where to join.";
+  }
+  return "Joining was not completed. Check the group number or ask your teacher to reopen joining.";
+}
 
 export function JoinPage({
   gateway = supabaseAuthGateway,
@@ -45,10 +62,8 @@ export function JoinPage({
         ...(nickname ? { nickname } : {}),
       });
       navigate("/quest", { replace: true });
-    } catch {
-      setError(
-        "Joining was not completed. Check the group number or ask your teacher to reopen joining.",
-      );
+    } catch (caught) {
+      setError(joinErrorMessage(caught));
     } finally {
       setBusy(false);
     }
@@ -63,48 +78,24 @@ export function JoinPage({
           Choose the group number assigned by your teacher, then create your
           explorer identity.
         </p>
-        <form className="stacked-form" onSubmit={submit}>
-          <label>
-            Assigned group number
-            <input
-              name="groupNumber"
-              type="number"
-              min={1}
-              max={20}
-              inputMode="numeric"
-              defaultValue={1}
-              required
-            />
-          </label>
-          <label>
-            Real name
-            <input
-              name="realName"
-              autoComplete="name"
-              maxLength={100}
-              required
-            />
-            <small>Visible only to your teacher.</small>
-          </label>
-          <label>
-            Nickname (optional)
-            <input name="nickname" maxLength={40} />
-            <small>
-              Visible to your group. A neutral explorer name is generated if
-              left blank.
-            </small>
-          </label>
-          <label className="check-label">
-            <input name="privacyConfirmed" type="checkbox" required />
-            <span>
-              I understand the class privacy notice: my real name is
-              teacher-only, while my nickname and group identity are
-              group-visible.
-            </span>
-          </label>
-          <button type="submit" disabled={busy} aria-busy={busy}>
-            {busy ? "Joining…" : "Join the campus"}
-          </button>
+        <form className="stacked-form join-journey" onSubmit={submit}>
+          <GroupPicker />
+          <IdentityForm />
+          <section className="join-step">
+            <p className="join-step__number" aria-hidden="true">
+              3
+            </p>
+            <div>
+              <h2 id="join-campus-title">Join the campus</h2>
+              <p>
+                You will enter your group space first, then begin when your
+                teacher opens the quest.
+              </p>
+              <Button type="submit" busy={busy}>
+                {busy ? "Joining…" : "Join the campus"}
+              </Button>
+            </div>
+          </section>
           {error ? (
             <p className="form-error" role="alert">
               {error}
