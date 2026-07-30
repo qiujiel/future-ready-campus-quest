@@ -185,11 +185,11 @@ git commit -m "feat: define mastery and fair team scoring"
 - Create: `supabase/migrations/202607300103_learning_rls.sql`
 - Test: `supabase/tests/learning_rls.test.sql`
 
-- [ ] **Step 1: Write failing schema and conversion tests with synthetic content**
+- [x] **Step 1: Write failing schema and conversion tests with synthetic content**
 
 The public fixture must use invented placeholder-free questions unrelated to the course PDFs. Validate exactly eight concept IDs and three review items per concept in production mode, unique item IDs, non-empty rationales, valid correct option IDs, at least one PDF page reference, and an approved misconception tag.
 
-- [ ] **Step 2: Define the protected item schema**
+- [x] **Step 2: Define the protected item schema**
 
 ```ts
 export const ProtectedItemSchema = z.object({
@@ -207,7 +207,7 @@ export const ProtectedItemSchema = z.object({
 });
 ```
 
-- [ ] **Step 3: Convert the ignored approved blueprint**
+- [x] **Step 3: Convert the ignored approved blueprint**
 
 The converter reads:
 
@@ -219,15 +219,17 @@ and writes:
 
 It must fail loudly if it cannot extract exactly 24 items, three per C1–C8, with answers, rationales, misconception tags, and references. Log item IDs and counts only; never log protected text.
 
-- [ ] **Step 4: Create private database tables**
+> **Local verification note (30 July 2026):** Docker Desktop's single-file bind mount stalled from the worktree path. The local stack was started from a temporary no-space runtime copy; repository migrations, database resets, and pgTAP tests then ran against that local stack successfully.
+
+- [x] **Step 4: Create private database tables**
 
 Create `concepts`, `learning_items`, `item_options`, and `item_source_refs`. Keep correctness and rationales in tables that have no direct `anon` or `authenticated` SELECT grant. Expose current-item payloads only through Edge Functions. Add a `content_version` table and include its immutable version ID on every attempt.
 
-- [ ] **Step 5: Implement the import transaction**
+- [x] **Step 5: Implement the import transaction**
 
 `import-protected-content.ts` requires `SUPABASE_SERVICE_ROLE_KEY` in the local process, validates the generated JSON, opens a transaction through a restricted import RPC, upserts the version, and verifies counts before commit. It must refuse to target a production project unless `--confirm-project-ref=<exact-ref>` is provided.
 
-- [ ] **Step 6: Prove content privacy**
+- [x] **Step 6: Prove content privacy**
 
 Run:
 
@@ -241,7 +243,7 @@ git check-ignore protected-content/generated/question-bank.json
 
 Expected: tests pass, conversion reports 24 items and eight concepts, and Git confirms the generated bank is ignored.
 
-- [ ] **Step 7: Commit only pipeline code and synthetic fixtures**
+- [x] **Step 7: Commit only pipeline code and synthetic fixtures**
 
 ```bash
 git add scripts tests/fixtures/public-synthetic-bank.json tests/learning/content-import.test.ts supabase/migrations/202607300101_learning_content.sql supabase/migrations/202607300103_learning_rls.sql supabase/tests/learning_rls.test.sql package.json
