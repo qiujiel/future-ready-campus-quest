@@ -1,5 +1,6 @@
 import {
   normalizedImprovement,
+  rankTeamScores,
   teamScore,
 } from "../../src/learning/domain/scoring";
 
@@ -49,6 +50,23 @@ describe("teamScore", () => {
 
     expect(teamScore(fast)).toBe(teamScore(steady));
   });
+
+  it("limits reflection completion to five contribution points", () => {
+    const withoutReflection = teamScore({
+      finalMastery: 80,
+      improvement: 60,
+      missionCompletion: 100,
+      reflection: 0,
+    });
+    const withReflection = teamScore({
+      finalMastery: 80,
+      improvement: 60,
+      missionCompletion: 100,
+      reflection: 100,
+    });
+
+    expect(withReflection! - withoutReflection!).toBe(5);
+  });
 });
 
 describe("normalizedImprovement", () => {
@@ -87,5 +105,50 @@ describe("normalizedImprovement", () => {
         conceptCount: 8,
       }),
     ).toBe(0);
+  });
+});
+
+describe("rankTeamScores", () => {
+  it("shares ranks for ties and uses group number only for stable ordering", () => {
+    expect(
+      rankTeamScores([
+        { groupId: "group-3", groupNumber: 3, score: 82 },
+        { groupId: "group-2", groupNumber: 2, score: 91 },
+        { groupId: "group-1", groupNumber: 1, score: 91 },
+      ]),
+    ).toEqual([
+      { groupId: "group-1", groupNumber: 1, score: 91, rank: 1 },
+      { groupId: "group-2", groupNumber: 2, score: 91, rank: 1 },
+      { groupId: "group-3", groupNumber: 3, score: 82, rank: 3 },
+    ]);
+  });
+
+  it("places incomplete teams in an explicit unranked section", () => {
+    expect(
+      rankTeamScores([
+        { groupId: "group-2", groupNumber: 2, score: null },
+        { groupId: "group-1", groupNumber: 1, score: 75 },
+        { groupId: "group-3", groupNumber: 3, score: null },
+      ]),
+    ).toEqual([
+      { groupId: "group-1", groupNumber: 1, score: 75, rank: 1 },
+      { groupId: "group-2", groupNumber: 2, score: null, rank: null },
+      { groupId: "group-3", groupNumber: 3, score: null, rank: null },
+    ]);
+  });
+
+  it("returns only group aggregates, never private member results", () => {
+    const ranked = rankTeamScores([
+      { groupId: "group-1", groupNumber: 1, score: 88 },
+    ]);
+
+    expect(ranked[0]).toEqual({
+      groupId: "group-1",
+      groupNumber: 1,
+      score: 88,
+      rank: 1,
+    });
+    expect(ranked[0]).not.toHaveProperty("members");
+    expect(ranked[0]).not.toHaveProperty("individualContributions");
   });
 });

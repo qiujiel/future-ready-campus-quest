@@ -75,6 +75,7 @@ export function toLearningItemPayload(
     itemId: assignment.itemId,
     conceptId: assignment.conceptId,
     phase: assignment.phase,
+    formative: assignment.phase === "retry",
     stem: assignment.stem,
     interaction: assignment.interaction,
     support: {

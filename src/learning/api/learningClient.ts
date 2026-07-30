@@ -1,6 +1,9 @@
 import { getSupabaseClient } from "../../shared/api/supabase";
 import type {
+  CompleteQuestInput,
   LearningItemPayload,
+  QuestCompletionResult,
+  ReflectionPrompt,
   ResponseResult,
   ResponseSubmission,
 } from "../../shared/api/contracts";
@@ -8,6 +11,8 @@ import type {
 export interface LearningGateway {
   getNextItem(attemptId: string): Promise<LearningItemPayload | null>;
   submitResponse(input: ResponseSubmission): Promise<ResponseResult>;
+  getReflectionPrompt(attemptId: string): Promise<ReflectionPrompt>;
+  completeQuest(input: CompleteQuestInput): Promise<QuestCompletionResult>;
 }
 
 export class LearningGatewayError extends Error {
@@ -49,6 +54,30 @@ export const supabaseLearningGateway: LearningGateway = {
       responseError(response.error.context, "RESPONSE_NOT_ACCEPTED");
     }
     const data = response.data as { result: ResponseResult };
+    return data.result;
+  },
+
+  async getReflectionPrompt(attemptId) {
+    const response = await getSupabaseClient().functions.invoke(
+      "complete-quest",
+      { body: { action: "prompt", attemptId } },
+    );
+    if (response.error) {
+      responseError(response.error.context, "QUEST_NOT_READY");
+    }
+    const data = response.data as { prompt: ReflectionPrompt };
+    return data.prompt;
+  },
+
+  async completeQuest(input) {
+    const response = await getSupabaseClient().functions.invoke(
+      "complete-quest",
+      { body: { action: "complete", ...input } },
+    );
+    if (response.error) {
+      responseError(response.error.context, "QUEST_NOT_READY");
+    }
+    const data = response.data as { result: QuestCompletionResult };
     return data.result;
   },
 };

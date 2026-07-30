@@ -1,5 +1,15 @@
 import type { ImprovementInput, TeamScoreParts } from "./types";
 
+export interface TeamScoreEntry {
+  groupId: string;
+  groupNumber: number;
+  score: number | null;
+}
+
+export interface RankedTeamScore extends TeamScoreEntry {
+  rank: number | null;
+}
+
 function boundedPercentage(value: number): number {
   if (!Number.isFinite(value)) {
     throw new Error("Score components must be finite numbers.");
@@ -48,6 +58,37 @@ export function normalizedImprovement({
 
   const gained = Math.max(0, finalCorrect - diagnosticCorrect);
   return Math.round((gained / (conceptCount - diagnosticCorrect)) * 100);
+}
+
+export function rankTeamScores(
+  entries: readonly TeamScoreEntry[],
+): RankedTeamScore[] {
+  const completed = entries
+    .filter(
+      (entry): entry is TeamScoreEntry & { score: number } =>
+        entry.score !== null,
+    )
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        left.groupNumber - right.groupNumber,
+    );
+  const incomplete = entries
+    .filter((entry) => entry.score === null)
+    .sort((left, right) => left.groupNumber - right.groupNumber);
+
+  let previousScore: number | undefined;
+  let currentRank = 0;
+  const ranked = completed.map((entry, index) => {
+    if (entry.score !== previousScore) currentRank = index + 1;
+    previousScore = entry.score;
+    return { ...entry, rank: currentRank };
+  });
+
+  return [
+    ...ranked,
+    ...incomplete.map((entry) => ({ ...entry, rank: null })),
+  ];
 }
 
 export type { ImprovementInput, TeamScoreParts } from "./types";

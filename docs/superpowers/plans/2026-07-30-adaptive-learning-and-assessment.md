@@ -358,7 +358,7 @@ git commit -m "feat: deliver and score protected learning items"
 - Modify: `src/learning/domain/scoring.ts`
 - Test: `tests/learning/scoring.test.ts`
 
-- [ ] **Step 1: Write failing completion tests**
+- [x] **Step 1: Write failing completion tests**
 
 Assert:
 
@@ -369,19 +369,19 @@ Assert:
 - incomplete students are shown separately rather than silently scored as zero;
 - ties share rank and sort by group number for stable display.
 
-- [ ] **Step 2: Implement finalization**
+- [x] **Step 2: Implement finalization**
 
 `complete-quest` calculates first evidence, final evidence, targeted-retry evidence, improvement, mission completion, and reflection completion. Persist raw components and the formula version in `quest_results` and `team_score_snapshots`.
 
-- [ ] **Step 3: Generate targeted retry**
+- [x] **Step 3: Generate targeted retry**
 
 Select one retry item for each final misconception, capped by the three-minute phase. Return feedback immediately after each retry. Mark the retry as formative in every API response and dashboard field.
 
-- [ ] **Step 4: Implement reflection**
+- [x] **Step 4: Implement reflection**
 
 Use one short structured prompt tied to the weakest concept plus an optional text note. Store the note privately for the student and teacher; the group receives only completion credit.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run: `pnpm vitest run tests/learning/scoring.test.ts && pnpm test:functions quest_completion`
 

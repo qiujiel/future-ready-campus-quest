@@ -210,7 +210,51 @@ begin
         and learning_items.form = 'final'
     ) as ranked
     on conflict do nothing;
-  elsif p_phase <> 'retry' then
+  elsif p_phase = 'retry' then
+    insert into public.attempt_items (
+      attempt_id,
+      item_id,
+      phase,
+      sequence,
+      support_state
+    )
+    with missed_concepts as (
+      select distinct
+        learning_items.concept_id,
+        min(student_responses.submitted_at) as first_missed_at
+      from public.student_responses
+      join content.learning_items
+        on learning_items.id = student_responses.item_id
+      where student_responses.attempt_id = p_attempt_id
+        and student_responses.phase = 'final'
+        and not student_responses.correct
+      group by learning_items.concept_id
+      order by first_missed_at, learning_items.concept_id
+      limit 3
+    ),
+    ranked as (
+      select
+        learning_items.id,
+        row_number() over (
+          order by
+            missed_concepts.first_missed_at,
+            learning_items.concept_id
+        )::smallint as sequence
+      from missed_concepts
+      join content.learning_items
+        on learning_items.version_id = v_content_version_id
+        and learning_items.concept_id = missed_concepts.concept_id
+        and learning_items.form = 'practice'
+    )
+    select
+      p_attempt_id,
+      ranked.id,
+      'retry',
+      ranked.sequence,
+      'needs_support'
+    from ranked
+    on conflict do nothing;
+  else
     raise exception using
       errcode = 'P0001',
       message = 'ASSIGNMENT_NOT_AVAILABLE';
@@ -314,6 +358,7 @@ begin
     'itemId', v_item.item_key,
     'conceptId', v_item.concept_id,
     'phase', v_assignment.phase,
+    'formative', v_assignment.phase = 'retry',
     'stem', v_item.stem,
     'interaction', v_item.interaction_payload -
       array[
@@ -547,6 +592,9 @@ begin
     elsif v_attempt.current_phase = 'final' then
       v_next_phase := 'retry';
       v_next_duration := interval '3 minutes';
+    elsif v_attempt.current_phase = 'retry' then
+      v_next_phase := 'reflection';
+      v_next_duration := null;
     end if;
   end if;
 
@@ -560,6 +608,7 @@ begin
     end,
     phase_deadline_at = case
       when v_next_phase <> v_attempt.current_phase
+        and v_next_duration is not null
         then now() + v_next_duration
       else phase_deadline_at
     end
@@ -568,6 +617,7 @@ begin
   v_result := jsonb_build_object(
     'responseId', v_response_id,
     'correct', v_correct,
+    'formative', v_assignment.phase = 'retry',
     'explanation', v_item.rationale,
     'misconceptionTag', v_misconception_tag,
     'conceptState', v_support_state,

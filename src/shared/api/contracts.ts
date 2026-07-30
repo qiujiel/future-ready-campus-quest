@@ -120,6 +120,7 @@ export interface LearningItemPayload {
   itemId: string;
   conceptId: ConceptId;
   phase: LearningPhase;
+  formative: boolean;
   stem: string;
   interaction: LearningInteractionPayload;
   support: {
@@ -140,8 +141,40 @@ export interface ResponseSubmission {
 export interface ResponseResult {
   responseId: string;
   correct: boolean;
+  formative: boolean;
   explanation: string;
   misconceptionTag: string | null;
   conceptState: SupportState;
   nextPhase: LearningPhase;
+}
+
+export type ReflectionChoice = "apply" | "discuss" | "revisit";
+
+export interface ReflectionPrompt {
+  conceptId: ConceptId;
+  prompt: string;
+  choices: ReflectionChoice[];
+  noteMaxLength: 240;
+}
+
+export interface CompleteQuestInput {
+  attemptId: string;
+  idempotencyKey: string;
+  reflectionChoice: ReflectionChoice;
+  reflectionNote?: string;
+}
+
+export interface QuestCompletionResult {
+  attemptId: string;
+  diagnostic: { correct: number; total: 8 };
+  final: { correct: number; total: 8 };
+  retry: { correct: number; total: number };
+  retryFormative: true;
+  finalMastery: number;
+  improvement: number;
+  missionCompletion: number;
+  reflectionCompletion: 100;
+  individualContribution: number;
+  formulaVersion: "team-score-60-25-10-5-v1";
+  reflectionPromptConceptId: ConceptId;
 }

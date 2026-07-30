@@ -66,6 +66,7 @@ function repository(
       const result: StoredResponseResult = {
         responseId: "85000000-0000-4000-8000-000000000001",
         correct: input.correct,
+        formative: input.assignment.phase === "retry",
         explanation: input.explanation,
         misconceptionTag: input.misconceptionTag,
         conceptState: "secure",
@@ -87,6 +88,7 @@ it("omits correctness, rationale, and misconception answers from current items",
     itemId: "C1-Q1",
     conceptId: "C1",
     phase: "final",
+    formative: false,
     stem: assignment.stem,
     interaction: {
       kind: "single-choice",
