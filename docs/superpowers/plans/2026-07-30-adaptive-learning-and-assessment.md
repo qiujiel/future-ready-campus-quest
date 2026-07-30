@@ -105,7 +105,7 @@ export interface ResponseResult {
 - Test: `tests/learning/mastery.test.ts`
 - Test: `tests/learning/scoring.test.ts`
 
-- [ ] **Step 1: Write failing mastery-state tests**
+- [x] **Step 1: Write failing mastery-state tests**
 
 Test the lower-confidence cases, including one correct response followed by one incorrect response, missing evidence, and final-response weighting.
 
@@ -119,7 +119,7 @@ Run: `pnpm vitest run tests/learning/mastery.test.ts`
 
 Expected: FAIL because the domain module does not exist.
 
-- [ ] **Step 2: Implement transparent mastery thresholds**
+- [x] **Step 2: Implement transparent mastery thresholds**
 
 Use integer counts rather than floating-point equality:
 
@@ -129,7 +129,7 @@ Use integer counts rather than floating-point equality:
 
 The diagnostic establishes an initial state. Mission and final evidence are stored separately so the dashboard can show change rather than overwrite the baseline.
 
-- [ ] **Step 3: Write failing team-score tests**
+- [x] **Step 3: Write failing team-score tests**
 
 ```ts
 expect(teamScore({
@@ -142,7 +142,7 @@ expect(teamScore({
 
 Also test bounds, rounding, incomplete teams, and that duration has no effect.
 
-- [ ] **Step 4: Implement score normalization**
+- [x] **Step 4: Implement score normalization**
 
 ```ts
 export function teamScore(parts: TeamScoreParts): number {
@@ -161,7 +161,7 @@ export function teamScore(parts: TeamScoreParts): number {
 
 Define improvement as the cohort-configured aggregate of per-student concept-state gains, never a raw point advantage for students who began with lower scores.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run: `pnpm vitest run tests/learning/mastery.test.ts tests/learning/scoring.test.ts && pnpm typecheck`
 
