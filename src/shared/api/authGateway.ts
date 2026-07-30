@@ -26,6 +26,34 @@ export interface AuthGateway {
   recoverStudent(input: RecoverStudentInput): Promise<RecoverStudentOutput>;
 }
 
+export class AuthGatewayError extends Error {
+  constructor(public readonly code: string) {
+    super(code);
+  }
+}
+
+export async function throwAuthGatewayError(
+  context: unknown,
+  fallback: string,
+): Promise<never> {
+  const response = (
+    context as {
+      response?: Response;
+    } | null
+  )?.response;
+  if (response) {
+    try {
+      const body = (await response.clone().json()) as { error?: unknown };
+      if (typeof body.error === "string") {
+        throw new AuthGatewayError(body.error);
+      }
+    } catch (error) {
+      if (error instanceof AuthGatewayError) throw error;
+    }
+  }
+  throw new AuthGatewayError(fallback);
+}
+
 async function invokeJoinManager(
   input: ManageJoinWindowInput,
 ): Promise<Record<string, unknown>> {
@@ -90,7 +118,9 @@ export const supabaseAuthGateway: AuthGateway = {
     const result = await client.functions.invoke("join-cohort", {
       body: input,
     });
-    if (result.error) throw new Error("The join request was not accepted.");
+    if (result.error) {
+      await throwAuthGatewayError(result.error.context, "JOIN_NOT_ACCEPTED");
+    }
     const output = result.data as JoinCohortOutput;
     const session = await client.auth.setSession({
       access_token: output.accessToken,

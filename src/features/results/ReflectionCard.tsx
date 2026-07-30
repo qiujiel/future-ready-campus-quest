@@ -61,7 +61,9 @@ export function ReflectionCard({
       localStorage.removeItem(noteKey(attemptId));
       setMessage("Reflection saved privately");
     } catch {
-      setMessage("Reflection saved on this device and will retry when connected");
+      setMessage(
+        "Reflection was not sent. Your note is still saved on this device; reconnect and choose Finish reflection again.",
+      );
     } finally {
       setBusy(false);
     }

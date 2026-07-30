@@ -5,10 +5,20 @@ test("completes the synthetic student review journey", async ({
   page,
 }, testInfo) => {
   const keyboardOnly = testInfo.project.name === "desktop-chromium";
-  async function activate(locator: Locator) {
+  const mobile = !keyboardOnly;
+  const screenshot = async (
+    name: string,
+    options: { fullPage?: boolean; mask?: Locator[] } = {},
+  ) => {
+    if (!process.env.CI) await expect(page).toHaveScreenshot(name, options);
+  };
+  if (mobile) await page.emulateMedia({ reducedMotion: "reduce" });
+  async function activate(locator: Locator, touch = false) {
     if (keyboardOnly) {
       await locator.focus();
       await page.keyboard.press("Enter");
+    } else if (touch) {
+      await locator.tap();
     } else {
       await locator.click();
     }
@@ -18,9 +28,16 @@ test("completes the synthetic student review journey", async ({
   await expect(
     page.getByRole("heading", { name: "Join your campus quest" }),
   ).toBeVisible();
-  await expect(page).toHaveScreenshot(`join-${testInfo.project.name}.png`, {
+  await screenshot(`join-${testInfo.project.name}.png`, {
     fullPage: true,
   });
+  if (mobile) {
+    expect(
+      await page.evaluate(
+        () => matchMedia("(prefers-reduced-motion: reduce)").matches,
+      ),
+    ).toBe(true);
+  }
 
   await page.getByLabel(/assigned group number/i).fill("2");
   await page.getByLabel(/^real name/i).fill("Synthetic Learner");
@@ -29,9 +46,9 @@ test("completes the synthetic student review journey", async ({
     await page.getByLabel(/class privacy notice/i).focus();
     await page.keyboard.press("Space");
   } else {
-    await page.getByLabel(/class privacy notice/i).check();
+    await page.getByLabel(/class privacy notice/i).tap();
   }
-  await activate(page.getByRole("button", { name: "Join the campus" }));
+  await activate(page.getByRole("button", { name: "Join the campus" }), true);
 
   await expect(
     page.getByRole("heading", { name: "Future Makers" }),
@@ -49,7 +66,7 @@ test("completes the synthetic student review journey", async ({
   ).toBeVisible();
   await activate(page.getByRole("button", { name: "Reduce animation" }));
   await expect(page.getByText("Animation reduced")).toBeVisible();
-  await expect(page).toHaveScreenshot(`map-${testInfo.project.name}.png`, {
+  await screenshot(`map-${testInfo.project.name}.png`, {
     fullPage: true,
     mask: [page.getByText(/\d+:\d+ remaining/)],
   });
@@ -60,7 +77,7 @@ test("completes the synthetic student review journey", async ({
       name: /which action makes a future-ready learning plan stronger/i,
     }),
   ).toBeVisible();
-  await expect(page).toHaveScreenshot(`mission-${testInfo.project.name}.png`, {
+  await screenshot(`mission-${testInfo.project.name}.png`, {
     fullPage: true,
     mask: [page.getByText(/\d+:\d+ remaining/)],
   });
@@ -72,7 +89,7 @@ test("completes the synthetic student review journey", async ({
     await response.focus();
     await page.keyboard.press("Space");
   } else {
-    await response.check();
+    await response.tap();
   }
   await context.setOffline(true);
   await activate(page.getByRole("button", { name: "Confirm response" }));
@@ -82,7 +99,7 @@ test("completes the synthetic student review journey", async ({
   await context.setOffline(false);
   await activate(page.getByRole("button", { name: "Try saving again" }));
   await expect(page.getByText("Correct")).toBeVisible();
-  await expect(page).toHaveScreenshot(`feedback-${testInfo.project.name}.png`, {
+  await screenshot(`feedback-${testInfo.project.name}.png`, {
     fullPage: true,
     mask: [page.getByText(/\d+:\d+ remaining/)],
   });
@@ -112,13 +129,17 @@ test("completes the synthetic student review journey", async ({
     await expectHorizontallyVisible(futureMakers.getByText("88"));
     await expectHorizontallyVisible(futureMakers.getByText("Complete"));
   }
-  await expect(page).toHaveScreenshot(`leaderboard-${testInfo.project.name}.png`, {
+  await screenshot(`leaderboard-${testInfo.project.name}.png`, {
     fullPage: true,
   });
 
   if (keyboardOnly) {
     await page.setViewportSize({ width: 640, height: 400 });
   }
+  const browserSession = await context.newCDPSession(page);
+  await browserSession.send("Emulation.setPageScaleFactor", {
+    pageScaleFactor: 2,
+  });
   await expect
     .poll(() =>
       page.evaluate(

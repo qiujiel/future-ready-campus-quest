@@ -63,6 +63,9 @@ const previewGroupGateway: GroupStudioGateway = {
       imageObjectPath: "preview/future-makers.webp",
     };
   },
+  async getImageUrl() {
+    return null;
+  },
 };
 
 const previewItem: LearningItemPayload = {
@@ -259,7 +262,14 @@ export function StudentExperiencePreview() {
         ]}
       />
       <nav className="preview-nav" aria-label="Review journey">
-        <Button variant="secondary" onClick={() => setStep("join")}>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setIdentity(null);
+            setMissionComplete(false);
+            setStep("join");
+          }}
+        >
           Restart review
         </Button>
       </nav>

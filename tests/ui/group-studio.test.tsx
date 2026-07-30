@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { GroupImageUploader } from "../../src/features/group/GroupImageUploader";
 import { GroupStudio } from "../../src/features/group/GroupStudio";
 import type { GroupStudioGateway } from "../../src/features/group/groupStudioGateway";
 
@@ -38,6 +39,9 @@ function gateway(): GroupStudioGateway & {
       onProgress(100);
       return { ...group, imageObjectPath: "cohort/group/image.webp" };
     },
+    async getImageUrl() {
+      return "https://signed.invalid/group-image.webp";
+    },
   };
 }
 
@@ -66,6 +70,8 @@ describe("Group Studio", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /transfer editing/i }));
     await waitFor(() => expect(api.transferCalls).toEqual(["student-2"]));
+    expect(screen.queryByLabelText(/group name/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/group editor is shaping this space/i)).toBeVisible();
   });
 
   it("validates image type, previews valid images, and reports upload progress", async () => {
@@ -77,6 +83,7 @@ describe("Group Studio", () => {
         currentStudentId="student-1"
         isEditor
         gateway={api}
+        prepareImage={async (file) => file}
       />,
     );
     const input = screen.getByLabelText(/group image/i);
@@ -86,6 +93,7 @@ describe("Group Studio", () => {
     });
     fireEvent.change(input, { target: { files: [badFile] } });
     expect(screen.getByRole("alert")).toHaveTextContent(/png, jpeg, or webp/i);
+    expect(container.querySelector("img[alt='New group image preview']")).toBeNull();
 
     const goodFile = new File(["image"], "team.png", { type: "image/png" });
     fireEvent.change(input, { target: { files: [goodFile] } });
@@ -94,6 +102,47 @@ describe("Group Studio", () => {
 
     await waitFor(() => expect(api.uploadCalls).toEqual([goodFile]));
     expect(screen.getByText(/upload complete/i)).toBeVisible();
+  });
+
+  it("uploads a resized metadata-free WebP instead of the original file", async () => {
+    const prepared = new File(["prepared"], "group-image.webp", {
+      type: "image/webp",
+    });
+    const prepareImage = vi.fn(async () => prepared);
+    const onUpload = vi.fn(async () => {});
+    render(
+      <GroupImageUploader
+        prepareImage={prepareImage}
+        onUpload={onUpload}
+      />,
+    );
+
+    const original = new File(["original"], "camera.jpg", {
+      type: "image/jpeg",
+    });
+    fireEvent.change(screen.getByLabelText(/group image/i), {
+      target: { files: [original] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /upload group image/i }));
+
+    await waitFor(() => expect(prepareImage).toHaveBeenCalledWith(original));
+    expect(onUpload).toHaveBeenCalledWith(prepared, expect.any(Function));
+  });
+
+  it("resolves the private object path to a signed group image", async () => {
+    render(
+      <GroupStudio
+        group={{ ...group, imageObjectPath: "cohort/group/image.webp" }}
+        members={members}
+        currentStudentId="student-2"
+        isEditor={false}
+        gateway={gateway()}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("img", { name: /group 2 group image/i }),
+    ).toHaveAttribute("src", "https://signed.invalid/group-image.webp");
   });
 
   it("shows a read-only nickname list to ordinary members", () => {

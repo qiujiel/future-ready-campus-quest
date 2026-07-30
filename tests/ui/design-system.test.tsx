@@ -108,4 +108,22 @@ describe("Quest design system", () => {
     );
     expect(screen.getByText("reduced:0")).toBeVisible();
   });
+
+  it("does not let an explicit full-motion preference override the system setting", () => {
+    const original = window.matchMedia;
+    window.matchMedia = vi.fn().mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+
+    render(
+      <MotionProvider forceReduced={false}>
+        <MotionProbe />
+      </MotionProvider>,
+    );
+
+    expect(screen.getByText("reduced:0")).toBeVisible();
+    window.matchMedia = original;
+  });
 });

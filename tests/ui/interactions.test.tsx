@@ -184,4 +184,37 @@ describe("mission interactions", () => {
     expect(screen.getByText(/speed means quality/i)).toBeVisible();
     expect(screen.queryByText("needs_support")).not.toBeInTheDocument();
   });
+
+  it("clears the previous answer and feedback when the assignment changes", async () => {
+    const submit = vi.fn(async () => correctResult);
+    const { rerender } = render(<MissionCard item={item} onSubmit={submit} />);
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Agree on a purpose and review risks",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /confirm response/i }));
+    expect(await screen.findByText("Correct")).toBeVisible();
+
+    rerender(
+      <MissionCard
+        item={{
+          ...item,
+          assignmentId: "assignment-C4",
+          itemId: "item-C4",
+          conceptId: "C4",
+          stem: "Which next step checks the impact?",
+        }}
+        onSubmit={submit}
+      />,
+    );
+
+    expect(screen.queryByText("Correct")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", {
+        name: "Agree on a purpose and review risks",
+      }),
+    ).not.toBeChecked();
+    expect(screen.getByRole("button", { name: /confirm response/i })).toBeDisabled();
+  });
 });

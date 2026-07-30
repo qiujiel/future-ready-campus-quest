@@ -14,7 +14,7 @@ function joinErrorMessage(error: unknown) {
   if (code.includes("JOIN_WINDOW_EXPIRED") || code.includes("JOIN_WINDOW_CLOSED")) {
     return "This joining window has closed. Ask your teacher to reopen joining.";
   }
-  if (code.includes("GROUP_NOT_FOUND")) {
+  if (code.includes("GROUP_NOT_FOUND") || code.includes("INVALID_GROUP")) {
     return "Check the assigned group number and try again.";
   }
   if (code.includes("GROUP_FULL")) {

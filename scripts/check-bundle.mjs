@@ -1,6 +1,9 @@
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { gzipSync } from "node:zlib";
+
+const javascriptBudgetBytes = 250 * 1024;
 
 const forbiddenMarkers = [
   {
@@ -48,6 +51,18 @@ export async function scanBundle(root) {
   return violations;
 }
 
+export async function measureJavaScriptGzip(root) {
+  const absoluteRoot = resolve(root);
+  const javascript = (await filesUnder(absoluteRoot)).filter((path) =>
+    path.endsWith(".js"),
+  );
+  let gzipBytes = 0;
+  for (const path of javascript) {
+    gzipBytes += gzipSync(await readFile(path)).byteLength;
+  }
+  return { fileCount: javascript.length, gzipBytes };
+}
+
 async function main() {
   const root = process.argv[2] ?? "dist";
   const violations = await scanBundle(root);
@@ -68,7 +83,17 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  console.log(`Bundle privacy scan passed: ${root}`);
+  const budget = await measureJavaScriptGzip(root);
+  if (budget.gzipBytes > javascriptBudgetBytes) {
+    console.error(
+      `javascript-budget: ${budget.gzipBytes} compressed bytes exceeds ${javascriptBudgetBytes}`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  console.log(
+    `Bundle privacy scan passed: ${root}; JavaScript gzip ${budget.gzipBytes}/${javascriptBudgetBytes} bytes`,
+  );
 }
 
 if (

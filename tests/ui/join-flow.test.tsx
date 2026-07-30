@@ -83,7 +83,9 @@ describe("student join flow", () => {
 
   it.each([
     ["JOIN_WINDOW_EXPIRED", /teacher to reopen joining/i],
+    ["JOIN_WINDOW_CLOSED", /teacher to reopen joining/i],
     ["GROUP_NOT_FOUND", /check the assigned group number/i],
+    ["INVALID_GROUP", /check the assigned group number/i],
     ["GROUP_FULL", /assigned group is full/i],
   ])("explains the recoverable %s state", async (code, message) => {
     renderJoin(

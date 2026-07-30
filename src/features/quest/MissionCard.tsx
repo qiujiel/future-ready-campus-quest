@@ -21,6 +21,22 @@ export function MissionCard({
   item: LearningItemPayload;
   onSubmit: (selectedOptionIds: string[]) => Promise<ResponseResult>;
 }) {
+  return (
+    <MissionCardSession
+      key={item.assignmentId}
+      item={item}
+      onSubmit={onSubmit}
+    />
+  );
+}
+
+function MissionCardSession({
+  item,
+  onSubmit,
+}: {
+  item: LearningItemPayload;
+  onSubmit: (selectedOptionIds: string[]) => Promise<ResponseResult>;
+}) {
   const [selected, setSelected] = useState(() => initialSelections(item));
   const [classification, setClassification] = useState<Record<string, string>>(
     {},

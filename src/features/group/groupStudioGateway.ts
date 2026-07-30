@@ -12,6 +12,7 @@ export interface GroupStudioGateway {
     file: File,
     onProgress: (percent: number) => void,
   ): Promise<PublicGroupIdentity>;
+  getImageUrl(groupId: string): Promise<string | null>;
 }
 
 async function invokeGroupCommand(body: Record<string, unknown>) {
@@ -102,5 +103,12 @@ export const supabaseGroupStudioGateway: GroupStudioGateway = {
         requestKey: crypto.randomUUID(),
       }),
     );
+  },
+  async getImageUrl(groupId) {
+    const data = await invokeGroupCommand({
+      action: "get-image-url",
+      groupId,
+    });
+    return typeof data.imageUrl === "string" ? data.imageUrl : null;
   },
 };

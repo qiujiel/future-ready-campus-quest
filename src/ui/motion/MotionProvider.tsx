@@ -29,7 +29,7 @@ export function MotionProvider({
     return () => query.removeEventListener?.("change", update);
   }, []);
 
-  const reduced = forceReduced ?? systemReduced;
+  const reduced = forceReduced === true || systemReduced;
   const value = useMemo(
     () => ({ duration: reduced ? 0 : 0.24, reduced }),
     [reduced],

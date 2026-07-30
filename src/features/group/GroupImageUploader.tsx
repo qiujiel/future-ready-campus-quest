@@ -1,5 +1,6 @@
 import { type ChangeEvent, useEffect, useState } from "react";
 import { Button } from "../../ui/Button";
+import { prepareGroupImage } from "./imageProcessing";
 
 const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
 const maxBytes = 5 * 1024 * 1024;
@@ -7,9 +8,11 @@ const maxBytes = 5 * 1024 * 1024;
 export function GroupImageUploader({
   disabled,
   onUpload,
+  prepareImage = prepareGroupImage,
 }: {
   disabled?: boolean;
   onUpload: (file: File, onProgress: (percent: number) => void) => Promise<void>;
+  prepareImage?: (file: File) => Promise<File>;
 }) {
   const [error, setError] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -29,6 +32,8 @@ export function GroupImageUploader({
     setError("");
     setProgress(null);
     setFile(null);
+    if (preview.startsWith("blob:")) URL.revokeObjectURL(preview);
+    setPreview("");
     if (!next) return;
     if (!allowedTypes.has(next.type)) {
       setError("Choose a PNG, JPEG, or WebP image.");
@@ -38,7 +43,6 @@ export function GroupImageUploader({
       setError("Choose an image smaller than 5 MB.");
       return;
     }
-    if (preview.startsWith("blob:")) URL.revokeObjectURL(preview);
     const previewUrl =
       typeof URL.createObjectURL === "function"
         ? URL.createObjectURL(next)
@@ -52,10 +56,13 @@ export function GroupImageUploader({
     setBusy(true);
     setError("");
     try {
-      await onUpload(file, setProgress);
+      const prepared = await prepareImage(file);
+      await onUpload(prepared, setProgress);
       setProgress(100);
     } catch {
-      setError("The image was not uploaded. Check it and try again.");
+      setError(
+        "The image could not be prepared or uploaded. Choose a clear image and try again.",
+      );
     } finally {
       setBusy(false);
     }

@@ -75,6 +75,32 @@ describe("private results experience", () => {
     expect(localStorage.getItem("campus-quest-reflection-attempt-1")).toBeNull();
   });
 
+  it("asks for a manual retry when reflection submission fails", async () => {
+    render(
+      <ReflectionCard
+        attemptId="attempt-offline"
+        prompt={{
+          conceptId: "C8",
+          prompt: "Where could your group apply this idea next?",
+          choices: ["apply", "discuss", "revisit"],
+          noteMaxLength: 240,
+        }}
+        onSubmit={async () => {
+          throw new Error("offline");
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: /discuss it/i }));
+    fireEvent.click(screen.getByRole("button", { name: /finish reflection/i }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      /not sent.*finish reflection again/i,
+    );
+    expect(screen.getByRole("radio", { name: /discuss it/i })).toBeChecked();
+    expect(screen.queryByText(/will retry/i)).not.toBeInTheDocument();
+  });
+
   it("ranks teams with shared ranks and no individual peer data", () => {
     const teams = [
       {

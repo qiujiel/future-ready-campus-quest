@@ -1,4 +1,4 @@
-import { type PropsWithChildren, useState } from "react";
+import { type PropsWithChildren, useEffect, useState } from "react";
 import type { ConceptId } from "../../shared/api/contracts";
 import { Button } from "../../ui/Button";
 import { QuestGuide } from "../../ui/QuestGuide";
@@ -41,7 +41,7 @@ export function QuestShell({
   completedPhases,
   deadline,
   lastAcknowledgement,
-  now = new Date(),
+  now,
   phase,
   resumed = false,
   transitionMessage,
@@ -57,7 +57,18 @@ export function QuestShell({
   visitedConcepts: ConceptId[];
 }>) {
   const [reduceAnimation, setReduceAnimation] = useState(readAnimationPreference);
-  const remaining = deadline ? formatRemaining(deadline, now) : null;
+  const [clock, setClock] = useState(() => now ?? new Date());
+  const remaining = deadline ? formatRemaining(deadline, clock) : null;
+
+  useEffect(() => {
+    if (!deadline) return;
+    const timer = window.setInterval(() => {
+      setClock((current) =>
+        now ? new Date(current.getTime() + 1_000) : new Date(),
+      );
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [deadline, now]);
 
   function toggleAnimation() {
     setReduceAnimation((current) => {

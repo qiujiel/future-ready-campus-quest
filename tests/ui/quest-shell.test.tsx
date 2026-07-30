@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { QuestShell } from "../../src/features/quest/QuestShell";
 
 const now = new Date("2026-07-31T08:00:00.000Z");
@@ -66,6 +66,24 @@ describe("Campus Quest shell", () => {
       />,
     );
     expect(screen.getByText(/moving on soon/i)).toBeVisible();
+  });
+
+  it("updates the deadline display while the phase remains active", () => {
+    vi.useFakeTimers();
+    render(
+      <QuestShell
+        phase="diagnostic"
+        completedPhases={["briefing"]}
+        visitedConcepts={["C1"]}
+        deadline="2026-07-31T08:00:03.000Z"
+        now={now}
+      />,
+    );
+
+    expect(screen.getByText("0:03 remaining")).toBeVisible();
+    act(() => vi.advanceTimersByTime(2_000));
+    expect(screen.getByText("0:01 remaining")).toBeVisible();
+    vi.useRealTimers();
   });
 
   it("announces resume and phase changes while preserving the save receipt", () => {

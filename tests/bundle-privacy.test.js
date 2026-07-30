@@ -2,7 +2,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { scanBundle } from "../scripts/check-bundle.mjs";
+import {
+  measureJavaScriptGzip,
+  scanBundle,
+} from "../scripts/check-bundle.mjs";
 
 const temporaryDirectories = [];
 
@@ -40,4 +43,17 @@ it("fails when a seeded answer-key marker reaches a fixture bundle", async () =>
       path: expect.stringContaining("app.js"),
     }),
   ]);
+});
+
+it("measures compressed JavaScript for the public budget gate", async () => {
+  const directory = await temporaryBundle();
+  await writeFile(join(directory, "app.js"), "const publicShell = true;");
+  await writeFile(join(directory, "styles.css"), "body { color: navy; }");
+
+  await expect(measureJavaScriptGzip(directory)).resolves.toEqual(
+    expect.objectContaining({
+      fileCount: 1,
+      gzipBytes: expect.any(Number),
+    }),
+  );
 });

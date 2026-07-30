@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import type { PublicGroupIdentity } from "../../shared/api/contracts";
 import { Button } from "../../ui/Button";
 import { Card } from "../../ui/Card";
@@ -20,16 +20,36 @@ export function GroupStudio({
   group: initialGroup,
   isEditor,
   members,
+  prepareImage,
 }: {
   currentStudentId: string | null;
   gateway?: GroupStudioGateway;
   group: PublicGroupIdentity | null;
   isEditor: boolean;
   members: GroupMember[];
+  prepareImage?: (file: File) => Promise<File>;
 }) {
   const [group, setGroup] = useState(initialGroup);
+  const [canEdit, setCanEdit] = useState(isEditor);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!group?.imageObjectPath) return;
+    gateway
+      .getImageUrl(group.groupId)
+      .then((url) => {
+        if (active) setImageUrl(url);
+      })
+      .catch(() => {
+        if (active) setImageUrl(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [gateway, group?.groupId, group?.imageObjectPath]);
 
   if (!group || !currentStudentId) {
     return (
@@ -69,10 +89,11 @@ export function GroupStudio({
     const form = new FormData(event.currentTarget);
     setBusy(true);
     try {
-      await gateway.transferEditor(
+      setGroup(await gateway.transferEditor(
         group.groupId,
         String(form.get("nextEditorId") ?? ""),
-      );
+      ));
+      setCanEdit(false);
       setMessage("Editing passed to your teammate");
     } catch {
       setMessage("Editing could not be transferred");
@@ -89,9 +110,17 @@ export function GroupStudio({
           <h1>{group.displayName}</h1>
           <p>Shape one shared identity before the quest begins.</p>
         </div>
-        <div className="group-avatar" aria-hidden="true">
-          {group.groupNumber}
-        </div>
+        {imageUrl ? (
+          <img
+            className="group-avatar"
+            src={imageUrl}
+            alt={`${group.displayName} group image`}
+          />
+        ) : (
+          <div className="group-avatar" aria-hidden="true">
+            {group.groupNumber}
+          </div>
+        )}
       </header>
 
       {locked ? (
@@ -112,8 +141,8 @@ export function GroupStudio({
           </ul>
         </Card>
 
-        <Card title="Shared group identity" eyebrow={isEditor ? "You can edit" : "View only"}>
-          {isEditor ? (
+        <Card title="Shared group identity" eyebrow={canEdit ? "You can edit" : "View only"}>
+          {canEdit ? (
             <div className="quest-stack">
               <p>
                 You are the first explorer here, so you can shape the shared
@@ -137,6 +166,7 @@ export function GroupStudio({
               </form>
               <GroupImageUploader
                 disabled={locked}
+                {...(prepareImage ? { prepareImage } : {})}
                 onUpload={async (file, onProgress) => {
                   setGroup(await gateway.uploadImage(group.groupId, file, onProgress));
                   setMessage("Group image ready");
