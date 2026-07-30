@@ -6,8 +6,6 @@ import {
 } from "react-router-dom";
 import { JoinPage } from "../features/join/JoinPage";
 import { RecoveryPage } from "../features/join/RecoveryPage";
-import { TeacherSetupPage } from "../features/teacher/TeacherSetupPage";
-import { TeacherSignInPage } from "../features/teacher/TeacherSignInPage";
 import { getSupabaseClient } from "../shared/api/supabase";
 import { App } from "./App";
 
@@ -37,7 +35,22 @@ export const router = createHashRouter([
   { path: "/", element: <App /> },
   { path: "/join/:token", element: <JoinPage /> },
   { path: "/recover/:token", element: <RecoveryPage /> },
-  { path: "/teacher/sign-in", element: <TeacherSignInPage /> },
+  {
+    path: "/preview/student",
+    lazy: async () => {
+      const module = await import(
+        "../features/preview/StudentExperiencePreview"
+      );
+      return { Component: module.StudentExperiencePreview };
+    },
+  },
+  {
+    path: "/teacher/sign-in",
+    lazy: async () => {
+      const module = await import("../features/teacher/TeacherSignInPage");
+      return { Component: module.TeacherSignInPage };
+    },
+  },
   {
     element: <ProtectedRouteBoundary />,
     children: [
@@ -49,7 +62,10 @@ export const router = createHashRouter([
       {
         path: "/teacher/setup",
         loader: () => requireRole("teacher"),
-        element: <TeacherSetupPage />,
+        lazy: async () => {
+          const module = await import("../features/teacher/TeacherSetupPage");
+          return { Component: module.TeacherSetupPage };
+        },
       },
       { path: "/teacher", element: <Navigate to="/teacher/setup" replace /> },
     ],

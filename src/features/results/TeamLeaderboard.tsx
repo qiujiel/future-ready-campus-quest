@@ -61,8 +61,10 @@ export function TeamLeaderboard({ teams }: { teams: TeamResult[] }) {
             <tbody>
               {ranked.map((team) => (
                 <tr key={team.groupId}>
-                  <td>{team.rank ? `Rank ${team.rank}` : "—"}</td>
-                  <th scope="row">
+                  <td data-label="Rank">
+                    {team.rank ? `Rank ${team.rank}` : "—"}
+                  </td>
+                  <th scope="row" data-label="Team">
                     {team.groupImageUrl ? (
                       <img src={team.groupImageUrl} alt="" />
                     ) : (
@@ -72,8 +74,8 @@ export function TeamLeaderboard({ teams }: { teams: TeamResult[] }) {
                     )}
                     {team.groupName}
                   </th>
-                  <td>{team.score ?? "—"}</td>
-                  <td>
+                  <td data-label="Team score">{team.score ?? "—"}</td>
+                  <td data-label="Status">
                     {team.completionStatus === "complete"
                       ? "Complete"
                       : "Awaiting completion"}

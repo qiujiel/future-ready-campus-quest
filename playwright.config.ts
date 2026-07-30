@@ -7,7 +7,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: "http://127.0.0.1:4174",
     trace: "on-first-retry",
   },
   projects: [
@@ -19,13 +19,23 @@ export default defineConfig({
       },
     },
     {
+      name: "mobile-wide-chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 390, height: 844 },
+      },
+    },
+    {
       name: "desktop-chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 800 },
+      },
     },
   ],
   webServer: {
-    command: "pnpm build && pnpm preview --host 127.0.0.1",
-    url: "http://127.0.0.1:4173",
+    command: "pnpm build && pnpm preview --host 127.0.0.1 --port 4174",
+    url: "http://127.0.0.1:4174",
     reuseExistingServer: !process.env.CI,
   },
 });

@@ -4,6 +4,7 @@ import {
   type AuthGateway,
   supabaseAuthGateway,
 } from "../../shared/api/authGateway";
+import type { JoinCohortOutput } from "../../shared/api/contracts";
 import { Button } from "../../ui/Button";
 import { GroupPicker } from "./GroupPicker";
 import { IdentityForm } from "./IdentityForm";
@@ -24,11 +25,16 @@ function joinErrorMessage(error: unknown) {
 
 export function JoinPage({
   gateway = supabaseAuthGateway,
+  joinToken,
+  onJoined,
 }: {
   gateway?: AuthGateway;
+  joinToken?: string;
+  onJoined?: (result: JoinCohortOutput) => void;
 }) {
   const navigate = useNavigate();
-  const { token = "" } = useParams();
+  const { token: routeToken = "" } = useParams();
+  const token = joinToken ?? routeToken;
   const requestKey = useRef(crypto.randomUUID());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -53,7 +59,7 @@ export function JoinPage({
     const form = new FormData(event.currentTarget);
     const nickname = String(form.get("nickname") ?? "").trim();
     try {
-      await gateway.joinCohort({
+      const joined = await gateway.joinCohort({
         joinToken: token,
         groupNumber: Number(form.get("groupNumber")),
         realName: String(form.get("realName") ?? ""),
@@ -61,7 +67,8 @@ export function JoinPage({
         requestKey: requestKey.current,
         ...(nickname ? { nickname } : {}),
       });
-      navigate("/quest", { replace: true });
+      if (onJoined) onJoined(joined);
+      else navigate("/quest", { replace: true });
     } catch (caught) {
       setError(joinErrorMessage(caught));
     } finally {

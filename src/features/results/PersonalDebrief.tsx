@@ -53,10 +53,18 @@ export function PersonalDebrief({
           <tbody>
             {concepts.map((concept) => (
               <tr key={concept.conceptId}>
-                <th scope="row">{concept.conceptId}</th>
-                <td>{evidenceLabels[concept.firstEvidence]}</td>
-                <td>{evidenceLabels[concept.finalEvidence]}</td>
-                <td>{retryLabels[concept.retryStatus]}</td>
+                <th scope="row" data-label="Concept">
+                  {concept.conceptId}
+                </th>
+                <td data-label="First evidence">
+                  {evidenceLabels[concept.firstEvidence]}
+                </td>
+                <td data-label="Final evidence">
+                  {evidenceLabels[concept.finalEvidence]}
+                </td>
+                <td data-label="Next step">
+                  {retryLabels[concept.retryStatus]}
+                </td>
               </tr>
             ))}
           </tbody>
