@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(5);
+select plan(7);
 
 select is(
   (
@@ -59,6 +59,26 @@ select throws_ok(
   '42501',
   'permission denied for function authorize_group_media_read',
   'anonymous callers cannot authorize signed image reads'
+);
+
+select throws_ok(
+  $$select * from public.authorize_group_media_finalize(
+    '60000000-0000-4000-8000-000000000001',
+    'cohort/group/other-group-object.png'
+  )$$,
+  '42501',
+  'permission denied for function authorize_group_media_finalize',
+  'anonymous callers cannot authorize image finalization'
+);
+
+select throws_ok(
+  $$select * from public.reject_group_media_upload(
+    '60000000-0000-4000-8000-000000000001',
+    'cohort/group/other-group-object.png'
+  )$$,
+  '42501',
+  'permission denied for function reject_group_media_upload',
+  'anonymous callers cannot trigger media cleanup'
 );
 
 select * from finish();

@@ -58,6 +58,16 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+  const html = await readFile(join(resolve(root), "index.html"), "utf8");
+  if (
+    !html.includes('http-equiv="Content-Security-Policy"') ||
+    !html.includes("default-src 'self'") ||
+    !html.includes('name="referrer" content="no-referrer"')
+  ) {
+    console.error("security-metadata: index.html");
+    process.exitCode = 1;
+    return;
+  }
   console.log(`Bundle privacy scan passed: ${root}`);
 }
 

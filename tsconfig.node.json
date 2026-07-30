@@ -18,6 +18,7 @@
     "eslint.config.js",
     "playwright.config.ts",
     "vite.config.ts",
-    "vitest.functions.config.ts"
+    "vitest.functions.config.ts",
+    "vitest.integration.config.ts"
   ]
 }

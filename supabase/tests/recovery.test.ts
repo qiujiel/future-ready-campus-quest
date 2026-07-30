@@ -11,16 +11,17 @@ import {
 } from "../functions/_shared/group-core";
 
 function recoveryDependencies(): RecoveryDependencies & {
-  consumed: Set<string>;
+  claims: Map<string, string>;
 } {
-  const consumed = new Set<string>();
+  const claims = new Map<string, string>();
   return {
-    consumed,
-    async consumeToken(tokenHash) {
-      if (consumed.has(tokenHash)) {
+    claims,
+    async claimToken(tokenHash, requestKey) {
+      const claimedBy = claims.get(tokenHash);
+      if (claimedBy && claimedBy !== requestKey) {
         throw new RecoveryBoundaryError("RECOVERY_LINK_USED", 410);
       }
-      consumed.add(tokenHash);
+      claims.set(tokenHash, requestKey);
       return { studentId: "20000000-0000-4000-8000-000000000001" };
     },
     async issueSession() {
@@ -29,6 +30,7 @@ function recoveryDependencies(): RecoveryDependencies & {
         refreshToken: "replacement-refresh-token",
       };
     },
+    async finalizeToken() {},
   };
 }
 
@@ -75,7 +77,7 @@ it.each([
   ["RECOVERY_SCOPE_REJECTED", 403],
 ] as const)("returns a safe %s boundary", async (code, status) => {
   const dependencies = recoveryDependencies();
-  dependencies.consumeToken = async () => {
+  dependencies.claimToken = async () => {
     throw new RecoveryBoundaryError(code, status);
   };
 
@@ -88,6 +90,50 @@ it.each([
       dependencies,
     ),
   ).rejects.toMatchObject({ code, status });
+});
+
+it("lets the winning request retry when session issuance fails", async () => {
+  const dependencies = recoveryDependencies();
+  let attempts = 0;
+  dependencies.issueSession = async () => {
+    attempts += 1;
+    if (attempts === 1) throw new Error("session mint failed");
+    return {
+      accessToken: "replacement-access-token",
+      refreshToken: "replacement-refresh-token",
+    };
+  };
+
+  const input = {
+    recoveryToken: "single-use-recovery-token-with-enough-entropy",
+    requestKey: "50000000-0000-4000-8000-000000000001",
+  };
+  await expect(recoverStudent(input, dependencies)).rejects.toMatchObject({
+    code: "RECOVERY_NOT_AVAILABLE",
+  });
+  await expect(recoverStudent(input, dependencies)).resolves.toMatchObject({
+    studentId: "20000000-0000-4000-8000-000000000001",
+  });
+});
+
+it("allows only the winning request key to replay a finalized recovery", async () => {
+  const dependencies = recoveryDependencies();
+  const input = {
+    recoveryToken: "single-use-recovery-token-with-enough-entropy",
+    requestKey: "50000000-0000-4000-8000-000000000001",
+  };
+
+  await expect(recoverStudent(input, dependencies)).resolves.toBeDefined();
+  await expect(recoverStudent(input, dependencies)).resolves.toBeDefined();
+  await expect(
+    recoverStudent(
+      {
+        ...input,
+        requestKey: "50000000-0000-4000-8000-000000000002",
+      },
+      dependencies,
+    ),
+  ).rejects.toMatchObject({ code: "RECOVERY_LINK_USED" });
 });
 
 function groupDependencies(

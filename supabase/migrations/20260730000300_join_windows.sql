@@ -1,6 +1,9 @@
 alter table public.cohorts
 add column creation_request_key uuid unique;
 
+create schema if not exists private;
+revoke all on schema private from public, anon, authenticated;
+
 create table public.audit_events (
   id uuid primary key default gen_random_uuid(),
   actor_user_id uuid references auth.users(id) on delete set null,
@@ -63,6 +66,18 @@ create index student_join_requests_cohort_id_idx
 create index student_join_requests_group_id_idx
   on public.student_join_requests (group_id);
 
+create table private.join_attempts (
+  id bigint generated always as identity primary key,
+  token_hash text not null check (token_hash ~ '^[a-f0-9]{64}$'),
+  rate_key_hash text not null check (rate_key_hash ~ '^[a-f0-9]{64}$'),
+  attempted_at timestamptz not null default now()
+);
+
+create index join_attempts_token_time_idx
+  on private.join_attempts (token_hash, attempted_at desc);
+create index join_attempts_rate_time_idx
+  on private.join_attempts (rate_key_hash, attempted_at desc);
+
 alter table public.audit_events enable row level security;
 alter table public.cohort_join_windows enable row level security;
 alter table public.student_join_requests enable row level security;
@@ -81,6 +96,80 @@ on public.audit_events
 for select
 to authenticated
 using (public.teacher_owns_cohort(cohort_id));
+
+create or replace function public.preflight_student_join(
+  p_token_hash text,
+  p_group_number smallint,
+  p_rate_key_hash text
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_window public.cohort_join_windows;
+  v_group public.groups;
+  v_capacity smallint;
+begin
+  select *
+  into v_window
+  from public.cohort_join_windows
+  where token_hash = p_token_hash
+  for update;
+
+  if not found
+    or v_window.closed_at is not null
+    or v_window.opens_at > now()
+    or v_window.expires_at <= now()
+  then
+    raise exception 'JOIN_WINDOW_CLOSED' using errcode = 'P0001';
+  end if;
+
+  delete from private.join_attempts
+  where attempted_at < now() - interval '10 minutes';
+
+  if (
+    select count(*) >= 90
+    from private.join_attempts
+    where token_hash = p_token_hash
+      and attempted_at >= now() - interval '1 minute'
+  ) or (
+    select count(*) >= 12
+    from private.join_attempts
+    where rate_key_hash = p_rate_key_hash
+      and attempted_at >= now() - interval '1 minute'
+  ) then
+    raise exception 'JOIN_NOT_AVAILABLE' using errcode = 'P0001';
+  end if;
+
+  insert into private.join_attempts (token_hash, rate_key_hash)
+  values (p_token_hash, p_rate_key_hash);
+
+  select *
+  into v_group
+  from public.groups
+  where cohort_id = v_window.cohort_id
+    and group_number = p_group_number;
+
+  if not found then
+    raise exception 'INVALID_GROUP' using errcode = 'P0001';
+  end if;
+
+  select cohorts.group_capacity
+  into v_capacity
+  from public.cohorts as cohorts
+  where cohorts.id = v_group.cohort_id;
+
+  if (
+    select count(*) >= v_capacity
+    from public.student_private_profiles
+    where group_id = v_group.id
+  ) then
+    raise exception 'GROUP_FULL' using errcode = 'P0001';
+  end if;
+end;
+$$;
 
 create or replace function public.create_teacher_cohort(
   p_title text,
@@ -456,6 +545,8 @@ revoke all on function public.close_cohort_join_window(uuid, uuid)
   from public;
 revoke all on function public.find_completed_student_join(text, uuid)
   from public;
+revoke all on function public.preflight_student_join(text, smallint, text)
+  from public;
 revoke all on function public.complete_student_join(
   text,
   uuid,
@@ -472,6 +563,8 @@ grant execute on function public.open_cohort_join_window(uuid, text, timestamptz
 grant execute on function public.close_cohort_join_window(uuid, uuid)
   to authenticated;
 grant execute on function public.find_completed_student_join(text, uuid)
+  to service_role;
+grant execute on function public.preflight_student_join(text, smallint, text)
   to service_role;
 grant execute on function public.complete_student_join(
   text,

@@ -12,12 +12,15 @@ create table private.session_recovery_tokens (
   issued_at timestamptz not null default now(),
   expires_at timestamptz not null,
   invalidated_at timestamptz,
+  claimed_at timestamptz,
+  claim_request_key uuid,
   redeemed_at timestamptz,
-  redeemed_request_key uuid,
   unique (issuing_teacher_id, request_key),
   check (expires_at > issued_at),
   check (expires_at <= issued_at + interval '5 minutes'),
   check (invalidated_at is null or invalidated_at >= issued_at),
+  check (claimed_at is null or claimed_at >= issued_at),
+  check ((claimed_at is null) = (claim_request_key is null)),
   check (redeemed_at is null or redeemed_at >= issued_at)
 );
 
@@ -27,6 +30,19 @@ create index session_recovery_tokens_cohort_id_idx
   on private.session_recovery_tokens (cohort_id);
 create index session_recovery_tokens_expires_at_idx
   on private.session_recovery_tokens (expires_at);
+
+create table private.group_identity_receipts (
+  actor_user_id uuid not null references auth.users(id) on delete cascade,
+  request_key uuid not null,
+  input_payload jsonb not null,
+  group_id uuid not null references public.groups(id) on delete cascade,
+  group_number smallint not null,
+  display_name text not null,
+  image_object_path text,
+  locked_at timestamptz,
+  created_at timestamptz not null default now(),
+  primary key (actor_user_id, request_key)
+);
 
 create or replace function public.issue_student_recovery(
   p_cohort_id uuid,
@@ -122,7 +138,7 @@ begin
 end;
 $$;
 
-create or replace function public.redeem_student_recovery(
+create or replace function public.claim_student_recovery(
   p_token_hash text,
   p_request_key uuid
 )
@@ -147,19 +163,65 @@ begin
     raise exception 'RECOVERY_NOT_AVAILABLE' using errcode = 'P0001';
   end if;
 
-  if v_token.redeemed_at is not null then
-    raise exception 'RECOVERY_LINK_USED' using errcode = 'P0001';
-  end if;
-
   if v_token.invalidated_at is not null or v_token.expires_at <= now() then
     raise exception 'RECOVERY_LINK_EXPIRED' using errcode = 'P0001';
   end if;
 
+  if v_token.claim_request_key is not null then
+    if v_token.claim_request_key <> p_request_key then
+      raise exception 'RECOVERY_LINK_USED' using errcode = 'P0001';
+    end if;
+    return query select v_token.student_id, v_token.cohort_id;
+    return;
+  end if;
+
+  if v_token.redeemed_at is not null then
+    raise exception 'RECOVERY_LINK_USED' using errcode = 'P0001';
+  end if;
+
   update private.session_recovery_tokens
   set
-    redeemed_at = now(),
-    redeemed_request_key = p_request_key
+    claimed_at = now(),
+    claim_request_key = p_request_key
   where id = v_token.id;
+
+  return query select v_token.student_id, v_token.cohort_id;
+end;
+$$;
+
+create or replace function public.finalize_student_recovery(
+  p_token_hash text,
+  p_request_key uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_token private.session_recovery_tokens;
+begin
+  select *
+  into v_token
+  from private.session_recovery_tokens
+  where token_hash = p_token_hash
+  for update;
+
+  if not found
+    or v_token.claim_request_key is distinct from p_request_key
+  then
+    raise exception 'RECOVERY_LINK_USED' using errcode = 'P0001';
+  end if;
+
+  if v_token.redeemed_at is not null then
+    return;
+  end if;
+
+  update private.session_recovery_tokens
+  set redeemed_at = now()
+  where id = v_token.id
+    and claim_request_key = p_request_key
+    and redeemed_at is null;
 
   insert into public.audit_events (
     actor_user_id,
@@ -176,7 +238,6 @@ begin
     p_request_key
   );
 
-  return query select v_token.student_id, v_token.cohort_id;
 end;
 $$;
 
@@ -200,10 +261,52 @@ set search_path = ''
 as $$
 declare
   v_group public.groups;
+  v_receipt private.group_identity_receipts;
+  v_actor_id uuid;
+  v_input_payload jsonb;
   v_is_teacher boolean;
   v_is_editor boolean;
   v_name text;
 begin
+  v_actor_id := auth.uid();
+  if v_actor_id is null then
+    raise exception 'GROUP_ACTION_DENIED' using errcode = '42501';
+  end if;
+  perform pg_advisory_xact_lock(
+    hashtextextended(v_actor_id::text || ':' || p_request_key::text, 0)
+  );
+
+  v_name := case
+    when p_action = 'rename'
+      then regexp_replace(btrim(coalesce(p_display_name, '')), '\s+', ' ', 'g')
+    else null
+  end;
+  v_input_payload := jsonb_build_object(
+    'action', p_action,
+    'group_id', p_group_id,
+    'display_name', v_name,
+    'next_editor_id', p_next_editor_id
+  );
+
+  select *
+  into v_receipt
+  from private.group_identity_receipts
+  where actor_user_id = v_actor_id
+    and request_key = p_request_key;
+
+  if found then
+    if v_receipt.input_payload is distinct from v_input_payload then
+      raise exception 'INVALID_GROUP_ACTION' using errcode = '22023';
+    end if;
+    return query select
+      v_receipt.group_id,
+      v_receipt.group_number,
+      v_receipt.display_name,
+      v_receipt.image_object_path,
+      v_receipt.locked_at;
+    return;
+  end if;
+
   select *
   into v_group
   from public.groups
@@ -226,7 +329,6 @@ begin
     if v_group.identity_locked_at is not null and not v_is_teacher then
       raise exception 'GROUP_IDENTITY_LOCKED' using errcode = '42501';
     end if;
-    v_name := regexp_replace(btrim(coalesce(p_display_name, '')), '\s+', ' ', 'g');
     if char_length(v_name) not between 2 and 40 then
       raise exception 'INVALID_GROUP_ACTION' using errcode = '22023';
     end if;
@@ -234,6 +336,9 @@ begin
   elsif p_action = 'transfer-editor' then
     if (not v_is_teacher and not v_is_editor) then
       raise exception 'GROUP_ACTION_DENIED' using errcode = '42501';
+    end if;
+    if v_group.identity_locked_at is not null and not v_is_teacher then
+      raise exception 'GROUP_IDENTITY_LOCKED' using errcode = '42501';
     end if;
     if not exists (
       select 1
@@ -280,15 +385,39 @@ begin
   )
   on conflict (actor_user_id, event_type, request_key) do nothing;
 
+  select *
+  into v_group
+  from public.groups
+  where id = v_group.id;
+
+  insert into private.group_identity_receipts (
+    actor_user_id,
+    request_key,
+    input_payload,
+    group_id,
+    group_number,
+    display_name,
+    image_object_path,
+    locked_at
+  )
+  values (
+    v_actor_id,
+    p_request_key,
+    v_input_payload,
+    v_group.id,
+    v_group.group_number,
+    v_group.display_name,
+    v_group.image_object_path,
+    v_group.identity_locked_at
+  );
+
   return query
   select
-    groups.id,
-    groups.group_number,
-    groups.display_name,
-    groups.image_object_path,
-    groups.identity_locked_at
-  from public.groups as groups
-  where groups.id = v_group.id;
+    v_group.id,
+    v_group.group_number,
+    v_group.display_name,
+    v_group.image_object_path,
+    v_group.identity_locked_at;
 end;
 $$;
 
@@ -330,7 +459,8 @@ revoke all on function public.issue_student_recovery(
   timestamptz,
   uuid
 ) from public;
-revoke all on function public.redeem_student_recovery(text, uuid) from public;
+revoke all on function public.claim_student_recovery(text, uuid) from public;
+revoke all on function public.finalize_student_recovery(text, uuid) from public;
 revoke all on function public.manage_group_identity(
   text,
   uuid,
@@ -353,7 +483,9 @@ grant execute on function public.issue_student_recovery(
   timestamptz,
   uuid
 ) to authenticated;
-grant execute on function public.redeem_student_recovery(text, uuid)
+grant execute on function public.claim_student_recovery(text, uuid)
+  to service_role;
+grant execute on function public.finalize_student_recovery(text, uuid)
   to service_role;
 grant execute on function public.manage_group_identity(
   text,

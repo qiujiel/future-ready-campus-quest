@@ -1,4 +1,6 @@
-import { JoinBoundaryError } from "./join-core.ts";
+export class RequestOriginError extends Error {
+  readonly status = 403;
+}
 
 function allowedOrigins(): Set<string> {
   const configured = Deno.env.get("ALLOWED_FRONTEND_ORIGINS") ?? "";
@@ -12,12 +14,12 @@ function allowedOrigins(): Set<string> {
 
 export function corsHeaders(request: Request): Record<string, string> {
   const origin = request.headers.get("Origin");
-  if (origin && !allowedOrigins().has(origin)) {
-    throw new JoinBoundaryError("JOIN_NOT_AVAILABLE", 403);
+  if (!origin || !allowedOrigins().has(origin)) {
+    throw new RequestOriginError("ORIGIN_NOT_ALLOWED");
   }
 
   return {
-    ...(origin ? { "Access-Control-Allow-Origin": origin } : {}),
+    "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Headers":
       "authorization, apikey, content-type, x-client-info",
     "Access-Control-Allow-Methods": "POST, OPTIONS",

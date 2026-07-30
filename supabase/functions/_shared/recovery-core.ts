@@ -29,11 +29,12 @@ export class RecoveryBoundaryError extends Error {
 }
 
 export interface RecoveryDependencies {
-  consumeToken(
+  claimToken(
     tokenHash: string,
     requestKey: string,
   ): Promise<{ studentId: string }>;
   issueSession(studentId: string): Promise<SessionTokens>;
+  finalizeToken(tokenHash: string, requestKey: string): Promise<void>;
 }
 
 export interface RecoveryToken {
@@ -66,11 +67,12 @@ export async function recoverStudent(
 
   try {
     const tokenHash = await hashJoinToken(parsed.data.recoveryToken);
-    const recovery = await dependencies.consumeToken(
+    const recovery = await dependencies.claimToken(
       tokenHash,
       parsed.data.requestKey,
     );
     const session = await dependencies.issueSession(recovery.studentId);
+    await dependencies.finalizeToken(tokenHash, parsed.data.requestKey);
     return { studentId: recovery.studentId, ...session };
   } catch (error) {
     if (error instanceof RecoveryBoundaryError) throw error;

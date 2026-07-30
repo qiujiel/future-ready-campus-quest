@@ -43,6 +43,7 @@ function createDependencies(capacity = 6): JoinDependencies & {
     async findCompletedJoin(tokenHash, requestKey) {
       return stored.get(`${tokenHash}:${requestKey}`) ?? null;
     },
+    async preflightJoin() {},
     async createSyntheticUser() {
       this.createdUsers += 1;
       const studentId = `20000000-0000-4000-8000-${String(nextStudent).padStart(12, "0")}`;
@@ -88,6 +89,7 @@ function createDependencies(capacity = 6): JoinDependencies & {
     async deleteSyntheticUser() {
       this.deletedUsers += 1;
     },
+    async recordOrphanedIdentity() {},
   };
 }
 
@@ -118,6 +120,19 @@ it("rejects an invalid group before creating an Auth user", async () => {
   await expect(
     joinStudent({ ...baseInput, groupNumber: 0 }, dependencies),
   ).rejects.toMatchObject({ code: "INVALID_REQUEST", status: 400 });
+  expect(dependencies.createdUsers).toBe(0);
+});
+
+it("runs the trusted join preflight before creating an Auth user", async () => {
+  const dependencies = createDependencies();
+  dependencies.preflightJoin = async () => {
+    throw new JoinBoundaryError("GROUP_FULL", 409);
+  };
+
+  await expect(joinStudent(baseInput, dependencies)).rejects.toMatchObject({
+    code: "GROUP_FULL",
+    status: 409,
+  });
   expect(dependencies.createdUsers).toBe(0);
 });
 
@@ -190,4 +205,25 @@ it("does not disclose internal join failures such as name collisions", async () 
     status: 409,
   });
   expect(dependencies.deletedUsers).toBe(1);
+});
+
+it("audits a synthetic identity when Auth cleanup fails", async () => {
+  const dependencies = createDependencies();
+  let orphanedStudentId = "";
+  dependencies.completeJoin = async () => {
+    throw new Error("database unavailable");
+  };
+  dependencies.deleteSyntheticUser = async () => {
+    throw new Error("auth cleanup unavailable");
+  };
+  dependencies.recordOrphanedIdentity = async (studentId) => {
+    orphanedStudentId = studentId;
+  };
+
+  await expect(joinStudent(baseInput, dependencies)).rejects.toMatchObject({
+    code: "JOIN_NOT_AVAILABLE",
+  });
+  expect(orphanedStudentId).toBe(
+    "20000000-0000-4000-8000-000000000001",
+  );
 });

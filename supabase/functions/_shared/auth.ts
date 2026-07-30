@@ -54,13 +54,14 @@ export function callerClient(request: Request): SupabaseClient {
   );
 }
 
-export function frontendOrigin(): string {
-  const firstOrigin = requiredEnvironment("ALLOWED_FRONTEND_ORIGINS")
-    .split(",")
-    .map((origin) => origin.trim())
-    .find(Boolean);
-  if (!firstOrigin) throw new Error("No allowed frontend origin configured.");
-  return firstOrigin;
+export function frontendAppUrl(): string {
+  const configured = requiredEnvironment("FRONTEND_APP_URL");
+  const url = new URL(configured);
+  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if ((!local && url.protocol !== "https:") || url.search || url.hash) {
+    throw new Error("FRONTEND_APP_URL must be a secure application URL.");
+  }
+  return url.toString().replace(/\/$/, "");
 }
 
 export async function issueSessionForExistingUser(

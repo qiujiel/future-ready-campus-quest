@@ -1,4 +1,5 @@
 import {
+  decodeStoredImage,
   inspectStoredImage,
   MediaBoundaryError,
   validateIncomingUpload,
@@ -117,4 +118,24 @@ it("uses neutral media errors without exposing object paths", () => {
 
   expect(error.message).toBe("MEDIA_NOT_AVAILABLE");
   expect(error.message).not.toContain("/");
+});
+
+it("rejects a header-only image when the trusted decoder cannot read it", async () => {
+  await expect(
+    decodeStoredImage(png(1200, 900), "image/png", async () => {
+      throw new Error("decoder rejected truncated PNG");
+    }),
+  ).rejects.toMatchObject({ code: "MEDIA_TYPE_REJECTED", status: 400 });
+});
+
+it("rejects oversized declared dimensions before invoking the decoder", async () => {
+  let decoderCalled = false;
+
+  await expect(
+    decodeStoredImage(png(2049, 1200), "image/png", async () => {
+      decoderCalled = true;
+      throw new Error("should not decode");
+    }),
+  ).rejects.toMatchObject({ code: "MEDIA_DIMENSIONS_REJECTED", status: 400 });
+  expect(decoderCalled).toBe(false);
 });

@@ -11,11 +11,23 @@ const forbiddenTrackedPaths = [
   /(^|\/)\.env(?:\.|$)/i,
 ];
 
-const { stdout } = await execFile("git", ["ls-files", "-z"], {
-  encoding: "utf8",
-});
-const tracked = stdout.split("\0").filter(Boolean);
-const violations = tracked.filter(
+const { stdout: trackedOutput } = await execFile(
+  "git",
+  ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+  { encoding: "utf8" },
+);
+const { stdout: historyOutput } = await execFile(
+  "git",
+  ["rev-list", "--objects", "--all"],
+  { encoding: "utf8" },
+);
+const tracked = trackedOutput.split("\0").filter(Boolean);
+const historical = historyOutput
+  .split("\n")
+  .map((line) => line.slice(line.indexOf(" ") + 1))
+  .filter((path) => path && !/^[a-f0-9]{40}$/.test(path));
+const candidates = new Set([...tracked, ...historical]);
+const violations = [...candidates].filter(
   (path) =>
     path !== ".env.example" &&
     forbiddenTrackedPaths.some((pattern) => pattern.test(path)),
@@ -25,5 +37,5 @@ if (violations.length > 0) {
   for (const path of violations) console.error(`forbidden tracked path: ${path}`);
   process.exitCode = 1;
 } else {
-  console.log("Repository privacy path check passed.");
+  console.log("Repository privacy path and reachable-history check passed.");
 }

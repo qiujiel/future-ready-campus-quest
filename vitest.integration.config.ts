@@ -4,8 +4,8 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
-    include: ["supabase/tests/**/*.test.ts"],
-    exclude: ["supabase/tests/**/*.integration.test.ts"],
+    include: ["supabase/tests/**/*.integration.test.ts"],
+    testTimeout: 20_000,
     restoreMocks: true,
   },
 });

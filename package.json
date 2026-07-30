@@ -16,10 +16,12 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:functions": "vitest run --config vitest.functions.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc -b --pretty false",
     "playwright": "playwright"
   },
   "dependencies": {
+    "@imagemagick/magick-wasm": "0.0.41",
     "@supabase/supabase-js": "^2.57.4",
     "motion": "^12.23.24",
     "react": "19.2.0",

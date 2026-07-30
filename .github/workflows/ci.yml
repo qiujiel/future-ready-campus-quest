@@ -61,6 +61,30 @@ jobs:
           pnpm exec supabase db reset
           pnpm exec supabase test db
 
+      - name: Export local integration credentials
+        run: |
+          eval "$(pnpm exec supabase status -o env)"
+          echo "TEST_SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "TEST_SUPABASE_ANON_KEY=$ANON_KEY" >> "$GITHUB_ENV"
+          echo "TEST_SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
+
+      - name: Run black-box Edge and Auth tests
+        env:
+          ALLOWED_FRONTEND_ORIGINS: http://127.0.0.1:4173
+          FRONTEND_APP_URL: http://127.0.0.1:4173
+          JOIN_TOKEN_SIGNING_SECRET: ci-only-join-signing-secret-32-bytes-minimum
+          RECOVERY_TOKEN_SIGNING_SECRET: ci-only-recovery-signing-secret-32-bytes
+        run: |
+          pnpm exec supabase functions serve > /tmp/campus-quest-functions.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --silent --output /dev/null \
+              http://127.0.0.1:54321/functions/v1/join-cohort; then
+              break
+            fi
+            sleep 1
+          done
+          pnpm test:integration
+
       - name: Build and scan the public artifact
         run: |
           pnpm build

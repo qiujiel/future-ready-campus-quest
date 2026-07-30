@@ -7,12 +7,14 @@ import {
 import { corsHeaders } from "../_shared/cors.ts";
 import {
   type CompleteJoinInput,
+  hashJoinToken,
   type JoinDependencies,
   JoinBoundaryError,
   joinStudent,
   type StoredJoin,
   type SyntheticUser,
 } from "../_shared/join-core.ts";
+import { RequestOriginError } from "../_shared/cors.ts";
 import { jsonResponse, readJson } from "../_shared/http.ts";
 import type {
   JoinCohortInput,
@@ -62,6 +64,7 @@ function safeRpcError(error: { message: string }): never {
 function dependencies(
   admin: SupabaseClient,
   publicClient: SupabaseClient,
+  rateKeyHash: string,
 ): JoinDependencies {
   return {
     async findCompletedJoin(tokenHash, requestKey): Promise<StoredJoin | null> {
@@ -72,6 +75,14 @@ function dependencies(
       if (result.error) safeRpcError(result.error);
       const row = result.data?.[0] as Record<string, unknown> | undefined;
       return row ? { identity: mapIdentity(row) } : null;
+    },
+    async preflightJoin(tokenHash, groupNumber): Promise<void> {
+      const result = await admin.rpc("preflight_student_join", {
+        p_token_hash: tokenHash,
+        p_group_number: groupNumber,
+        p_rate_key_hash: rateKeyHash,
+      });
+      if (result.error) safeRpcError(result.error);
     },
     async createSyntheticUser(): Promise<SyntheticUser> {
       const password = randomPassword();
@@ -115,7 +126,18 @@ function dependencies(
       return mapIdentity(row);
     },
     async deleteSyntheticUser(studentId): Promise<void> {
-      await admin.auth.admin.deleteUser(studentId, false);
+      const result = await admin.auth.admin.deleteUser(studentId, false);
+      if (result.error) throw new Error("AUTH_CLEANUP_FAILED");
+    },
+    async recordOrphanedIdentity(studentId): Promise<void> {
+      const result = await admin.rpc("record_rejected_security_action", {
+        p_actor_user_id: null,
+        p_cohort_id: null,
+        p_event_type: "join.orphan_cleanup_failed",
+        p_entity_id: studentId,
+        p_request_key: crypto.randomUUID(),
+      });
+      if (result.error) throw new Error("AUDIT_WRITE_FAILED");
     },
   };
 }
@@ -130,13 +152,26 @@ Deno.serve(async (request) => {
     }
 
     const input = (await readJson(request)) as JoinCohortInput;
+    const rateSecret = Deno.env.get("JOIN_TOKEN_SIGNING_SECRET");
+    if (!rateSecret || rateSecret.length < 32) {
+      throw new Error("Join signing is not configured.");
+    }
+    const clientAddress =
+      request.headers.get("cf-connecting-ip") ??
+      request.headers.get("x-real-ip") ??
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+      "unknown";
+    const rateKeyHash = await hashJoinToken(`${rateSecret}\0${clientAddress}`);
     const result = await joinStudent(
       input,
-      dependencies(adminClient(), publicAuthClient()),
+      dependencies(adminClient(), publicAuthClient(), rateKeyHash),
     );
     return jsonResponse(result, 200, headers);
   } catch (error) {
-    const status = error instanceof JoinBoundaryError ? error.status : 400;
+    const status =
+      error instanceof JoinBoundaryError || error instanceof RequestOriginError
+        ? error.status
+        : 400;
     return jsonResponse(
       {
         error:

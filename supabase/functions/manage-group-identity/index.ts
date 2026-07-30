@@ -4,7 +4,8 @@ import {
   adminClient,
   callerClient,
 } from "../_shared/auth.ts";
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsHeaders, RequestOriginError } from "../_shared/cors.ts";
+import { decodeAndSanitizeImage } from "../_shared/image-decoder.ts";
 import {
   executeGroupIdentityCommand,
   type GroupIdentityDependencies,
@@ -12,7 +13,7 @@ import {
 } from "../_shared/group-core.ts";
 import { jsonResponse, readJson } from "../_shared/http.ts";
 import {
-  inspectStoredImage,
+  decodeStoredImage,
   MediaBoundaryError,
   validateIncomingUpload,
 } from "../_shared/media-core.ts";
@@ -183,27 +184,66 @@ async function executeMediaCommand(
   }
 
   if (command.action === "remove-image") {
-    const removed = await caller.rpc("remove_group_media", {
+    const authorization = await caller.rpc("authorize_group_media_removal", {
       p_group_id: command.groupId,
+    });
+    if (authorization.error) mapMediaError(authorization.error.message);
+    const row = authorization.data?.[0] as { object_path?: string } | undefined;
+    if (!row?.object_path) {
+      throw new MediaBoundaryError("MEDIA_NOT_AVAILABLE", 404);
+    }
+    const removed = await bucket.remove([row.object_path]);
+    if (removed.error) {
+      throw new MediaBoundaryError("MEDIA_NOT_AVAILABLE", 409);
+    }
+    const finalized = await caller.rpc("finalize_group_media_removal", {
+      p_group_id: command.groupId,
+      p_object_path: row.object_path,
       p_request_key: command.requestKey,
     });
-    if (removed.error) mapMediaError(removed.error.message);
-    const row = removed.data?.[0] as { object_path?: string } | undefined;
-    if (row?.object_path) await bucket.remove([row.object_path]);
+    if (finalized.error) mapMediaError(finalized.error.message);
     return { removed: true };
   }
 
-  const downloaded = await bucket.download(command.objectPath);
+  const authorization = await caller.rpc("authorize_group_media_finalize", {
+    p_group_id: command.groupId,
+    p_object_path: command.objectPath,
+  });
+  if (authorization.error) mapMediaError(authorization.error.message);
+  const authorized = authorization.data?.[0] as
+    | { object_path?: string; mime_type?: string }
+    | undefined;
+  if (!authorized?.object_path || !authorized.mime_type) {
+    throw new MediaBoundaryError("MEDIA_NOT_AVAILABLE", 404);
+  }
+
+  const canonicalPath = authorized.object_path;
+  const downloaded = await bucket.download(canonicalPath);
   if (downloaded.error || !downloaded.data) {
     throw new MediaBoundaryError("MEDIA_NOT_AVAILABLE", 404);
   }
 
   try {
     const bytes = new Uint8Array(await downloaded.data.arrayBuffer());
-    const inspected = inspectStoredImage(bytes, downloaded.data.type);
+    const inspected = await decodeStoredImage(
+      bytes,
+      authorized.mime_type,
+      decodeAndSanitizeImage,
+    );
+    const replaced = await bucket.update(
+      canonicalPath,
+      inspected.sanitizedBytes,
+      {
+        contentType: inspected.mimeType,
+        upsert: true,
+      },
+    );
+    if (replaced.error) {
+      throw new MediaBoundaryError("MEDIA_NOT_AVAILABLE", 409);
+    }
     const finalized = await caller.rpc("finalize_group_media_upload", {
       p_group_id: command.groupId,
-      p_object_path: command.objectPath,
+      p_object_path: canonicalPath,
       p_mime_type: inspected.mimeType,
       p_verified_size: inspected.byteSize,
       p_width: inspected.width,
@@ -217,15 +257,19 @@ async function executeMediaCommand(
       typeof row.previous_object_path === "string"
         ? row.previous_object_path
         : null;
-    if (previousPath && previousPath !== command.objectPath) {
+    if (previousPath && previousPath !== canonicalPath) {
       await bucket.remove([previousPath]);
     }
     return { group: mapGroup(row) };
   } catch (error) {
-    await admin.rpc("reject_group_media_upload", {
-      p_object_path: command.objectPath,
+    const rejected = await caller.rpc("reject_group_media_upload", {
+      p_group_id: command.groupId,
+      p_object_path: canonicalPath,
     });
-    await bucket.remove([command.objectPath]);
+    const rejectedRow = rejected.data?.[0] as { object_path?: string } | undefined;
+    if (!rejected.error && rejectedRow?.object_path === canonicalPath) {
+      await bucket.remove([canonicalPath]);
+    }
     throw error;
   }
 }
@@ -279,7 +323,8 @@ Deno.serve(async (request) => {
     }
     const status =
       error instanceof GroupIdentityBoundaryError ||
-      error instanceof MediaBoundaryError
+      error instanceof MediaBoundaryError ||
+      error instanceof RequestOriginError
         ? error.status
         : 400;
     return jsonResponse(
@@ -289,7 +334,7 @@ Deno.serve(async (request) => {
             ? error.code
             : error instanceof MediaBoundaryError
               ? error.code
-            : "INVALID_GROUP_ACTION",
+              : "INVALID_GROUP_ACTION",
       },
       status,
       headers,

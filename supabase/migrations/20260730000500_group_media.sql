@@ -283,6 +283,56 @@ begin
 end;
 $$;
 
+create or replace function public.authorize_group_media_finalize(
+  p_group_id uuid,
+  p_object_path text
+)
+returns table (object_path text, mime_type text)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_group public.groups;
+  v_asset private.group_media_assets;
+  v_allowed boolean;
+begin
+  select *
+  into v_group
+  from public.groups
+  where id = p_group_id;
+
+  if not found then
+    raise exception 'MEDIA_ACTION_DENIED' using errcode = '42501';
+  end if;
+
+  v_allowed :=
+    public.teacher_owns_cohort(v_group.cohort_id)
+    or (
+      v_group.identity_editor_id = auth.uid()
+      and public.student_in_group(v_group.id)
+      and v_group.identity_locked_at is null
+    );
+  if not v_allowed then
+    raise exception 'MEDIA_ACTION_DENIED' using errcode = '42501';
+  end if;
+
+  select *
+  into v_asset
+  from private.group_media_assets as assets
+  where assets.group_id = p_group_id
+    and assets.object_path = p_object_path
+    and assets.uploader_id = auth.uid()
+    and assets.status = 'pending';
+
+  if not found then
+    raise exception 'MEDIA_NOT_AVAILABLE' using errcode = 'P0001';
+  end if;
+
+  return query select v_asset.object_path, v_asset.mime_type;
+end;
+$$;
+
 create or replace function public.authorize_group_media_read(p_group_id uuid)
 returns table (object_path text)
 language plpgsql
@@ -312,10 +362,7 @@ begin
 end;
 $$;
 
-create or replace function public.remove_group_media(
-  p_group_id uuid,
-  p_request_key uuid
-)
+create or replace function public.authorize_group_media_removal(p_group_id uuid)
 returns table (object_path text)
 language plpgsql
 security definer
@@ -323,7 +370,35 @@ set search_path = ''
 as $$
 declare
   v_group public.groups;
-  v_path text;
+begin
+  select *
+  into v_group
+  from public.groups
+  where id = p_group_id;
+
+  if not found
+    or v_group.image_object_path is null
+    or not public.teacher_owns_cohort(v_group.cohort_id)
+  then
+    raise exception 'MEDIA_ACTION_DENIED' using errcode = '42501';
+  end if;
+
+  return query select v_group.image_object_path;
+end;
+$$;
+
+create or replace function public.finalize_group_media_removal(
+  p_group_id uuid,
+  p_object_path text,
+  p_request_key uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_group public.groups;
 begin
   select *
   into v_group
@@ -331,15 +406,19 @@ begin
   where id = p_group_id
   for update;
 
-  if not found or not public.teacher_owns_cohort(v_group.cohort_id) then
+  if not found
+    or not public.teacher_owns_cohort(v_group.cohort_id)
+    or v_group.image_object_path is distinct from p_object_path
+  then
     raise exception 'MEDIA_ACTION_DENIED' using errcode = '42501';
   end if;
 
-  v_path := v_group.image_object_path;
   update public.groups set image_object_path = null where id = v_group.id;
   update private.group_media_assets
   set status = 'removed'
-  where group_id = v_group.id and status = 'approved';
+  where group_id = v_group.id
+    and object_path = p_object_path
+    and status = 'approved';
 
   insert into public.audit_events (
     actor_user_id,
@@ -357,19 +436,41 @@ begin
   )
   on conflict (actor_user_id, event_type, request_key) do nothing;
 
-  return query select v_path;
 end;
 $$;
 
-create or replace function public.reject_group_media_upload(p_object_path text)
-returns void
-language sql
+create or replace function public.reject_group_media_upload(
+  p_group_id uuid,
+  p_object_path text
+)
+returns table (object_path text)
+language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  v_asset private.group_media_assets;
+begin
+  select *
+  into v_asset
+  from private.group_media_assets as assets
+  where assets.group_id = p_group_id
+    and assets.object_path = p_object_path
+    and assets.uploader_id = auth.uid()
+    and assets.status = 'pending'
+  for update;
+
+  if not found then
+    raise exception 'MEDIA_NOT_AVAILABLE' using errcode = 'P0001';
+  end if;
+
   update private.group_media_assets
   set status = 'rejected', verified_at = now()
-  where object_path = p_object_path and status = 'pending'
+  where id = v_asset.id
+    and status = 'pending';
+
+  return query select v_asset.object_path;
+end;
 $$;
 
 revoke all on function public.authorize_group_media_upload(
@@ -387,9 +488,13 @@ revoke all on function public.finalize_group_media_upload(
   integer,
   uuid
 ) from public;
+revoke all on function public.authorize_group_media_finalize(uuid, text)
+  from public;
 revoke all on function public.authorize_group_media_read(uuid) from public;
-revoke all on function public.remove_group_media(uuid, uuid) from public;
-revoke all on function public.reject_group_media_upload(text) from public;
+revoke all on function public.authorize_group_media_removal(uuid) from public;
+revoke all on function public.finalize_group_media_removal(uuid, text, uuid)
+  from public;
+revoke all on function public.reject_group_media_upload(uuid, text) from public;
 
 grant execute on function public.authorize_group_media_upload(
   uuid,
@@ -406,9 +511,13 @@ grant execute on function public.finalize_group_media_upload(
   integer,
   uuid
 ) to authenticated;
+grant execute on function public.authorize_group_media_finalize(uuid, text)
+  to authenticated;
 grant execute on function public.authorize_group_media_read(uuid)
   to authenticated;
-grant execute on function public.remove_group_media(uuid, uuid)
+grant execute on function public.authorize_group_media_removal(uuid)
   to authenticated;
-grant execute on function public.reject_group_media_upload(text)
-  to service_role;
+grant execute on function public.finalize_group_media_removal(uuid, text, uuid)
+  to authenticated;
+grant execute on function public.reject_group_media_upload(uuid, text)
+  to authenticated;

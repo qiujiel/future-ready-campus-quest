@@ -2,11 +2,12 @@ import { z } from "npm:zod@4.4.3";
 import {
   adminClient,
   callerClient,
-  frontendOrigin,
+  frontendAppUrl,
   issueSessionForExistingUser,
   publicAuthClient,
 } from "../_shared/auth.ts";
 import { corsHeaders } from "../_shared/cors.ts";
+import { RequestOriginError } from "../_shared/cors.ts";
 import {
   createRecoveryToken,
   type RecoveryDependencies,
@@ -85,7 +86,7 @@ Deno.serve(async (request) => {
       const row = result.data?.[0] as { expires_at?: string } | undefined;
       return jsonResponse(
         {
-          recoveryUrl: `${frontendOrigin()}/#/recover/${token.rawToken}`,
+          recoveryUrl: `${frontendAppUrl()}/#/recover/${token.rawToken}`,
           expiresAt: row?.expires_at ?? token.expiresAt,
         },
         200,
@@ -98,8 +99,8 @@ Deno.serve(async (request) => {
     const admin = adminClient();
     const publicClient = publicAuthClient();
     const dependencies: RecoveryDependencies = {
-      async consumeToken(tokenHash, requestKey) {
-        const result = await admin.rpc("redeem_student_recovery", {
+      async claimToken(tokenHash, requestKey) {
+        const result = await admin.rpc("claim_student_recovery", {
           p_token_hash: tokenHash,
           p_request_key: requestKey,
         });
@@ -112,6 +113,13 @@ Deno.serve(async (request) => {
       },
       async issueSession(studentId) {
         return issueSessionForExistingUser(admin, publicClient, studentId);
+      },
+      async finalizeToken(tokenHash, requestKey) {
+        const result = await admin.rpc("finalize_student_recovery", {
+          p_token_hash: tokenHash,
+          p_request_key: requestKey,
+        });
+        if (result.error) mapRecoveryError(result.error.message);
       },
     };
     const recovered = await recoverStudent(
@@ -148,7 +156,10 @@ Deno.serve(async (request) => {
         // Preserve the neutral client error even if audit storage is unavailable.
       }
     }
-    const status = error instanceof RecoveryBoundaryError ? error.status : 400;
+    const status =
+      error instanceof RecoveryBoundaryError || error instanceof RequestOriginError
+        ? error.status
+        : 400;
     return jsonResponse(
       {
         error:

@@ -1,6 +1,6 @@
 import { z } from "npm:zod@4.4.3";
-import { callerClient, frontendOrigin } from "../_shared/auth.ts";
-import { corsHeaders } from "../_shared/cors.ts";
+import { callerClient, frontendAppUrl } from "../_shared/auth.ts";
+import { corsHeaders, RequestOriginError } from "../_shared/cors.ts";
 import {
   deriveJoinToken,
   hashJoinToken,
@@ -85,14 +85,17 @@ Deno.serve(async (request) => {
         : expiresAt;
     return jsonResponse(
       {
-        joinUrl: `${frontendOrigin()}/#/join/${rawToken}`,
+        joinUrl: `${frontendAppUrl()}/#/join/${rawToken}`,
         expiresAt: persistedExpiry,
       },
       200,
       headers,
     );
   } catch (error) {
-    const status = error instanceof JoinBoundaryError ? error.status : 400;
+    const status =
+      error instanceof JoinBoundaryError || error instanceof RequestOriginError
+        ? error.status
+        : 400;
     return jsonResponse(
       {
         error:

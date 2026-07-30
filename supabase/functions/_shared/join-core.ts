@@ -58,11 +58,13 @@ export interface JoinDependencies {
     tokenHash: string,
     requestKey: string,
   ): Promise<StoredJoin | null>;
+  preflightJoin(tokenHash: string, groupNumber: number): Promise<void>;
   createSyntheticUser(): Promise<SyntheticUser>;
   signInNewUser(user: SyntheticUser): Promise<SessionTokens>;
   issueReplacementSession(studentId: string): Promise<SessionTokens>;
   completeJoin(input: CompleteJoinInput): Promise<StudentIdentity>;
   deleteSyntheticUser(studentId: string): Promise<void>;
+  recordOrphanedIdentity(studentId: string): Promise<void>;
 }
 
 export interface JoinWindowToken {
@@ -166,6 +168,8 @@ export async function joinStudent(
     return { identity: completed.identity, ...session };
   }
 
+  await dependencies.preflightJoin(tokenHash, normalized.groupNumber);
+
   let syntheticUser: SyntheticUser | undefined;
   let initialSession: SessionTokens | undefined;
   try {
@@ -181,7 +185,7 @@ export async function joinStudent(
     });
 
     if (identity.studentId !== syntheticUser.studentId) {
-      await dependencies.deleteSyntheticUser(syntheticUser.studentId);
+      await deleteSyntheticUserSafely(syntheticUser.studentId, dependencies);
       const replacementSession = await dependencies.issueReplacementSession(
         identity.studentId,
       );
@@ -204,7 +208,7 @@ export async function joinStudent(
           if (reconciled.identity.studentId === syntheticUser.studentId) {
             return { identity: reconciled.identity, ...initialSession };
           }
-          await dependencies.deleteSyntheticUser(syntheticUser.studentId);
+          await deleteSyntheticUserSafely(syntheticUser.studentId, dependencies);
           const replacement = await dependencies.issueReplacementSession(
             reconciled.identity.studentId,
           );
@@ -215,9 +219,29 @@ export async function joinStudent(
       }
     }
     if (syntheticUser) {
-      await dependencies.deleteSyntheticUser(syntheticUser.studentId);
+      try {
+        await deleteSyntheticUserSafely(syntheticUser.studentId, dependencies);
+      } catch {
+        throw new JoinBoundaryError("JOIN_NOT_AVAILABLE", 409);
+      }
     }
     if (error instanceof JoinBoundaryError) throw error;
     throw new JoinBoundaryError("JOIN_NOT_AVAILABLE", 409);
+  }
+}
+
+async function deleteSyntheticUserSafely(
+  studentId: string,
+  dependencies: JoinDependencies,
+): Promise<void> {
+  try {
+    await dependencies.deleteSyntheticUser(studentId);
+  } catch (error) {
+    try {
+      await dependencies.recordOrphanedIdentity(studentId);
+    } catch {
+      // Preserve the cleanup failure; the audit path is best-effort only.
+    }
+    throw error;
   }
 }

@@ -37,6 +37,15 @@ export interface InspectedImage {
   byteSize: number;
 }
 
+export interface DecodedImage extends InspectedImage {
+  sanitizedBytes: Uint8Array;
+}
+
+export type TrustedImageDecoder = (
+  bytes: Uint8Array,
+  declaredMimeType: string,
+) => Promise<DecodedImage>;
+
 export function validateIncomingUpload(upload: IncomingUpload): void {
   if (!ALLOWED_MIME_TYPES.has(upload.mimeType)) {
     throw new MediaBoundaryError("MEDIA_TYPE_REJECTED", 400);
@@ -201,4 +210,37 @@ export function inspectStoredImage(
     height: detected.height,
     byteSize: bytes.byteLength,
   };
+}
+
+export async function decodeStoredImage(
+  bytes: Uint8Array,
+  declaredMimeType: string,
+  decoder: TrustedImageDecoder,
+): Promise<DecodedImage> {
+  validateIncomingUpload({ mimeType: declaredMimeType, byteSize: bytes.byteLength });
+  if (bytes.byteLength > MAX_STORED_BYTES) {
+    throw new MediaBoundaryError("MEDIA_TOO_LARGE", 413);
+  }
+  const original = inspectStoredImage(bytes, declaredMimeType);
+
+  try {
+    const decoded = await decoder(bytes, declaredMimeType);
+    const inspected = inspectStoredImage(
+      decoded.sanitizedBytes,
+      declaredMimeType,
+    );
+    if (
+      decoded.width !== inspected.width ||
+      decoded.height !== inspected.height ||
+      decoded.mimeType !== inspected.mimeType ||
+      decoded.width !== original.width ||
+      decoded.height !== original.height
+    ) {
+      throw new MediaBoundaryError("MEDIA_SIGNATURE_MISMATCH", 400);
+    }
+    return { ...inspected, sanitizedBytes: decoded.sanitizedBytes };
+  } catch (error) {
+    if (error instanceof MediaBoundaryError) throw error;
+    throw new MediaBoundaryError("MEDIA_TYPE_REJECTED", 400);
+  }
 }
