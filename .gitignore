@@ -6,6 +6,7 @@ dfrlt-session-1-21st-century-quality-learning-aug-26.pdf
 tmp/
 .superpowers/
 protected-content/
+.worktrees/
 
 # Future application outputs and secrets.
 node_modules/
