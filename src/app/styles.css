@@ -756,6 +756,190 @@ button:disabled {
   }
 }
 
+.mission-card {
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-card);
+  padding: clamp(1rem, 5vw, 1.75rem);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-outline);
+}
+
+.mission-card__header h2 {
+  margin: 0;
+  font-size: clamp(1.35rem, 5vw, 2rem);
+  line-height: 1.2;
+}
+
+.adaptive-cue {
+  margin-block: 1rem;
+  border-left: 5px solid var(--color-quest-purple);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  padding: 0.8rem 1rem;
+  background: #f1ebff;
+  line-height: 1.5;
+}
+
+.choice-interaction,
+.sort-interaction,
+.classification-interaction {
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.choice-interaction legend,
+.sort-interaction legend,
+.classification-interaction legend {
+  margin-bottom: 0.75rem;
+  font-weight: 900;
+}
+
+.choice-interaction__options {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.choice-option {
+  display: grid;
+  min-height: 54px;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.7rem;
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-control);
+  padding: 0.7rem 0.8rem;
+  background: var(--color-surface-raised);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.choice-option--selected {
+  background: var(--color-info-soft);
+  box-shadow: inset 5px 0 0 var(--color-campus-blue);
+}
+
+.choice-option input {
+  width: 1.4rem;
+  min-height: 1.4rem;
+  margin: 0;
+  accent-color: var(--color-campus-blue);
+}
+
+.selection-summary {
+  margin-bottom: 0;
+  color: var(--color-ink-muted);
+  font-weight: 750;
+}
+
+.sort-interaction ol {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sort-interaction li {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.7rem;
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-control);
+  padding: 0.55rem;
+  background: var(--color-surface-raised);
+}
+
+.sort-interaction small,
+.sort-interaction strong {
+  display: block;
+}
+
+.sort-interaction small {
+  margin-top: 0.15rem;
+  color: var(--color-ink-muted);
+}
+
+.sort-position {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border: 2px solid var(--color-ink);
+  border-radius: 50%;
+  background: var(--color-sun);
+  font-weight: 900;
+}
+
+.sort-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.classification-interaction {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.classification-interaction label {
+  display: grid;
+  gap: 0.45rem;
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-control);
+  padding: 0.75rem;
+  font-weight: 700;
+}
+
+.classification-interaction select {
+  width: 100%;
+  border: 2px solid var(--color-ink);
+  border-radius: 0.7rem;
+  padding: 0.6rem;
+  background: #fff;
+  color: var(--color-ink);
+}
+
+.connection-note {
+  border-radius: var(--radius-control);
+  padding: 0.8rem 1rem;
+  background: var(--color-warning-soft);
+  font-weight: 750;
+}
+
+.feedback-panel {
+  margin-top: 1.25rem;
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-card);
+  padding: 1rem;
+  background: var(--color-success-soft);
+}
+
+.feedback-panel--developing {
+  background: var(--color-warning-soft);
+}
+
+.feedback-panel h3 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.source-label {
+  color: var(--color-ink-muted);
+  font-size: 0.9rem;
+}
+
+@media (min-width: 40rem) {
+  .sort-interaction li {
+    grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+  }
+
+  .sort-actions {
+    grid-column: auto;
+  }
+}
+
 .control-panel h2,
 .privacy-card h2 {
   margin-top: 0;
