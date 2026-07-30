@@ -4,7 +4,7 @@ import type {
   JoinCohortOutput,
   SessionTokens,
   StudentIdentity,
-} from "../../../src/shared/api/contracts";
+} from "../../../src/shared/api/contracts.ts";
 
 const uuidSchema = z.uuid();
 

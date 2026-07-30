@@ -5,6 +5,7 @@ import {
   redirect,
 } from "react-router-dom";
 import { JoinPage } from "../features/join/JoinPage";
+import { RecoveryPage } from "../features/join/RecoveryPage";
 import { TeacherSetupPage } from "../features/teacher/TeacherSetupPage";
 import { TeacherSignInPage } from "../features/teacher/TeacherSignInPage";
 import { getSupabaseClient } from "../shared/api/supabase";
@@ -35,6 +36,7 @@ async function requireRole(role: "teacher" | "student") {
 export const router = createHashRouter([
   { path: "/", element: <App /> },
   { path: "/join/:token", element: <JoinPage /> },
+  { path: "/recover/:token", element: <RecoveryPage /> },
   { path: "/teacher/sign-in", element: <TeacherSignInPage /> },
   {
     element: <ProtectedRouteBoundary />,

@@ -2,6 +2,8 @@ import type {
   JoinCohortInput,
   JoinCohortOutput,
   ManageJoinWindowInput,
+  RecoverStudentInput,
+  RecoverStudentOutput,
 } from "./contracts";
 import { getSupabaseClient } from "./supabase";
 
@@ -21,6 +23,7 @@ export interface AuthGateway {
   ): Promise<{ joinUrl: string; expiresAt: string }>;
   closeJoinWindow?(cohortId: string, requestKey: string): Promise<void>;
   joinCohort(input: JoinCohortInput): Promise<JoinCohortOutput>;
+  recoverStudent(input: RecoverStudentInput): Promise<RecoverStudentOutput>;
 }
 
 async function invokeJoinManager(
@@ -94,6 +97,20 @@ export const supabaseAuthGateway: AuthGateway = {
       refresh_token: output.refreshToken,
     });
     if (session.error) throw new Error("The student session could not be saved.");
+    return output;
+  },
+  async recoverStudent(input) {
+    const client = getSupabaseClient();
+    const result = await client.functions.invoke("recover-student", {
+      body: { action: "redeem", ...input },
+    });
+    if (result.error) throw new Error("The recovery link was not accepted.");
+    const output = result.data as RecoverStudentOutput;
+    const session = await client.auth.setSession({
+      access_token: output.accessToken,
+      refresh_token: output.refreshToken,
+    });
+    if (session.error) throw new Error("The recovered session could not be saved.");
     return output;
   },
 };

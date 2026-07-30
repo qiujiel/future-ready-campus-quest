@@ -49,3 +49,9 @@ verify_jwt = false
 
 [functions.manage-join-window]
 verify_jwt = true
+
+[functions.recover-student]
+verify_jwt = false
+
+[functions.manage-group-identity]
+verify_jwt = true

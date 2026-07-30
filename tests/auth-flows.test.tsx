@@ -5,6 +5,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import { JoinPage } from "../src/features/join/JoinPage";
+import { RecoveryPage } from "../src/features/join/RecoveryPage";
 import { TeacherSetupPage } from "../src/features/teacher/TeacherSetupPage";
 import { TeacherSignInPage } from "../src/features/teacher/TeacherSignInPage";
 import type { AuthGateway } from "../src/shared/api/authGateway";
@@ -47,6 +48,13 @@ function createGateway(): AuthGateway & {
         },
         accessToken: "student-access-token",
         refreshToken: "student-refresh-token",
+      };
+    },
+    async recoverStudent() {
+      return {
+        studentId: "20000000-0000-4000-8000-000000000001",
+        accessToken: "replacement-access-token",
+        refreshToken: "replacement-refresh-token",
       };
     },
   };
@@ -141,6 +149,48 @@ it("joins a student without asking for email, password, or PIN", async () => {
     realName: "Synthetic Learner",
     nickname: "Silver Fern",
     privacyConfirmed: true,
+  });
+  expect(await screen.findByLabelText("current path")).toHaveTextContent(
+    "/quest",
+  );
+});
+
+it("redeems a teacher-issued recovery link and removes it from the route", async () => {
+  const gateway = {
+    ...createGateway(),
+    recoveryCalls: [] as Array<{
+      recoveryToken: string;
+      requestKey: string;
+    }>,
+    async recoverStudent(input: {
+      recoveryToken: string;
+      requestKey: string;
+    }) {
+      this.recoveryCalls.push(input);
+      return {
+        studentId: "20000000-0000-4000-8000-000000000001",
+        accessToken: "replacement-access-token",
+        refreshToken: "replacement-refresh-token",
+      };
+    },
+  };
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/recover/:token",
+        element: <RecoveryPage gateway={gateway} />,
+      },
+      { path: "/quest", element: <CurrentPath /> },
+    ],
+    { initialEntries: ["/recover/single-use-recovery-token-with-enough-entropy"] },
+  );
+  render(<RouterProvider router={router} />);
+
+  fireEvent.click(screen.getByRole("button", { name: /restore my session/i }));
+
+  await waitFor(() => expect(gateway.recoveryCalls).toHaveLength(1));
+  expect(gateway.recoveryCalls[0]).toMatchObject({
+    recoveryToken: "single-use-recovery-token-with-enough-entropy",
   });
   expect(await screen.findByLabelText("current path")).toHaveTextContent(
     "/quest",

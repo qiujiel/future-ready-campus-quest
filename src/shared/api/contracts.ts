@@ -75,3 +75,31 @@ export type ManageJoinWindowInput =
   | CreateCohortInput
   | OpenJoinWindowInput
   | CloseJoinWindowInput;
+
+export interface RecoverStudentInput {
+  recoveryToken: string;
+  requestKey: string;
+}
+
+export interface RecoverStudentOutput extends SessionTokens {
+  studentId: string;
+}
+
+export type GroupIdentityCommand =
+  | {
+      action: "rename";
+      groupId: string;
+      displayName: string;
+      requestKey: string;
+    }
+  | {
+      action: "transfer-editor";
+      groupId: string;
+      nextEditorId: string;
+      requestKey: string;
+    }
+  | {
+      action: "lock" | "unlock";
+      groupId: string;
+      requestKey: string;
+    };

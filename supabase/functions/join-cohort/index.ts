@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { adminClient, publicAuthClient } from "../_shared/auth.ts";
+import {
+  adminClient,
+  issueSessionForExistingUser,
+  publicAuthClient,
+} from "../_shared/auth.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import {
   type CompleteJoinInput,
@@ -94,21 +98,7 @@ function dependencies(
       return sessionTokens(result.data.session);
     },
     async issueReplacementSession(studentId): Promise<SessionTokens> {
-      const user = await admin.auth.admin.getUserById(studentId);
-      const email = user.data.user?.email;
-      if (user.error || !email) throw new Error("AUTH_USER_NOT_FOUND");
-      const link = await admin.auth.admin.generateLink({
-        type: "magiclink",
-        email,
-      });
-      const tokenHash = link.data.properties?.hashed_token;
-      if (link.error || !tokenHash) throw new Error("AUTH_LINK_FAILED");
-      const verified = await publicClient.auth.verifyOtp({
-        token_hash: tokenHash,
-        type: "email",
-      });
-      if (verified.error) throw new Error("AUTH_SESSION_FAILED");
-      return sessionTokens(verified.data.session);
+      return issueSessionForExistingUser(admin, publicClient, studentId);
     },
     async completeJoin(input: CompleteJoinInput): Promise<StudentIdentity> {
       const result = await admin.rpc("complete_student_join", {
