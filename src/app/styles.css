@@ -1,10 +1,6 @@
 :root {
-  color: #15213d;
-  background: #fff9ed;
-  font-family:
-    Inter, ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, sans-serif;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  color: var(--color-ink);
+  background: var(--color-surface);
 }
 
 * {
@@ -18,7 +14,7 @@ body {
   background:
     radial-gradient(circle at 12% 12%, rgb(245 189 50 / 22%), transparent 24rem),
     radial-gradient(circle at 88% 20%, rgb(122 76 224 / 17%), transparent 28rem),
-    #fff9ed;
+    var(--color-surface);
 }
 
 a {
@@ -229,6 +225,136 @@ button {
 button:disabled {
   cursor: not-allowed;
   opacity: 0.58;
+}
+
+.quest-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-control);
+  padding: 0.7rem 1rem;
+  background: var(--color-quest-purple);
+  color: #fff;
+  font-weight: 800;
+}
+
+.quest-button--secondary {
+  background: var(--color-surface-raised);
+  color: var(--color-ink);
+}
+
+.quest-button--quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-ink);
+  box-shadow: none;
+}
+
+.quest-button--danger {
+  background: var(--color-danger);
+}
+
+.quest-card {
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-card);
+  padding: clamp(1.1rem, 4vw, 1.7rem);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.quest-card__eyebrow {
+  margin: 0 0 0.4rem;
+  color: var(--color-quest-purple);
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.quest-card__title {
+  margin: 0;
+  font-size: clamp(1.25rem, 4vw, 1.75rem);
+}
+
+.quest-card__body {
+  margin-top: 0.85rem;
+}
+
+.status-pill {
+  display: inline-flex;
+  min-height: 1.8rem;
+  align-items: center;
+  border: 2px solid var(--color-ink);
+  border-radius: 999px;
+  padding: 0.15rem 0.65rem;
+  background: var(--color-warning-soft);
+  color: var(--color-ink);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.status-pill--complete {
+  background: var(--color-success-soft);
+}
+
+.status-pill--upcoming {
+  background: #eef0f4;
+}
+
+.status-pill--attention {
+  background: #ffe3df;
+}
+
+.quest-dialog-backdrop {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(21 33 61 / 58%);
+}
+
+.quest-dialog {
+  width: min(34rem, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-card);
+  padding: 1.25rem;
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-outline);
+}
+
+.quest-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.quest-dialog__header h2 {
+  margin: 0;
+}
+
+.toast-region {
+  position: fixed;
+  z-index: 30;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  max-width: min(26rem, calc(100vw - 2rem));
+  border-radius: var(--radius-control);
+  background: var(--color-ink);
+  color: #fff;
+  font-weight: 750;
+}
+
+.toast-region:not(:empty) {
+  border: 2px solid var(--color-ink);
+  padding: 0.8rem 1rem;
+  box-shadow: var(--shadow-card);
 }
 
 .check-label {

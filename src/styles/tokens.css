@@ -1,0 +1,24 @@
+:root {
+  --color-ink: #15213d;
+  --color-ink-muted: #526079;
+  --color-surface: #fffdf8;
+  --color-surface-raised: #ffffff;
+  --color-campus-blue: #3568e8;
+  --color-quest-purple: #6a38cd;
+  --color-energy-coral: #d94e45;
+  --color-growth-green: #147762;
+  --color-sun: #f5bd32;
+  --color-focus: #0a58ca;
+  --color-danger: #a72d25;
+  --color-info-soft: #e7efff;
+  --color-success-soft: #dff7ed;
+  --color-warning-soft: #fff1cf;
+  --shadow-card: 0 12px 32px rgb(21 33 61 / 14%);
+  --shadow-outline: 7px 7px 0 var(--color-ink);
+  --radius-card: 22px;
+  --radius-control: 14px;
+  --space-unit: 0.25rem;
+  --content-max: 72rem;
+  --font-body:
+    Inter, ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, sans-serif;
+}
