@@ -6,18 +6,9 @@ import {
 } from "react-router-dom";
 import { JoinPage } from "../features/join/JoinPage";
 import { RecoveryPage } from "../features/join/RecoveryPage";
+import { QuestEntryPage } from "../features/quest/QuestEntryPage";
 import { getSupabaseClient } from "../shared/api/supabase";
 import { App } from "./App";
-
-function QuestPlaceholder() {
-  return (
-    <main className="route-shell">
-      <p className="eyebrow">Session ready</p>
-      <h1>Your quest is preparing</h1>
-      <p>The learning journey arrives in the next approved implementation plan.</p>
-    </main>
-  );
-}
 
 function ProtectedRouteBoundary() {
   return <Outlet />;
@@ -57,7 +48,7 @@ export const router = createHashRouter([
       {
         path: "/quest",
         loader: () => requireRole("student"),
-        element: <QuestPlaceholder />,
+        element: <QuestEntryPage />,
       },
       {
         path: "/teacher/setup",

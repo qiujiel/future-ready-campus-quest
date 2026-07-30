@@ -48,7 +48,7 @@ export function QuestShell({
   visitedConcepts,
 }: PropsWithChildren<{
   completedPhases: CampusPhase[];
-  deadline: string;
+  deadline?: string;
   lastAcknowledgement?: string;
   now?: Date;
   phase: CampusPhase;
@@ -57,7 +57,7 @@ export function QuestShell({
   visitedConcepts: ConceptId[];
 }>) {
   const [reduceAnimation, setReduceAnimation] = useState(readAnimationPreference);
-  const remaining = formatRemaining(deadline, now);
+  const remaining = deadline ? formatRemaining(deadline, now) : null;
 
   function toggleAnimation() {
     setReduceAnimation((current) => {
@@ -79,8 +79,13 @@ export function QuestShell({
             Campus Quest
           </a>
           <div className="quest-topbar__tools">
-            <p className="quest-timer" aria-label={`Phase time: ${remaining.label}`}>
-              {remaining.label}
+            <p
+              className="quest-timer"
+              aria-label={
+                remaining ? `Phase time: ${remaining.label}` : "Waiting for teacher"
+              }
+            >
+              {remaining?.label ?? "Waiting for teacher"}
             </p>
             <Button
               variant="quiet"
@@ -104,7 +109,7 @@ export function QuestShell({
             <p className="score-note">
               Thoughtful choices matter. Speed does not affect your score.
             </p>
-            {remaining.seconds <= 60 ? (
+            {remaining && remaining.seconds <= 60 ? (
               <p className="time-warning">
                 Moving on soon. Finish your current thought; your saved work
                 stays with you.
