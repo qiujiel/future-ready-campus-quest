@@ -163,8 +163,8 @@ begin
 
   if (
     select count(*) >= v_capacity
-    from public.student_private_profiles
-    where group_id = v_group.id
+    from public.student_private_profiles as private_profiles
+    where private_profiles.group_id = v_group.id
   ) then
     raise exception 'GROUP_FULL' using errcode = 'P0001';
   end if;
@@ -410,7 +410,6 @@ declare
   v_capacity smallint;
   v_member_count integer;
   v_nickname text;
-  v_existing_student_id uuid;
 begin
   select *
   into v_window
@@ -426,13 +425,12 @@ begin
     raise exception 'JOIN_WINDOW_CLOSED' using errcode = 'P0001';
   end if;
 
-  select requests.student_id
-  into v_existing_student_id
-  from public.student_join_requests as requests
-  where requests.join_window_id = v_window.id
-    and requests.request_key = p_request_key;
-
-  if found then
+  if exists (
+    select 1
+    from public.student_join_requests as requests
+    where requests.join_window_id = v_window.id
+      and requests.request_key = p_request_key
+  ) then
     return query
     select * from public.find_completed_student_join(p_token_hash, p_request_key);
     return;
@@ -456,8 +454,8 @@ begin
 
   select count(*)
   into v_member_count
-  from public.student_private_profiles
-  where group_id = v_group.id;
+  from public.student_private_profiles as private_profiles
+  where private_profiles.group_id = v_group.id;
 
   if v_member_count >= v_capacity then
     raise exception 'GROUP_FULL' using errcode = 'P0001';

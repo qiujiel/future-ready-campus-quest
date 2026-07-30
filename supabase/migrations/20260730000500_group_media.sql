@@ -199,10 +199,10 @@ begin
 
   select *
   into v_asset
-  from private.group_media_assets
-  where group_id = p_group_id
-    and object_path = p_object_path
-    and uploader_id = auth.uid()
+  from private.group_media_assets as media_assets
+  where media_assets.group_id = p_group_id
+    and media_assets.object_path = p_object_path
+    and media_assets.uploader_id = auth.uid()
   for update;
 
   if not found or v_asset.status not in ('pending', 'approved') then
@@ -235,11 +235,11 @@ begin
 
   v_previous_path := v_group.image_object_path;
 
-  update private.group_media_assets
+  update private.group_media_assets as media_assets
   set status = 'replaced'
-  where group_id = v_group.id
-    and status = 'approved'
-    and object_path <> p_object_path;
+  where media_assets.group_id = v_group.id
+    and media_assets.status = 'approved'
+    and media_assets.object_path <> p_object_path;
 
   update private.group_media_assets
   set

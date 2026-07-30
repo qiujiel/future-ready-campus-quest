@@ -178,3 +178,20 @@ export interface QuestCompletionResult {
   formulaVersion: "team-score-60-25-10-5-v1";
   reflectionPromptConceptId: ConceptId;
 }
+
+export interface AttemptState {
+  attemptId: string;
+  status: "active" | "completed" | "abandoned";
+  currentPhase: LearningPhase;
+  lastAcceptedSequence: number;
+}
+
+export type ResumeLearningResult =
+  | {
+      status: "resumed";
+      attempt: AttemptState;
+      item: LearningItemPayload | null;
+    }
+  | {
+      status: "recovery-required";
+    };

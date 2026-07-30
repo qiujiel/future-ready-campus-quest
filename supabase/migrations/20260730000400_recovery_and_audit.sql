@@ -92,11 +92,11 @@ begin
     raise exception 'INVALID_RECOVERY_WINDOW' using errcode = '22023';
   end if;
 
-  update private.session_recovery_tokens
+  update private.session_recovery_tokens as recovery_tokens
   set invalidated_at = now()
-  where student_id = p_student_id
-    and invalidated_at is null
-    and redeemed_at is null;
+  where recovery_tokens.student_id = p_student_id
+    and recovery_tokens.invalidated_at is null
+    and recovery_tokens.redeemed_at is null;
 
   delete from auth.sessions
   where user_id = p_student_id;
@@ -342,9 +342,9 @@ begin
     end if;
     if not exists (
       select 1
-      from public.student_private_profiles
-      where student_id = p_next_editor_id
-        and group_id = v_group.id
+      from public.student_private_profiles as private_profiles
+      where private_profiles.student_id = p_next_editor_id
+        and private_profiles.group_id = v_group.id
     ) then
       raise exception 'GROUP_MEMBER_INVALID' using errcode = '22023';
     end if;

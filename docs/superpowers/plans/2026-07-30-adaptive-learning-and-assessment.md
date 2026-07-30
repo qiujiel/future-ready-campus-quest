@@ -401,25 +401,25 @@ git commit -m "feat: complete assessment retry and team scoring"
 - Modify: `src/learning/api/learningClient.ts`
 - Test: `tests/e2e/adaptive-journey.spec.ts`
 
-- [ ] **Step 1: Write failing queue tests**
+- [x] **Step 1: Write failing queue tests**
 
 Test one in-flight mutation, ordered replay, stable idempotency keys across page refresh, acknowledgement removal, stale-sequence reconciliation, and no caching of explanations beyond the current authenticated session.
 
-- [ ] **Step 2: Implement a minimal durable queue**
+- [x] **Step 2: Implement a minimal durable queue**
 
 Persist only pending response payloads and attempt identifiers in IndexedDB. Never persist real names, answer keys, or teacher data. Use exponential retry with jitter, stop on authorization errors, and request authoritative state after conflict.
 
-- [ ] **Step 3: Add resume behavior**
+- [x] **Step 3: Add resume behavior**
 
 On load, restore the Supabase session, fetch server attempt state, reconcile acknowledged submissions, and resume the active phase. If the Auth session is gone, direct the student to teacher-assisted recovery.
 
-- [ ] **Step 4: Run the adaptive journey at mobile and desktop widths**
+- [x] **Step 4: Run the adaptive journey at mobile and desktop widths**
 
 Run: `pnpm playwright test tests/e2e/adaptive-journey.spec.ts`
 
 Expected: the test completes all C1–C8, simulates one network interruption, resumes without a duplicate response, and preserves one scored final attempt.
 
-- [ ] **Step 5: Run the complete learning-engine gate and commit**
+- [x] **Step 5: Run the complete learning-engine gate and commit**
 
 Run: `pnpm lint && pnpm typecheck && pnpm test && supabase test db && pnpm build && pnpm check:bundle`
 
