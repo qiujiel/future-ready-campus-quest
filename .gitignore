@@ -11,6 +11,7 @@ protected-content/
 # Future application outputs and secrets.
 node_modules/
 dist/
+*.tsbuildinfo
 playwright-report/
 test-results/
 .env
