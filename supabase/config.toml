@@ -43,3 +43,9 @@ enable_signup = false
 enabled = true
 policy = "per_worker"
 inspector_port = 8083
+
+[functions.join-cohort]
+verify_jwt = false
+
+[functions.manage-join-window]
+verify_jwt = true

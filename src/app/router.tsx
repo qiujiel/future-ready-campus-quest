@@ -2,33 +2,20 @@ import {
   createHashRouter,
   Navigate,
   Outlet,
-  useParams,
+  redirect,
 } from "react-router-dom";
+import { JoinPage } from "../features/join/JoinPage";
+import { TeacherSetupPage } from "../features/teacher/TeacherSetupPage";
+import { TeacherSignInPage } from "../features/teacher/TeacherSignInPage";
+import { getSupabaseClient } from "../shared/api/supabase";
 import { App } from "./App";
 
-function JoinPlaceholder() {
-  const { token } = useParams();
-  const hasToken = token && token !== "unavailable";
-
+function QuestPlaceholder() {
   return (
     <main className="route-shell">
-      <p className="eyebrow">Student entry</p>
-      <h1>{hasToken ? "Join your campus quest" : "Use your class QR link"}</h1>
-      <p>
-        {hasToken
-          ? "Your teacher’s join window will be checked securely before you enter."
-          : "Ask your teacher to open the join window and scan the shared class QR code."}
-      </p>
-    </main>
-  );
-}
-
-function TeacherSignInPlaceholder() {
-  return (
-    <main className="route-shell">
-      <p className="eyebrow">Teacher access</p>
-      <h1>Teacher sign in</h1>
-      <p>Secure cohort controls will be available after authentication.</p>
+      <p className="eyebrow">Session ready</p>
+      <h1>Your quest is preparing</h1>
+      <p>The learning journey arrives in the next approved implementation plan.</p>
     </main>
   );
 }
@@ -37,15 +24,32 @@ function ProtectedRouteBoundary() {
   return <Outlet />;
 }
 
+async function requireRole(role: "teacher" | "student") {
+  const result = await getSupabaseClient().auth.getUser();
+  if (result.error || result.data.user?.app_metadata.role !== role) {
+    throw redirect(role === "teacher" ? "/teacher/sign-in" : "/");
+  }
+  return null;
+}
+
 export const router = createHashRouter([
   { path: "/", element: <App /> },
-  { path: "/join/:token", element: <JoinPlaceholder /> },
-  { path: "/teacher/sign-in", element: <TeacherSignInPlaceholder /> },
+  { path: "/join/:token", element: <JoinPage /> },
+  { path: "/teacher/sign-in", element: <TeacherSignInPage /> },
   {
     element: <ProtectedRouteBoundary />,
     children: [
-      { path: "/quest", element: <Navigate to="/" replace /> },
-      { path: "/teacher", element: <Navigate to="/teacher/sign-in" replace /> },
+      {
+        path: "/quest",
+        loader: () => requireRole("student"),
+        element: <QuestPlaceholder />,
+      },
+      {
+        path: "/teacher/setup",
+        loader: () => requireRole("teacher"),
+        element: <TeacherSetupPage />,
+      },
+      { path: "/teacher", element: <Navigate to="/teacher/setup" replace /> },
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },

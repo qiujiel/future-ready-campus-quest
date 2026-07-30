@@ -11,6 +11,26 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: normalizeBasePath(environment.VITE_BASE_PATH),
+    build: {
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            maxSize: 400_000,
+            minSize: 20_000,
+            groups: [
+              {
+                name: "supabase",
+                test: /node_modules\/\.pnpm\/@supabase/,
+              },
+              {
+                name: "react",
+                test: /node_modules\/\.pnpm\/(react|react-dom|react-router)/,
+              },
+            ],
+          },
+        },
+      },
+    },
     plugins: [react()],
     test: {
       environment: "jsdom",
