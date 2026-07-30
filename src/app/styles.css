@@ -940,6 +940,143 @@ button:disabled {
   }
 }
 
+.personal-debrief,
+.reflection-card,
+.team-leaderboard {
+  overflow: hidden;
+}
+
+.results-table-scroll,
+.leaderboard-scroll {
+  overflow-x: auto;
+  margin-inline: -0.25rem;
+  padding: 0.25rem;
+}
+
+.results-table,
+.leaderboard-table {
+  width: 100%;
+  min-width: 42rem;
+  border-collapse: separate;
+  border-spacing: 0 0.45rem;
+  text-align: left;
+}
+
+.results-table th,
+.results-table td,
+.leaderboard-table th,
+.leaderboard-table td {
+  padding: 0.7rem;
+}
+
+.results-table thead th,
+.leaderboard-table thead th {
+  color: var(--color-ink-muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+.results-table tbody tr,
+.leaderboard-table tbody tr {
+  background: var(--color-info-soft);
+}
+
+.results-table tbody th,
+.leaderboard-table tbody td:first-child {
+  border-radius: var(--radius-control) 0 0 var(--radius-control);
+}
+
+.results-table tbody td:last-child,
+.leaderboard-table tbody td:last-child {
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+}
+
+.reflection-prompt {
+  font-size: clamp(1.1rem, 4vw, 1.35rem);
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+.reflection-choices {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.reflection-choices legend {
+  margin-bottom: 0.4rem;
+  font-weight: 900;
+}
+
+.reflection-choices label {
+  display: grid;
+  min-height: 50px;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.6rem;
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-control);
+  padding: 0.65rem;
+  font-weight: 700;
+}
+
+.reflection-choices input {
+  width: 1.35rem;
+  min-height: 1.35rem;
+  accent-color: var(--color-quest-purple);
+}
+
+.reflection-note {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 800;
+}
+
+.reflection-note textarea {
+  width: 100%;
+  resize: vertical;
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-control);
+  padding: 0.75rem;
+  background: #fff;
+  color: var(--color-ink);
+  line-height: 1.5;
+}
+
+.reflection-note small {
+  color: var(--color-ink-muted);
+  font-weight: 500;
+}
+
+.reflection-status,
+.leaderboard-empty {
+  border-radius: var(--radius-control);
+  padding: 0.8rem 1rem;
+  background: var(--color-success-soft);
+  font-weight: 750;
+}
+
+.leaderboard-table th[scope="row"] {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.leaderboard-avatar,
+.leaderboard-table img {
+  display: inline-grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border: 2px solid var(--color-ink);
+  border-radius: 50%;
+  background: var(--color-sun);
+  object-fit: cover;
+  font-weight: 900;
+}
+
 .control-panel h2,
 .privacy-card h2 {
   margin-top: 0;
