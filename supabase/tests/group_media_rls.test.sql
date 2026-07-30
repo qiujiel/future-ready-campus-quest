@@ -57,7 +57,7 @@ select throws_ok(
     '60000000-0000-4000-8000-000000000001'
   )$$,
   '42501',
-  'MEDIA_ACTION_DENIED',
+  'permission denied for function authorize_group_media_read',
   'anonymous callers cannot authorize signed image reads'
 );
 

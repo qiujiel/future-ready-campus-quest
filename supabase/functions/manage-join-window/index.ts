@@ -1,4 +1,4 @@
-import { z } from "npm:zod@4";
+import { z } from "npm:zod@4.4.3";
 import { callerClient, frontendOrigin } from "../_shared/auth.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import {

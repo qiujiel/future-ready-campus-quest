@@ -1,5 +1,5 @@
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { z } from "npm:zod@4";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2.111.0";
+import { z } from "npm:zod@4.4.3";
 import {
   adminClient,
   callerClient,

@@ -1,0 +1,96 @@
+name: Verify Campus Quest
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "codex/**"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Reject protected tracked paths
+        run: pnpm check:repo
+
+      - name: Lint, typecheck, and test
+        run: |
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+          pnpm test:functions
+
+      - name: Typecheck Edge Functions
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Check Edge Function modules
+        run: deno check supabase/functions/*/index.ts
+
+      - name: Start local Supabase
+        run: pnpm exec supabase start
+
+      - name: Reset and test database policies
+        run: |
+          pnpm exec supabase db reset
+          pnpm exec supabase test db
+
+      - name: Build and scan the public artifact
+        run: |
+          pnpm build
+          pnpm check:bundle
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run browser smoke tests
+        run: pnpm playwright test tests/e2e/shell.spec.ts
+
+      - name: Stop local Supabase
+        if: always()
+        run: pnpm exec supabase stop --no-backup
+
+      - name: Upload browser evidence on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2

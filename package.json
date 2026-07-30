@@ -9,6 +9,8 @@
   },
   "scripts": {
     "build": "tsc -b && vite build",
+    "check:bundle": "node scripts/check-bundle.mjs dist",
+    "check:repo": "node scripts/check-repository.mjs",
     "dev": "vite",
     "lint": "eslint . --max-warnings 0",
     "preview": "vite preview",

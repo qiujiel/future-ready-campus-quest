@@ -238,15 +238,17 @@ reset role;
 set local role anon;
 select set_config('request.jwt.claim.sub', '', true);
 
-select results_eq(
-  $$select count(*)::bigint from public.cohorts$$,
-  array[0::bigint],
+select throws_ok(
+  $$select count(*) from public.cohorts$$,
+  '42501',
+  'permission denied for table cohorts',
   'an anonymous caller cannot read cohorts'
 );
 
-select results_eq(
-  $$select count(*)::bigint from public.student_private_profiles$$,
-  array[0::bigint],
+select throws_ok(
+  $$select count(*) from public.student_private_profiles$$,
+  '42501',
+  'permission denied for table student_private_profiles',
   'an anonymous caller cannot read private profiles'
 );
 
