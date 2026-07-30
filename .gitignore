@@ -1,0 +1,17 @@
+# Local source material is access-controlled and must not be published.
+dflt-session-1-overview-of-ict-in-the-singapore-education-system-aug-2026.pdf
+dfrlt-session-1-21st-century-quality-learning-aug-26.pdf
+
+# Local analysis and design-companion artifacts.
+tmp/
+.superpowers/
+protected-content/
+
+# Future application outputs and secrets.
+node_modules/
+dist/
+playwright-report/
+test-results/
+.env
+.env.*
+!.env.example
