@@ -260,7 +260,7 @@ Before committing, run `git status --short` and confirm no file under `protected
 - Test: `tests/learning/router.test.ts`
 - Create: `supabase/migrations/202607300102_learning_state.sql`
 
-- [ ] **Step 1: Write failing route tests**
+- [x] **Step 1: Write failing route tests**
 
 Cover this timing contract:
 
@@ -272,11 +272,11 @@ Cover this timing contract:
 
 Assert that C1–C8 all appear, support changes item depth and scaffolding, no state skips a concept, and a resumed attempt returns to its server-recorded phase.
 
-- [ ] **Step 2: Model attempts and concept evidence**
+- [x] **Step 2: Model attempts and concept evidence**
 
 Create `quest_attempts`, `phase_progress`, `concept_evidence`, and `student_responses`. Store server timestamps, content version, current phase, last accepted sequence, and completion state. A student can have only one active attempt per cohort session.
 
-- [ ] **Step 3: Implement deterministic scheduling**
+- [x] **Step 3: Implement deterministic scheduling**
 
 Use a seeded ordering derived from `attemptId` so retries and tests are reproducible:
 
@@ -288,13 +288,13 @@ export function supportFor(state: SupportState): SupportProfile {
 }
 ```
 
-The route must reserve at least one mission encounter for every concept, while allocating additional practice to `needs_support` concepts within the 14-minute budget.
+The diagnostic and final routes must each reserve one encounter for every concept. The approximately six mission slots prioritise diagnosed weaknesses, cross-concept work, secure transfer, and synthesis within the 14-minute budget.
 
-- [ ] **Step 4: Add time-budget fallbacks**
+- [x] **Step 4: Add time-budget fallbacks**
 
 If time is running short, reduce optional second practice items before reducing any required concept encounter. The server phase deadline governs transitions; a manipulated client clock cannot extend the scored final.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run: `pnpm vitest run tests/learning/router.test.ts && supabase db reset`
 
