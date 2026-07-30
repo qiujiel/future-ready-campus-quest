@@ -103,3 +103,45 @@ export type GroupIdentityCommand =
       groupId: string;
       requestKey: string;
     };
+
+export type LearningInteractionPayload =
+  | {
+      kind: "single-choice" | "multi-select" | "scenario-sort";
+      options: Array<{ id: string; text: string }>;
+    }
+  | {
+      kind: "classification";
+      prompts: Array<{ id: string; text: string }>;
+      categories: string[];
+    };
+
+export interface LearningItemPayload {
+  assignmentId: string;
+  itemId: string;
+  conceptId: ConceptId;
+  phase: LearningPhase;
+  stem: string;
+  interaction: LearningInteractionPayload;
+  support: {
+    conceptReminder?: string;
+    sourcePageLabel?: string;
+  };
+}
+
+export interface ResponseSubmission {
+  attemptId: string;
+  assignmentId: string;
+  idempotencyKey: string;
+  selectedOptionIds: string[];
+  clientSequence: number;
+  confidence?: "unsure" | "somewhat_sure" | "very_sure";
+}
+
+export interface ResponseResult {
+  responseId: string;
+  correct: boolean;
+  explanation: string;
+  misconceptionTag: string | null;
+  conceptState: SupportState;
+  nextPhase: LearningPhase;
+}

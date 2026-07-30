@@ -315,15 +315,15 @@ git commit -m "feat: route every learner through all concepts"
 - Create: `src/learning/api/learningClient.ts`
 - Test: `supabase/tests/response_idempotency.test.ts`
 
-- [ ] **Step 1: Write failing response-boundary tests**
+- [x] **Step 1: Write failing response-boundary tests**
 
 Test that a current item omits correctness and rationale, a submitted item returns its explanation, a repeated idempotency key returns the original result, a stale sequence is rejected, another student's item cannot be submitted, and final responses cannot be changed after acceptance.
 
-- [ ] **Step 2: Implement `get-next-item`**
+- [x] **Step 2: Implement `get-next-item`**
 
 Authorize the student, lock the active attempt, select the scheduled item, and return `LearningItemPayload`. The payload may contain a concept reminder and source page label based on support state, but never correct option IDs.
 
-- [ ] **Step 3: Implement atomic `submit-response`**
+- [x] **Step 3: Implement atomic `submit-response`**
 
 Use one database RPC to:
 
@@ -336,13 +336,13 @@ Use one database RPC to:
 
 Use server time for every deadline and duration field.
 
-- [ ] **Step 4: Verify the authorization and retry boundary**
+- [x] **Step 4: Verify the authorization and retry boundary**
 
-Run: `pnpm test:functions responses && supabase test db`
+Run: `pnpm test:functions response_idempotency && supabase test db`
 
 Expected: all response, replay, cross-student, and answer-leak tests pass.
 
-- [ ] **Step 5: Commit the learning API**
+- [x] **Step 5: Commit the learning API**
 
 ```bash
 git add supabase/migrations/202607300104_learning_rpc.sql supabase/functions/get-next-item supabase/functions/submit-response src/learning/api supabase/tests/response_idempotency.test.ts

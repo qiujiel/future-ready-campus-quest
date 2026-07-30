@@ -55,3 +55,9 @@ verify_jwt = false
 
 [functions.manage-group-identity]
 verify_jwt = true
+
+[functions.get-next-item]
+verify_jwt = true
+
+[functions.submit-response]
+verify_jwt = true
