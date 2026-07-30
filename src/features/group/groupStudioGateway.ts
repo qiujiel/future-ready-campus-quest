@@ -108,6 +108,7 @@ export const supabaseGroupStudioGateway: GroupStudioGateway = {
     const data = await invokeGroupCommand({
       action: "get-image-url",
       groupId,
+      requestKey: crypto.randomUUID(),
     });
     return typeof data.imageUrl === "string" ? data.imageUrl : null;
   },
