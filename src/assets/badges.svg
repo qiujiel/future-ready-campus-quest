@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 110" role="img" aria-labelledby="title description">
+  <title id="title">Campus Quest phase badges</title>
+  <desc id="description">Five original geometric badges for the briefing, diagnostic, learning, final challenge, and reflection phases.</desc>
+  <g stroke="#15213d" stroke-width="5">
+    <path d="M55 8 98 31v48l-43 23L12 79V31z" fill="#f5bd32"/>
+    <path d="m40 57 11 11 22-28" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="155" cy="55" r="47" fill="#3568e8"/>
+    <path d="M132 74V36h46v38M155 36v38" fill="#fffdf8"/>
+    <path d="M255 8 298 31v48l-43 23-43-23V31z" fill="#7a4ce0"/>
+    <path d="M233 72h44M239 72V43h32v29M248 43V31h14v12" fill="#fffdf8"/>
+    <circle cx="355" cy="55" r="47" fill="#ed5f55"/>
+    <path d="m355 24 9 20 22 2-17 14 5 22-19-12-19 12 5-22-17-14 22-2z" fill="#fffdf8"/>
+    <path d="M455 8 498 31v48l-43 23-43-23V31z" fill="#16866f"/>
+    <path d="M455 83V51M455 60c-18-1-23-12-24-22 15-2 24 6 24 22zm2-10c14-1 21-10 22-20-14-1-23 7-22 20z" fill="#fffdf8"/>
+  </g>
+</svg>

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 400" role="img" aria-labelledby="title description">
+  <title id="title">Future-Ready Campus route</title>
+  <desc id="description">A bright route linking Briefing Plaza, Diagnostic Gate, Learning Labs, Challenge Hall, and Reflection Garden.</desc>
+  <rect width="760" height="400" rx="34" fill="#dff7ed"/>
+  <path d="M70 305C160 205 225 345 330 240s170 35 255-80c36-49 76-61 112-66" fill="none" stroke="#15213d" stroke-width="18" stroke-linecap="round" opacity=".16"/>
+  <path d="M70 290C160 190 225 330 330 225s170 35 255-80c36-49 76-61 112-66" fill="none" stroke="#fffdf8" stroke-width="13" stroke-linecap="round" stroke-dasharray="16 15"/>
+  <g stroke="#15213d" stroke-width="5">
+    <g transform="translate(32 238)">
+      <circle cx="52" cy="52" r="48" fill="#f5bd32"/>
+      <path d="M28 61h48V35L52 20 28 35z" fill="#fffdf8"/>
+      <path d="M45 61V44h14v17" fill="#ed5f55"/>
+    </g>
+    <g transform="translate(168 224)">
+      <rect x="4" y="8" width="100" height="90" rx="18" fill="#3568e8"/>
+      <path d="M24 98V42h60v56M18 42h72L54 14z" fill="#fffdf8"/>
+      <circle cx="54" cy="66" r="12" fill="#f5bd32"/>
+    </g>
+    <g transform="translate(306 146)">
+      <path d="M10 104V34L60 5l50 29v70z" fill="#7a4ce0"/>
+      <path d="M30 104V49h60v55M48 49v55M72 49v55" fill="#fffdf8"/>
+      <circle cx="60" cy="27" r="7" fill="#f5bd32"/>
+    </g>
+    <g transform="translate(490 86)">
+      <path d="M10 104V45L65 8l55 37v59z" fill="#ed5f55"/>
+      <path d="M40 104V53h50v51M65 53v51" fill="#fffdf8"/>
+      <path d="M23 45h84" fill="none"/>
+    </g>
+    <g transform="translate(630 24)">
+      <circle cx="54" cy="62" r="49" fill="#16866f"/>
+      <path d="M53 92V52M53 62c-22-2-28-15-29-27 18-2 29 7 29 27zm2-12c17-2 25-12 27-25-18-2-28 8-27 25z" fill="#fffdf8"/>
+      <path d="M30 92h48" fill="none"/>
+    </g>
+  </g>
+  <g fill="#15213d" font-family="system-ui,sans-serif" font-size="15" font-weight="800" text-anchor="middle">
+    <text x="84" y="360">BRIEFING</text>
+    <text x="222" y="350">DIAGNOSTIC</text>
+    <text x="366" y="286">LABS</text>
+    <text x="555" y="220">CHALLENGE</text>
+    <text x="684" y="156">REFLECTION</text>
+  </g>
+</svg>

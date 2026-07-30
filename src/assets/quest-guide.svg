@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-labelledby="title description">
+  <title id="title">Orbit the campus guide</title>
+  <desc id="description">A friendly geometric compass character pointing along the quest route.</desc>
+  <path d="M90 9 160 48v84l-70 39-70-39V48z" fill="#f5bd32" stroke="#15213d" stroke-width="7"/>
+  <circle cx="90" cy="89" r="51" fill="#fffdf8" stroke="#15213d" stroke-width="7"/>
+  <path d="m90 45 18 42-18 46-18-46z" fill="#7a4ce0" stroke="#15213d" stroke-width="5" stroke-linejoin="round"/>
+  <circle cx="69" cy="87" r="6" fill="#15213d"/>
+  <circle cx="111" cy="87" r="6" fill="#15213d"/>
+  <path d="M72 110c11 10 25 10 36 0" fill="none" stroke="#15213d" stroke-width="6" stroke-linecap="round"/>
+</svg>
