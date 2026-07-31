@@ -195,3 +195,46 @@ export type ResumeLearningResult =
   | {
       status: "recovery-required";
     };
+
+export interface EvidenceCounts {
+  needs_support: number;
+  developing: number;
+  secure: number;
+}
+
+export interface ConceptAggregate {
+  conceptId: ConceptId;
+  first: EvidenceCounts;
+  final: EvidenceCounts;
+  retryCorrect: number;
+  retryAttempted: number;
+}
+
+export interface MissedItemAggregate {
+  itemId: string;
+  conceptId: ConceptId;
+  shortLabel: string;
+  incorrectCount: number;
+  responseCount: number;
+  misconceptionTags: Array<{ tag: string; count: number }>;
+}
+
+export interface TeacherTeamScore {
+  groupId: string;
+  groupNumber: number;
+  displayName: string;
+  score: number | null;
+  completedMembers: number;
+  enrolledMembers: number;
+}
+
+export interface TeacherDashboardSummary {
+  cohortId: string;
+  enrolled: number;
+  active: number;
+  completed: number;
+  conceptAggregates: ConceptAggregate[];
+  mostMissed: MissedItemAggregate[];
+  teamScores: TeacherTeamScore[];
+  generatedAt: string;
+}

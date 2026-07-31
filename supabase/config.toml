@@ -64,3 +64,6 @@ verify_jwt = true
 
 [functions.complete-quest]
 verify_jwt = true
+
+[functions.teacher-dashboard]
+verify_jwt = true
