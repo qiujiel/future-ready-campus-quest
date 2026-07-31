@@ -58,6 +58,38 @@ export const router = createHashRouter([
           return { Component: module.TeacherSetupPage };
         },
       },
+      {
+        path: "/teacher/cohorts/:cohortId",
+        loader: () => requireRole("teacher"),
+        lazy: async () => {
+          const module = await import("../features/teacher/TeacherShell");
+          return { Component: module.TeacherShell };
+        },
+      },
+      {
+        path: "/teacher/cohorts/:cohortId/concepts/:conceptId",
+        loader: () => requireRole("teacher"),
+        lazy: async () => {
+          const module = await import("../features/teacher/TeacherShell");
+          return { Component: module.TeacherShell };
+        },
+      },
+      {
+        path: "/teacher/cohorts/:cohortId/groups/:groupId",
+        loader: () => requireRole("teacher"),
+        lazy: async () => {
+          const module = await import("../features/teacher/TeacherShell");
+          return { Component: module.TeacherShell };
+        },
+      },
+      {
+        path: "/teacher/cohorts/:cohortId/students/:studentId",
+        loader: () => requireRole("teacher"),
+        lazy: async () => {
+          const module = await import("../features/teacher/TeacherShell");
+          return { Component: module.TeacherShell };
+        },
+      },
       { path: "/teacher", element: <Navigate to="/teacher/setup" replace /> },
     ],
   },

@@ -5,7 +5,14 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "playwright-report", "test-results"] },
+  {
+    ignores: [
+      "dist",
+      "playwright-report",
+      "supabase/.temp",
+      "test-results",
+    ],
+  },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {

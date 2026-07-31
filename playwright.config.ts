@@ -39,5 +39,13 @@ export default defineConfig({
     command: "pnpm build && pnpm preview --host 127.0.0.1 --port 4174",
     url: "http://127.0.0.1:4174",
     reuseExistingServer: !process.env.CI,
+    env: {
+      VITE_SUPABASE_URL:
+        process.env.VITE_SUPABASE_URL ?? "https://e2e.invalid",
+      VITE_SUPABASE_PUBLISHABLE_KEY:
+        process.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
+        "e2e-public-publishable-key-with-safe-length",
+      VITE_BASE_PATH: process.env.VITE_BASE_PATH ?? "/",
+    },
   },
 });

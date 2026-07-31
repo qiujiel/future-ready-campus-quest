@@ -67,3 +67,9 @@ verify_jwt = true
 
 [functions.teacher-dashboard]
 verify_jwt = true
+
+[functions.teacher-controls]
+verify_jwt = true
+
+[functions.export-cohort]
+verify_jwt = true

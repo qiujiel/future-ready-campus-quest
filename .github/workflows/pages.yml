@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   package:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Check out approved source
@@ -34,19 +35,94 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify source and build public shell
-        env:
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH }}
+      - name: Verify source and unit boundaries
         run: |
           pnpm check:repo
           pnpm lint
           pnpm typecheck
           pnpm test
           pnpm test:functions
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Check Edge Function modules
+        run: deno check supabase/functions/*/index.ts
+
+      - name: Start and verify local Supabase
+        run: |
+          pnpm exec supabase start
+          pnpm exec supabase db reset
+          pnpm exec supabase test db
+          eval "$(pnpm exec supabase status -o env)"
+          echo "TEST_SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "TEST_SUPABASE_ANON_KEY=$ANON_KEY" >> "$GITHUB_ENV"
+          echo "TEST_SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
+
+      - name: Run black-box Edge and Auth tests
+        env:
+          ALLOWED_FRONTEND_ORIGINS: http://127.0.0.1:4173
+          FRONTEND_APP_URL: http://127.0.0.1:4173
+          JOIN_TOKEN_SIGNING_SECRET: package-only-join-signing-secret-32-bytes-minimum
+          RECOVERY_TOKEN_SIGNING_SECRET: package-only-recovery-signing-secret-32-bytes
+        run: |
+          printf '%s\n' \
+            "ALLOWED_FRONTEND_ORIGINS=$ALLOWED_FRONTEND_ORIGINS" \
+            "FRONTEND_APP_URL=$FRONTEND_APP_URL" \
+            "JOIN_TOKEN_SIGNING_SECRET=$JOIN_TOKEN_SIGNING_SECRET" \
+            "RECOVERY_TOKEN_SIGNING_SECRET=$RECOVERY_TOKEN_SIGNING_SECRET" \
+            > /tmp/campus-quest-functions.env
+          pnpm exec supabase functions serve \
+            --env-file /tmp/campus-quest-functions.env \
+            > /tmp/campus-quest-functions.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --silent --output /dev/null \
+              http://127.0.0.1:54321/functions/v1/join-cohort; then
+              break
+            fi
+            sleep 1
+          done
+          pnpm test:integration
+
+      - name: Build and scan the public shell
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH }}
+        run: |
           pnpm build
           pnpm check:bundle
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run browser and representative-load gates
+        run: |
+          pnpm playwright test
+          pnpm test:load
+
+      - name: Require dedicated-project 30-student load evidence
+        env:
+          LOAD_SUPABASE_URL: ${{ secrets.LOAD_SUPABASE_URL }}
+          LOAD_SUPABASE_ANON_KEY: ${{ secrets.LOAD_SUPABASE_ANON_KEY }}
+          LOAD_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.LOAD_SUPABASE_SERVICE_ROLE_KEY }}
+          LOAD_TEACHER_ACCESS_TOKEN: ${{ secrets.LOAD_TEACHER_ACCESS_TOKEN }}
+          LOAD_COHORT_ID: ${{ vars.LOAD_COHORT_ID }}
+          LOAD_JOIN_TOKEN: ${{ secrets.LOAD_JOIN_TOKEN }}
+          LOAD_CONTENT_VERSION_ID: ${{ vars.LOAD_CONTENT_VERSION_ID }}
+        run: pnpm test:load:live
+
+      - name: Stop local Supabase
+        if: always()
+        run: pnpm exec supabase stop --no-backup
+
+      - name: Record verified artifact checksum
+        run: |
+          find dist -type f ! -name artifact-sha256.txt -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > dist/artifact-sha256.txt
 
       - name: Upload verified Pages artifact
         uses: actions/upload-pages-artifact@v4
@@ -55,11 +131,41 @@ jobs:
 
   deploy:
     needs: package
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Check out the approved main-branch SHA
+        uses: actions/checkout@v5
+
+      - name: Set up pnpm for protected preflight
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+          run_install: false
+
+      - name: Set up Node for protected preflight
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install locked preflight dependency
+        run: pnpm install --frozen-lockfile
+
+      - name: Read-only production preflight after owner approval
+        env:
+          PRODUCTION_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          PRODUCTION_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          PRODUCTION_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY }}
+          PRODUCTION_CONTENT_VERSION: ${{ vars.PRODUCTION_CONTENT_VERSION }}
+          PRODUCTION_SMOKE_TEACHER_ID: ${{ vars.PRODUCTION_SMOKE_TEACHER_ID }}
+          PRODUCTION_SMOKE_COHORT_ID: ${{ vars.PRODUCTION_SMOKE_COHORT_ID }}
+          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH }}
+        run: node scripts/production-preflight.mjs
+
       - name: Publish after protected-environment approval
         id: deployment
         uses: actions/deploy-pages@v4

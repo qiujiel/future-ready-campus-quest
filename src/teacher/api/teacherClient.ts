@@ -1,8 +1,15 @@
 import { getSupabaseClient } from "../../shared/api/supabase";
-import type { TeacherDashboardSummary } from "../../shared/api/contracts";
+import type {
+  TeacherDashboardSummary,
+  TeacherStudentDetail,
+} from "../../shared/api/contracts";
 
 export interface TeacherGateway {
   getSummary(cohortId: string): Promise<TeacherDashboardSummary>;
+  getStudent?(
+    cohortId: string,
+    studentId: string,
+  ): Promise<TeacherStudentDetail>;
 }
 
 export class TeacherGatewayError extends Error {
@@ -44,5 +51,16 @@ export const supabaseTeacherGateway: TeacherGateway = {
     }
     const data = response.data as { summary: TeacherDashboardSummary };
     return data.summary;
+  },
+  async getStudent(cohortId, studentId) {
+    const response = await getSupabaseClient().functions.invoke(
+      "teacher-dashboard",
+      { body: { cohortId, studentId } },
+    );
+    if (response.error) {
+      await throwTeacherGatewayError(response.error.context);
+    }
+    const data = response.data as { student: TeacherStudentDetail };
+    return data.student;
   },
 };

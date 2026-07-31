@@ -238,3 +238,65 @@ export interface TeacherDashboardSummary {
   teamScores: TeacherTeamScore[];
   generatedAt: string;
 }
+
+export type TeacherControlCommand =
+  | { action: "open-join"; cohortId: string }
+  | { action: "close-join"; cohortId: string }
+  | {
+      action: "issue-recovery";
+      cohortId: string;
+      studentId: string;
+    }
+  | {
+      action: "transfer-editor";
+      cohortId: string;
+      groupId: string;
+      studentId: string;
+    }
+  | {
+      action: "set-group-lock";
+      cohortId: string;
+      groupId: string;
+      locked: boolean;
+    }
+  | {
+      action: "set-quest-starts";
+      cohortId: string;
+      allowed: boolean;
+    }
+  | {
+      action: "extend-phase";
+      cohortId: string;
+      phase: LearningPhase;
+      seconds: number;
+    }
+  | { action: "close-session"; cohortId: string };
+
+export interface TeacherControlReceipt {
+  affected: number;
+  expiresAt?: string;
+  actionState?: string;
+  joinUrl?: string;
+  recoveryUrl?: string;
+}
+
+export type CohortExportType = "summary" | "teacher-private";
+
+export interface TeacherStudentDetail {
+  studentId: string;
+  realName: string;
+  nickname: string;
+  groupName: string;
+  concepts: Array<{
+    conceptId: ConceptId;
+    first: SupportState | "no_evidence";
+    final: SupportState | "no_evidence";
+    retry: string;
+  }>;
+  outcomes: Array<{
+    itemLabel: string;
+    correct: boolean;
+    misconceptionTag: string | null;
+  }>;
+  reflection: string | null;
+}

@@ -76,7 +76,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
   });
   const teacher = await admin.auth.admin.createUser({
     email: `${crypto.randomUUID()}@teacher.integration.invalid`,
-    password: `${crypto.randomUUID()}-${crypto.randomUUID()}`,
+    password: `${crypto.randomUUID()}-GateD!`,
     email_confirm: true,
     app_metadata: { role: "teacher" },
   });

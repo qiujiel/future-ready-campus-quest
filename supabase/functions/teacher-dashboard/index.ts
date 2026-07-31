@@ -8,11 +8,15 @@ import {
   type TeacherDashboardRepository,
 } from "../_shared/teacher-dashboard-core.ts";
 import type {
+  ConceptId,
+  SupportState,
   TeacherDashboardSummary,
+  TeacherStudentDetail,
 } from "../../../src/shared/api/contracts.ts";
 
 const requestSchema = z.object({
   cohortId: z.uuid(),
+  studentId: z.uuid().optional(),
 });
 
 Deno.serve(async (request) => {
@@ -49,6 +53,131 @@ Deno.serve(async (request) => {
       input.cohortId,
       repository,
     );
+    if (input.studentId) {
+      const [profile, publicProfile, attempts] = await Promise.all([
+        client
+          .from("student_private_profiles")
+          .select("student_id,real_name,group_id")
+          .eq("cohort_id", input.cohortId)
+          .eq("student_id", input.studentId)
+          .maybeSingle(),
+        client
+          .from("student_public_profiles")
+          .select("student_id,nickname")
+          .eq("cohort_id", input.cohortId)
+          .eq("student_id", input.studentId)
+          .maybeSingle(),
+        client
+          .from("quest_attempts")
+          .select("id")
+          .eq("cohort_id", input.cohortId)
+          .eq("student_id", input.studentId)
+          .order("started_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      if (
+        profile.error ||
+        !profile.data ||
+        publicProfile.error ||
+        !publicProfile.data ||
+        attempts.error
+      ) {
+        throw new TeacherDashboardBoundaryError(
+          "COHORT_NOT_AVAILABLE",
+          404,
+        );
+      }
+      const group = await client
+        .from("groups")
+        .select("display_name")
+        .eq("cohort_id", input.cohortId)
+        .eq("id", profile.data.group_id)
+        .maybeSingle();
+      if (group.error || !group.data) {
+        throw new TeacherDashboardBoundaryError(
+          "COHORT_NOT_AVAILABLE",
+          404,
+        );
+      }
+      const attemptId = attempts.data?.id;
+      const [evidence, responses, reflection] = attemptId
+        ? await Promise.all([
+          client
+            .from("concept_evidence")
+            .select("concept_id,phase,support_state,correct_count,total_count")
+            .eq("attempt_id", attemptId),
+          client
+            .from("student_responses")
+            .select("phase,correct,misconception_tag")
+            .eq("attempt_id", attemptId)
+            .order("client_sequence"),
+          client
+            .from("quest_reflections")
+            .select("reflection_note")
+            .eq("attempt_id", attemptId)
+            .maybeSingle(),
+        ])
+        : [
+          { data: [], error: null },
+          { data: [], error: null },
+          { data: null, error: null },
+        ];
+      if (evidence.error || responses.error || reflection.error) {
+        throw new TeacherDashboardBoundaryError(
+          "COHORT_NOT_AVAILABLE",
+          404,
+        );
+      }
+      const rows = evidence.data ?? [];
+      const stateFor = (
+        conceptId: ConceptId,
+        phase: "diagnostic" | "final",
+      ): SupportState | "no_evidence" => {
+        const row = rows.find(
+          (candidate) =>
+            candidate.concept_id === conceptId &&
+            candidate.phase === phase,
+        );
+        return (row?.support_state as SupportState | undefined) ??
+          "no_evidence";
+      };
+      const student: TeacherStudentDetail = {
+        studentId: input.studentId,
+        realName: String(profile.data.real_name),
+        nickname: String(publicProfile.data.nickname),
+        groupName: String(group.data.display_name),
+        concepts: Array.from({ length: 8 }, (_, index) => {
+          const conceptId = `C${index + 1}` as ConceptId;
+          const retry = rows.find(
+            (candidate) =>
+              candidate.concept_id === conceptId &&
+              candidate.phase === "retry",
+          );
+          return {
+            conceptId,
+            first: stateFor(conceptId, "diagnostic"),
+            final: stateFor(conceptId, "final"),
+            retry: retry
+              ? `${retry.correct_count} of ${retry.total_count} correct`
+              : "no evidence",
+          };
+        }),
+        outcomes: (responses.data ?? []).map((response, index) => ({
+          itemLabel: `${String(response.phase)} response ${index + 1}`,
+          correct: Boolean(response.correct),
+          misconceptionTag:
+            typeof response.misconception_tag === "string"
+              ? response.misconception_tag
+              : null,
+        })),
+        reflection:
+          typeof reflection.data?.reflection_note === "string"
+            ? reflection.data.reflection_note
+            : null,
+      };
+      return jsonResponse({ student }, 200, headers);
+    }
     return jsonResponse({ summary }, 200, headers);
   } catch (error) {
     if (error instanceof TeacherDashboardBoundaryError) {
