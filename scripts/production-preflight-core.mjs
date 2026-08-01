@@ -1,19 +1,5 @@
 const DEDICATED_LOAD_PROJECT_REF = "vadyhuipwbtgbzpeisbn";
-const REQUIRED_GATE_D_MIGRATION = "20260730021000";
-
-export const EDGE_FUNCTION_NAMES = Object.freeze([
-  "complete-quest",
-  "export-cohort",
-  "get-next-item",
-  "join-cohort",
-  "manage-group-identity",
-  "manage-join-window",
-  "production-readiness",
-  "recover-student",
-  "submit-response",
-  "teacher-controls",
-  "teacher-dashboard",
-]);
+const REQUIRED_GATE_D_MIGRATION = "20260730021100";
 
 function required(environment, name) {
   const value = environment[name]?.trim();
@@ -28,7 +14,15 @@ export function projectRefFromSupabaseUrl(value) {
     throw new Error("Production URL must use a secure Supabase project hostname.");
   }
   const projectRef = url.hostname.slice(0, -suffix.length);
-  if (!projectRef || url.pathname !== "/" || url.search || url.hash) {
+  if (
+    !projectRef ||
+    url.username ||
+    url.password ||
+    url.port ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash
+  ) {
     throw new Error("Production URL must identify one Supabase project root.");
   }
   return projectRef;
@@ -119,6 +113,9 @@ export function evaluateReadinessReport(report, configuration) {
   if (report?.cleanupScheduleReady !== true) {
     failures.push("required cleanup schedule is missing or altered");
   }
+  if (Number(report?.edgeFunctionsReady) !== 10) {
+    failures.push("required Edge Function boundaries are not ready");
+  }
 
   if (!configuration.backendOnly) {
     if (Number(report?.openJoinWindows) !== 0) {
@@ -149,6 +146,7 @@ export function evaluateReadinessReport(report, configuration) {
   const evidence = {
     latestGateDMigration: REQUIRED_GATE_D_MIGRATION,
     cleanupScheduleReady: true,
+    edgeFunctionsReady: 10,
   };
   if (!configuration.backendOnly) {
     evidence.contentVersion = report.contentVersion;
@@ -183,34 +181,4 @@ export async function fetchReadinessReport(configuration, fetcher = fetch) {
     throw new Error(`Production readiness endpoint failed: ${response.status}`);
   }
   return response.json();
-}
-
-export async function probeEdgeFunctions(configuration, fetcher = fetch) {
-  const failures = [];
-  await Promise.all(
-    EDGE_FUNCTION_NAMES.map(async (name) => {
-      try {
-        const response = await fetcher(
-          `${configuration.url}/functions/v1/${name}`,
-          {
-            method: "GET",
-            headers: {
-              apikey: configuration.publishableKey,
-              Authorization: `Bearer ${configuration.publishableKey}`,
-              Origin: configuration.frontendOrigin,
-            },
-          },
-        );
-        if (response.status !== 405) {
-          failures.push(`${name} returned ${response.status}`);
-        }
-      } catch {
-        failures.push(`${name} could not be reached`);
-      }
-    }),
-  );
-  if (failures.length) {
-    throw new Error(`Edge Function preflight failed: ${failures.sort().join("; ")}`);
-  }
-  return { edgeFunctionsReady: EDGE_FUNCTION_NAMES.length };
 }

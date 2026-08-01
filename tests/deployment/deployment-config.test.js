@@ -38,7 +38,7 @@ function validConfiguration() {
             { run: "supabase secrets set --env-file /tmp/functions.env" },
             { run: "supabase functions deploy --project-ref \"$PRODUCTION_SUPABASE_PROJECT_REF\"" },
             {
-              run: "response_code=$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Origin: http://127.0.0.1:4173' http://127.0.0.1/functions/v1/join-cohort)\nif [ \"$response_code\" = \"405\" ]; then break; fi",
+              run: "for readiness_function in join-cohort recover-student; do response_code=$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Origin: http://127.0.0.1:4173' http://127.0.0.1/functions/v1/$readiness_function); if [ \"$response_code\" = \"405\" ]; then break; fi; done",
             },
             {
               run: "deno check --frozen --config supabase/functions/deno.json --lock supabase/functions/deno.lock supabase/functions/*/index.ts",
@@ -54,7 +54,7 @@ function validConfiguration() {
           steps: [
             { uses: pinnedCheckout },
             {
-              run: "response_code=$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Origin: http://127.0.0.1:4173' http://127.0.0.1/functions/v1/join-cohort)\nif [ \"$response_code\" = \"405\" ]; then break; fi",
+              run: "for readiness_function in join-cohort recover-student; do response_code=$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Origin: http://127.0.0.1:4173' http://127.0.0.1/functions/v1/$readiness_function); if [ \"$response_code\" = \"405\" ]; then break; fi; done",
             },
             {
               run: "deno check --frozen --config supabase/functions/deno.json --lock supabase/functions/deno.lock supabase/functions/*/index.ts",
@@ -203,6 +203,16 @@ describe("deployment workflow boundaries", () => {
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /Edge readiness.*405/i,
+    );
+  });
+
+  it("rejects integration startup waits that omit recovery", () => {
+    const configuration = validConfiguration();
+    configuration.pages.jobs.package.steps[1].run =
+      "response_code=$(curl --write-out '%{http_code}' --header 'Origin: test' http://127.0.0.1/functions/v1/join-cohort); test \"$response_code\" = 405";
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /join and recovery/i,
     );
   });
 

@@ -52,10 +52,13 @@ Before release, rehearse this job in a non-production project with synthetic
 expired and unexpired records. Record before/after counts proving that only
 expired join windows, recovery records, and rate-limit events changed. Also
 verify exactly one active cron row exists for the stable job name. Production
-readiness is blocked if the schedule is absent, duplicated, inactive, or if the
-command/schedule is altered, as enforced by migration
-`20260730021000_release_schedule_readiness.sql`. Readiness also fails if the
-course-owner retention period remains unapproved.
+readiness is blocked if the schedule is absent, duplicated under any owner,
+inactive, owned by the wrong role, targets the wrong database, or if its
+command/schedule is altered. Migration
+`20260730021000_release_schedule_readiness.sql` introduced the schedule gate;
+`20260730021100_release_schedule_uniqueness.sql` enforces its unique owner and
+database identity. Readiness also fails if the course-owner retention period
+remains unapproved.
 
 ## Archive, anonymize, and delete
 

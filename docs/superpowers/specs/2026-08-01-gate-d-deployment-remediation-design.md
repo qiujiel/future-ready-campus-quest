@@ -136,14 +136,15 @@ teacher-authorized operational step after backend deployment.
 ## Database readiness and retention
 
 A forward-only migration replaces `get_production_readiness_report` so it
-verifies migration history through `20260730021000`, including:
+verifies migration history through `20260730021100`, including:
 
 - `20260730020500_gate_d_security_hardening`;
 - `20260730020600_service_role_provisioning`;
 - `20260730020700_atomic_session_close`;
 - `20260730020800_release_preflight_hardening`;
 - `20260730020900_retention_cleanup_schedule`;
-- `20260730021000_release_schedule_readiness`.
+- `20260730021000_release_schedule_readiness`;
+- `20260730021100_release_schedule_uniqueness`.
 
 It also verifies every Gate D RPC required by the deployed functions, including
 `assert_teacher_control_scope` and `close_teacher_session`. A hard-coded marker
@@ -154,9 +155,10 @@ per day with `pg_cron`. The cleanup function permits only the hosted scheduler's
 database owner or the service role. The migration uses a stable named job so a
 subsequent migration can replace or remove the schedule deliberately.
 
-A final readiness migration requires exactly one active job with the reviewed
-name, cron expression, and command; missing, duplicated, disabled, or altered
-scheduling blocks backend and Pages readiness.
+A final readiness migration requires exactly one row under the reviewed name,
+owned by `postgres` in the target database, active with the reviewed cron
+expression and command. Missing, duplicated under another owner, disabled, or
+altered scheduling blocks backend and Pages readiness.
 
 The release checklist requires a non-production scheduler rehearsal and proof
 that expired join windows, recovery tokens, and rate-limit events are cleaned
@@ -172,7 +174,7 @@ network orchestration. It must:
 - reject `LOAD_SUPABASE_PROJECT_REF` and `vadyhuipwbtgbzpeisbn`;
 - validate the Pages base path and production frontend origin;
 - verify Auth health;
-- require migration history through `20260730021000`;
+- require migration history through `20260730021100`;
 - require all Gate D RPCs;
 - call a custom-secret-protected readiness endpoint so the provider service
   role remains inside Supabase;
@@ -180,9 +182,10 @@ network orchestration. It must:
 - require zero live join windows and recovery tokens;
 - require the approved 24-item, 8-concept content version;
 - require the smoke teacher/cohort and approved retention setting;
-- probe all eleven Edge Function endpoints with a safe `GET` request and require
-  the deployed method-boundary response rather than a missing-function or
-  server-error response;
+- have the protected readiness endpoint probe all ten application functions
+  with a safe `GET`, provider-managed service-role JWT authorization, and the
+  public publishable key as `apikey`; require the deployed method-boundary
+  response rather than a missing-function, authentication, or server error;
 - output only non-sensitive readiness evidence.
 
 Unit tests cover configuration parsing, load/production separation, migration

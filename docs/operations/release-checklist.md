@@ -62,7 +62,7 @@ Release record:
 - [ ] Backend workflow inputs exactly match the approved SHA and production ref.
 - [ ] `supabase migration list` is captured before mutation.
 - [ ] Migration dry-run contains only reviewed forward migrations, in timestamp
-  order, through `20260730021000`.
+  order, through `20260730021100`.
 - [ ] `production-backend` approval was granted by `________________` at
   `________________`.
 - [ ] Migration push, five custom secret updates, and all eleven function deploys
@@ -79,8 +79,9 @@ Release record:
 - [ ] Approved version key: `________________`; item/concept counts: `24 / 8`.
 - [ ] Smoke teacher and unarchived owned cohort exist as opaque fixtures.
 - [ ] No live join window or recovery token remains from testing.
-- [ ] Daily cleanup job `campus-quest-expired-artifact-cleanup` is active once
-  at `17 3 * * *` and the non-production cleanup rehearsal passed.
+- [ ] Daily cleanup job `campus-quest-expired-artifact-cleanup` has exactly one
+  row, owned by `postgres` in the production database, active at `17 3 * * *`,
+  and the non-production cleanup rehearsal passed.
 - [ ] Pages package job produced one 90-day `github-pages` artifact without
   Pages write or OIDC permission.
 - [ ] Package evidence: artifact ID `________________`, commit

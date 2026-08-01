@@ -1,7 +1,6 @@
 import {
   evaluateReadinessReport,
   fetchReadinessReport,
-  probeEdgeFunctions,
   readPreflightConfiguration,
 } from "./production-preflight-core.mjs";
 
@@ -18,11 +17,9 @@ if (!health.ok) {
 
 const report = await fetchReadinessReport(configuration);
 const evidence = evaluateReadinessReport(report, configuration);
-const edgeEvidence = await probeEdgeFunctions(configuration);
 process.stdout.write(
   `${JSON.stringify({
     projectRef: configuration.projectRef,
     ...evidence,
-    ...edgeEvidence,
   }, null, 2)}\n`,
 );

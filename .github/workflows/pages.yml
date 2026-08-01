@@ -86,18 +86,21 @@ jobs:
           pnpm exec supabase functions serve \
             --env-file /tmp/campus-quest-functions.env \
             > /tmp/campus-quest-functions.log 2>&1 &
-          response_code=000
-          for attempt in $(seq 1 30); do
-            response_code="$(curl --silent --output /dev/null \
-              --write-out '%{http_code}' \
-              --header 'Origin: http://127.0.0.1:4173' \
-              http://127.0.0.1:54321/functions/v1/join-cohort || true)"
-            if [ "$response_code" = "405" ]; then
-              break
-            fi
-            sleep 1
+          for readiness_function in join-cohort recover-student; do
+            response_code=000
+            for attempt in $(seq 1 30); do
+              response_code="$(curl --silent --output /dev/null \
+                --write-out '%{http_code}' \
+                --header 'Origin: http://127.0.0.1:4173' \
+                "http://127.0.0.1:54321/functions/v1/$readiness_function" \
+                || true)"
+              if [ "$response_code" = "405" ]; then
+                break
+              fi
+              sleep 1
+            done
+            test "$response_code" = "405"
           done
-          test "$response_code" = "405"
           pnpm test:integration
 
       - name: Build and scan the public shell

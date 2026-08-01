@@ -25,6 +25,9 @@ function projectRefFromUrl(url: string): string {
     parsed.protocol !== "https:" ||
     !hostname.endsWith(suffix) ||
     !/^[a-z0-9]{20}$/.test(projectRef) ||
+    parsed.username ||
+    parsed.password ||
+    parsed.port ||
     parsed.pathname !== "/" ||
     parsed.search ||
     parsed.hash

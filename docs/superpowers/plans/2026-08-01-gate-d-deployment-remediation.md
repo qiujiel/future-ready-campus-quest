@@ -108,7 +108,9 @@ The CLI loads backend-production.yml, pages.yml, and pages-rollback.yml, validat
 
 **Interfaces:**
 - Consumes: environment configuration, readiness JSON, injected fetch, and --backend-only.
-- Produces: readPreflightConfiguration, evaluateReadinessReport, probeEdgeFunctions, and redaction-safe CLI output.
+- Produces: `readPreflightConfiguration`, `evaluateReadinessReport`, a
+  custom-secret-protected server-side function probe, and redaction-safe CLI
+  output.
 
 - [ ] **Step 1: Write failing project-separation tests**
 

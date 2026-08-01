@@ -1,7 +1,10 @@
 import { adminClient } from "../_shared/auth.ts";
 import { corsHeaders, RequestOriginError } from "../_shared/cors.ts";
 import { jsonResponse, readJson } from "../_shared/http.ts";
-import { readinessSecretMatches } from "./core.ts";
+import {
+  probeFunctionBoundaries,
+  readinessSecretMatches,
+} from "./core.ts";
 
 interface ReadinessInput {
   contentVersion?: unknown;
@@ -14,6 +17,12 @@ function requiredString(value: unknown): string {
     throw new Error("INVALID_READINESS_INPUT");
   }
   return value.trim();
+}
+
+function requiredEnvironment(name: string): string {
+  const value = Deno.env.get(name)?.trim();
+  if (!value) throw new Error("READINESS_NOT_CONFIGURED");
+  return value;
 }
 
 Deno.serve(async (request) => {
@@ -37,7 +46,13 @@ Deno.serve(async (request) => {
       p_smoke_cohort_id: requiredString(input.cohortId),
     });
     if (result.error) throw new Error("READINESS_RPC_FAILED");
-    return jsonResponse(result.data, 200, headers);
+    const edgeEvidence = await probeFunctionBoundaries({
+      supabaseUrl: requiredEnvironment("SUPABASE_URL"),
+      anonKey: requiredEnvironment("SUPABASE_ANON_KEY"),
+      serviceRoleKey: requiredEnvironment("SUPABASE_SERVICE_ROLE_KEY"),
+      frontendOrigin: request.headers.get("Origin") ?? "",
+    });
+    return jsonResponse({ ...result.data, ...edgeEvidence }, 200, headers);
   } catch (error) {
     return jsonResponse(
       {

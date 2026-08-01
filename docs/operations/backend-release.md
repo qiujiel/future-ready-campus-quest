@@ -8,7 +8,7 @@ Reading this document or merging its workflow does not authorize a deployment.
 
 1. Complete the configuration inventory in `github-environments.md`.
 2. Confirm the release commit is on `main`, signed off by the release owner,
-   and contains migrations through `20260730021000`.
+   and contains migrations through `20260730021100`.
 3. Record a current managed-backup or point-in-time recovery identifier and its
    recoverable timestamp. If production has neither, the release is blocked.
 4. Complete a restore rehearsal into a non-production project and record the
@@ -45,8 +45,9 @@ The workflow performs one ordered sequence from the approved commit:
 7. deploy all eleven functions together from `supabase/config.toml`, including
    the custom-secret-protected `production-readiness` endpoint;
 8. run `production-preflight.mjs --backend-only` to verify exact project
-   identity, migrations through `20260730021000`, required RPCs, the exact
-   active cleanup schedule, Auth health, and all function method boundaries;
+   identity, migrations through `20260730021100`, required RPCs, the exact
+   unique active cleanup schedule, Auth health, and all application-function
+   method boundaries probed server-side with provider-managed credentials;
 9. delete temporary secret material in an always-run step.
 
 Expected deploy set:

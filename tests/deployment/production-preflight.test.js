@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  EDGE_FUNCTION_NAMES,
   evaluateReadinessReport,
   fetchReadinessReport,
-  probeEdgeFunctions,
   readPreflightConfiguration,
 } from "../../scripts/production-preflight-core.mjs";
 
@@ -30,9 +28,10 @@ function environment(overrides = {}) {
 function readinessReport(overrides = {}) {
   return {
     requiredMigrationsPresent: true,
-    latestGateDMigration: "20260730021000",
+    latestGateDMigration: "20260730021100",
     requiredFunctionsPresent: true,
     cleanupScheduleReady: true,
+    edgeFunctionsReady: 10,
     openJoinWindows: 0,
     openRecoveryTokens: 0,
     contentVersion: {
@@ -67,6 +66,17 @@ describe("production preflight configuration", () => {
     ).toThrow(/does not match/i);
   });
 
+  it.each([
+    "https://user@production-project.supabase.co",
+    "https://production-project.supabase.co:8443",
+  ])("rejects a non-canonical production URL: %s", (url) => {
+    expect(() =>
+      readPreflightConfiguration(
+        environment({ PRODUCTION_SUPABASE_URL: url }),
+      )
+    ).toThrow(/project root/i);
+  });
+
   it("requires full-release fixtures only outside backend-only mode", () => {
     const withoutFixtures = environment({
       PRODUCTION_CONTENT_VERSION: "",
@@ -88,8 +98,9 @@ describe("production readiness report", () => {
     const configuration = readPreflightConfiguration(environment());
 
     expect(evaluateReadinessReport(readinessReport(), configuration)).toEqual({
-      latestGateDMigration: "20260730021000",
+      latestGateDMigration: "20260730021100",
       cleanupScheduleReady: true,
+      edgeFunctionsReady: 10,
       contentVersion: {
         versionKey: "approved-v1",
         itemCount: 24,
@@ -123,8 +134,9 @@ describe("production readiness report", () => {
     });
 
     expect(evaluateReadinessReport(readinessReport(), configuration)).toEqual({
-      latestGateDMigration: "20260730021000",
+      latestGateDMigration: "20260730021100",
       cleanupScheduleReady: true,
+      edgeFunctionsReady: 10,
       basePath: "/campus-quest/",
     });
   });
@@ -138,6 +150,17 @@ describe("production readiness report", () => {
       readinessReport({ cleanupScheduleReady: false }),
       configuration,
     )).toThrow(/cleanup schedule/i);
+  });
+
+  it("rejects incomplete server-side function probes", () => {
+    const configuration = readPreflightConfiguration(environment(), {
+      backendOnly: true,
+    });
+
+    expect(() => evaluateReadinessReport(
+      readinessReport({ edgeFunctionsReady: 9 }),
+      configuration,
+    )).toThrow(/Edge Function boundaries/i);
   });
 });
 
@@ -165,48 +188,4 @@ describe("least-privilege readiness endpoint", () => {
     );
     expect(JSON.stringify(fetcher.mock.calls)).not.toContain("service-role");
   });
-});
-
-describe("Edge Function readiness probes", () => {
-  it("requires the deployed method boundary from every function", async () => {
-    const fetcher = vi.fn(async () => new Response(null, { status: 405 }));
-    const configuration = readPreflightConfiguration(environment(), {
-      backendOnly: true,
-    });
-
-    await expect(probeEdgeFunctions(configuration, fetcher)).resolves.toEqual({
-      edgeFunctionsReady: 11,
-    });
-    expect(fetcher).toHaveBeenCalledTimes(EDGE_FUNCTION_NAMES.length);
-    expect(fetcher).toHaveBeenCalledWith(
-      "https://production-project.supabase.co/functions/v1/teacher-controls",
-      {
-        method: "GET",
-        headers: {
-          apikey: "synthetic-public-publishable-key-for-tests",
-          Authorization:
-            "Bearer synthetic-public-publishable-key-for-tests",
-          Origin: "https://school.example",
-        },
-      },
-    );
-  });
-
-  it.each([404, 500])(
-    "rejects an unavailable function response with status %s",
-    async (status) => {
-      const fetcher = vi.fn(async (url) =>
-        new Response(null, {
-          status: String(url).endsWith("/teacher-controls") ? status : 405,
-        })
-      );
-      const configuration = readPreflightConfiguration(environment(), {
-        backendOnly: true,
-      });
-
-      await expect(probeEdgeFunctions(configuration, fetcher)).rejects.toThrow(
-        new RegExp(`teacher-controls returned ${status}`),
-      );
-    },
-  );
 });

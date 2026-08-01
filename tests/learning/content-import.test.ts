@@ -228,5 +228,13 @@ describe("protected import safeguards", () => {
       ...configuration,
       supabaseUrl: `https://${projectRef}.supabase.co/rest/v1`,
     })).toThrow(/HTTPS project root/i);
+    expect(() => assertImportConfiguration({
+      ...configuration,
+      supabaseUrl: `https://user@${projectRef}.supabase.co`,
+    })).toThrow(/HTTPS project root/i);
+    expect(() => assertImportConfiguration({
+      ...configuration,
+      supabaseUrl: `https://${projectRef}.supabase.co:444`,
+    })).toThrow(/HTTPS project root/i);
   });
 });

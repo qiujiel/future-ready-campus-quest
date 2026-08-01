@@ -23,6 +23,9 @@ export function readDedicatedLoadConfiguration(environment) {
     projectRef !== DEDICATED_LOAD_PROJECT_REF ||
     url.protocol !== "https:" ||
     url.hostname !== `${DEDICATED_LOAD_PROJECT_REF}.supabase.co` ||
+    url.username ||
+    url.password ||
+    url.port ||
     url.pathname !== "/" ||
     url.search ||
     url.hash

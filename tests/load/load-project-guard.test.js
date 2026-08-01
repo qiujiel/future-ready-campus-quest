@@ -44,4 +44,14 @@ describe("dedicated live-load project guard", () => {
       /dedicated load-test project/i,
     );
   });
+
+  it.each([
+    `https://user@${dedicatedRef}.supabase.co`,
+    `https://${dedicatedRef}.supabase.co:444`,
+  ])("rejects non-literal dedicated project URL %s", (apiUrl) => {
+    expect(() => readDedicatedLoadConfiguration({
+      ...validEnvironment(),
+      LOAD_SUPABASE_URL: apiUrl,
+    })).toThrow(/exact dedicated load-test project/i);
+  });
 });

@@ -42,9 +42,13 @@ function requireEdgeReadyWait(job, label) {
   if (
     !/%\{http_code\}/.test(runs) ||
     !/Origin:/.test(runs) ||
+    !/join-cohort/.test(runs) ||
+    !/recover-student/.test(runs) ||
     !/response_code[\s\S]*405|405[\s\S]*response_code/.test(runs)
   ) {
-    fail(`${label} Edge readiness must require the expected 405 response`);
+    fail(
+      `${label} Edge readiness must require the join and recovery 405 responses`,
+    );
   }
 }
 
