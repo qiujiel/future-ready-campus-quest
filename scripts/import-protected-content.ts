@@ -10,7 +10,6 @@ import {
 export interface ImportConfiguration {
   supabaseUrl: string;
   serviceRoleKey: string;
-  productionProjectRef?: string;
   confirmedProjectRef?: string;
 }
 
@@ -34,11 +33,7 @@ export function assertImportConfiguration(
   }
 
   const projectRef = projectRefFromUrl(configuration.supabaseUrl);
-  if (
-    configuration.productionProjectRef &&
-    projectRef === configuration.productionProjectRef &&
-    configuration.confirmedProjectRef !== projectRef
-  ) {
+  if (projectRef !== "local" && configuration.confirmedProjectRef !== projectRef) {
     throw new Error(
       `Production import requires --confirm-project-ref=${projectRef}.`,
     );
@@ -93,9 +88,6 @@ async function main(): Promise<void> {
   const configuration: ImportConfiguration = {
     supabaseUrl: process.env.SUPABASE_URL ?? "",
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
-    ...(process.env.PRODUCTION_SUPABASE_PROJECT_REF
-      ? { productionProjectRef: process.env.PRODUCTION_SUPABASE_PROJECT_REF }
-      : {}),
     ...(confirmedProjectRef ? { confirmedProjectRef } : {}),
   };
   const bank = JSON.parse(await readFile(bankPath, "utf8")) as unknown;

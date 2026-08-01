@@ -186,20 +186,26 @@ describe("protected import safeguards", () => {
     ).toThrow(/service-role key/i);
   });
 
-  it("requires exact confirmation before targeting production", () => {
+  it("requires exact confirmation before targeting any hosted project", () => {
     expect(() =>
       assertImportConfiguration({
-        supabaseUrl: "https://live-project.supabase.co",
+        supabaseUrl: "https://staging-project.supabase.co",
         serviceRoleKey: "synthetic-service-role-key",
-        productionProjectRef: "live-project",
       }),
-    ).toThrow(/confirm-project-ref=live-project/i);
+    ).toThrow(/confirm-project-ref=staging-project/i);
+
+    expect(() =>
+      assertImportConfiguration({
+        supabaseUrl: "https://staging-project.supabase.co",
+        serviceRoleKey: "synthetic-service-role-key",
+        confirmedProjectRef: "different-project",
+      }),
+    ).toThrow(/confirm-project-ref=staging-project/i);
 
     expect(() =>
       assertImportConfiguration({
         supabaseUrl: "https://live-project.supabase.co",
         serviceRoleKey: "synthetic-service-role-key",
-        productionProjectRef: "live-project",
         confirmedProjectRef: "live-project",
       }),
     ).not.toThrow();
