@@ -36,7 +36,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Reject protected tracked paths
-        run: pnpm check:repo
+        run: |
+          pnpm check:repo
+          pnpm check:deployment
 
       - name: Lint, typecheck, and test
         run: |

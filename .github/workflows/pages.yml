@@ -3,11 +3,6 @@ name: Package and Publish GitHub Pages
 on:
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 concurrency:
   group: campus-quest-pages
   cancel-in-progress: false
@@ -16,18 +11,25 @@ jobs:
   package:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      artifact_id: ${{ steps.pages-artifact.outputs.artifact_id }}
+      commit_sha: ${{ steps.integrity.outputs.commit_sha }}
+      manifest_digest: ${{ steps.integrity.outputs.manifest_digest }}
     steps:
       - name: Check out approved source
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:
           version: 11.9.0
           run_install: false
 
       - name: Set up Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version: 24
           cache: pnpm
@@ -38,13 +40,14 @@ jobs:
       - name: Verify source and unit boundaries
         run: |
           pnpm check:repo
+          pnpm check:deployment
           pnpm lint
           pnpm typecheck
           pnpm test
           pnpm test:functions
 
       - name: Set up Deno
-        uses: denoland/setup-deno@v2
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed
         with:
           deno-version: v2.x
 
@@ -118,54 +121,105 @@ jobs:
         if: always()
         run: pnpm exec supabase stop --no-backup
 
-      - name: Record verified artifact checksum
+      - name: Create immutable artifact evidence
+        id: integrity
         run: |
-          find dist -type f ! -name artifact-sha256.txt -print0 \
-            | sort -z \
-            | xargs -0 sha256sum > dist/artifact-sha256.txt
+          node scripts/pages-artifact.mjs create dist \
+            --commit "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID"
 
       - name: Upload verified Pages artifact
-        uses: actions/upload-pages-artifact@v4
+        id: pages-artifact
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b
         with:
           path: dist
+          retention-days: 90
 
-  deploy:
+      - name: Record release evidence
+        env:
+          ARTIFACT_ID: ${{ steps.pages-artifact.outputs.artifact_id }}
+          COMMIT_SHA: ${{ steps.integrity.outputs.commit_sha }}
+          MANIFEST_DIGEST: ${{ steps.integrity.outputs.manifest_digest }}
+        run: |
+          printf '%s\n' \
+            "### Pages artifact evidence" \
+            "- Commit SHA: $COMMIT_SHA" \
+            "- Artifact ID: $ARTIFACT_ID" \
+            "- Manifest SHA-256: $MANIFEST_DIGEST" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+  preflight:
     needs: package
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    timeout-minutes: 15
+    environment: production-readiness
+    permissions:
+      actions: read
+      contents: read
     steps:
-      - name: Check out the approved main-branch SHA
-        uses: actions/checkout@v5
+      - name: Check out the approved source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
 
-      - name: Set up pnpm for protected preflight
-        uses: pnpm/action-setup@v4
+      - name: Download the exact package artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          artifact-ids: ${{ needs.package.outputs.artifact_id }}
+          path: /tmp/pages-download
+          merge-multiple: true
+
+      - name: Verify the packaged artifact
+        env:
+          EXPECTED_COMMIT_SHA: ${{ needs.package.outputs.commit_sha }}
+          EXPECTED_MANIFEST_DIGEST: ${{ needs.package.outputs.manifest_digest }}
+        run: |
+          mkdir -p /tmp/pages-verified
+          tar -xf /tmp/pages-download/artifact.tar -C /tmp/pages-verified
+          node scripts/pages-artifact.mjs verify /tmp/pages-verified \
+            --expected-commit "$EXPECTED_COMMIT_SHA" \
+            --expected-digest "$EXPECTED_MANIFEST_DIGEST"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:
           version: 11.9.0
           run_install: false
 
-      - name: Set up Node for protected preflight
-        uses: actions/setup-node@v5
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version: 24
           cache: pnpm
 
-      - name: Install locked preflight dependency
+      - name: Install locked preflight dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Read-only production preflight after owner approval
+      - name: Run read-only production preflight
         env:
+          PRODUCTION_SUPABASE_PROJECT_REF: ${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}
           PRODUCTION_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           PRODUCTION_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
           PRODUCTION_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY }}
+          PRODUCTION_FRONTEND_ORIGIN: ${{ vars.PRODUCTION_FRONTEND_ORIGIN }}
           PRODUCTION_CONTENT_VERSION: ${{ vars.PRODUCTION_CONTENT_VERSION }}
           PRODUCTION_SMOKE_TEACHER_ID: ${{ vars.PRODUCTION_SMOKE_TEACHER_ID }}
           PRODUCTION_SMOKE_COHORT_ID: ${{ vars.PRODUCTION_SMOKE_COHORT_ID }}
+          LOAD_SUPABASE_PROJECT_REF: ${{ vars.LOAD_SUPABASE_PROJECT_REF }}
           VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH }}
         run: node scripts/production-preflight.mjs
 
-      - name: Publish after protected-environment approval
+  deploy:
+    needs: preflight
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Publish the verified artifact after approval
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e
