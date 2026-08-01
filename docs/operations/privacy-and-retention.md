@@ -41,9 +41,19 @@ copies according to school policy.
 period and records the approver and approval time. Do not substitute an
 undocumented default. Local/test projects may remain unconfigured.
 
-Expired join windows are closed automatically. Expired recovery-token records
-and rate-limit events are removed by the service-role cleanup job after their
-short operational grace period.
+Migration `20260730020900_retention_cleanup_schedule.sql` registers one daily
+`pg_cron` job named `campus-quest-expired-artifact-cleanup` at `17 3 * * *`.
+It invokes `run_expired_artifact_cleanup()` as the hosted database owner. The
+function is otherwise executable only by the service role. It closes expired
+join windows and removes recovery-token and rate-limit records after their
+one-day operational grace period.
+
+Before release, rehearse this job in a non-production project with synthetic
+expired and unexpired records. Record before/after counts proving that only
+expired join windows, recovery records, and rate-limit events changed. Also
+verify exactly one active cron row exists for the stable job name. Production
+readiness is blocked if the schedule is absent, duplicated, inactive, or if the
+course-owner retention period remains unapproved.
 
 ## Archive, anonymize, and delete
 
@@ -64,3 +74,9 @@ Before production, the course owner must name the operational contact in the
 release checklist. That contact coordinates access revocation, token
 invalidation, artifact removal, incident notes, and required school privacy
 notifications.
+
+Backup and restore evidence must use opaque identifiers and counts only. A
+restore rehearsal must target a separate non-production project, verify that
+RLS and private Storage remain private, and prove expired credentials are not
+reactivated. Backup contents, classroom exports, and restored personal data
+must never be copied into GitHub evidence.
