@@ -55,15 +55,17 @@ Secrets:
 | --- | --- |
 | `SUPABASE_ACCESS_TOKEN` | CLI authorization for the production organization |
 | `PRODUCTION_SUPABASE_DB_PASSWORD` | linked migration access |
-| `PRODUCTION_SUPABASE_SERVICE_ROLE_KEY` | backend-only readiness verification after deployment |
+| `PRODUCTION_READINESS_SECRET` | custom authorization for the least-privilege readiness endpoint |
 | `ALLOWED_FRONTEND_ORIGINS` | Edge Function CORS allow-list |
 | `FRONTEND_APP_URL` | recovery-link frontend origin |
 | `JOIN_TOKEN_SIGNING_SECRET` | join-token signing secret |
 | `RECOVERY_TOKEN_SIGNING_SECRET` | recovery-token signing secret |
 
 `ALLOWED_FRONTEND_ORIGINS` and `FRONTEND_APP_URL` must agree with
-`PRODUCTION_FRONTEND_ORIGIN`. Signing secrets must be independently generated,
-at least 32 bytes, and never reused from local, CI, or the load project.
+`PRODUCTION_FRONTEND_ORIGIN`. Signing and readiness secrets must be
+independently generated, at least 32 bytes, and never reused from local, CI, or
+the load project. The backend workflow also installs
+`PRODUCTION_READINESS_SECRET` as an Edge Function secret.
 
 ## `production-readiness` environment
 
@@ -84,10 +86,13 @@ Secret:
 
 | Name | Purpose |
 | --- | --- |
-| `PRODUCTION_SUPABASE_SERVICE_ROLE_KEY` | read-only readiness RPC and endpoint-boundary probes |
+| `PRODUCTION_READINESS_SECRET` | authorizes only the `production-readiness` Edge endpoint |
 
-The preflight prints only project identity, counts, migration/function status,
-and endpoint status. It must not print this key or protected record contents.
+The preflight prints only project identity, counts,
+migration/function/schedule status, and endpoint status. It must not print this
+key or protected record contents. No production service-role credential is
+stored in GitHub; the endpoint uses its provider-injected credential internally
+for the one readiness RPC.
 
 ## `github-pages` environment
 

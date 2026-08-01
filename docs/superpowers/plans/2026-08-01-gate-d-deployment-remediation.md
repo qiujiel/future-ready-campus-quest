@@ -455,4 +455,3 @@ Confirm each design criterion has evidence. Report environment creation, real va
 Stage only files corrected by verification and commit with:
 
     git commit -m "fix: close deployment verification gaps"
-

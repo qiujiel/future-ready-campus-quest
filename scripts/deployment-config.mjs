@@ -59,6 +59,25 @@ function requireFrozenDenoCheck(job, label) {
   }
 }
 
+function requireDedicatedLiveLoad(job) {
+  const step = (job?.steps ?? []).find((candidate) =>
+    String(candidate?.run ?? "").includes("test:load:live")
+  );
+  if (!step?.env?.LOAD_SUPABASE_PROJECT_REF) {
+    fail("Pages live load gate requires the dedicated load project ref");
+  }
+}
+
+function requireLeastPrivilegeReadiness(job) {
+  const serialized = JSON.stringify(job ?? {});
+  if (serialized.includes("PRODUCTION_SUPABASE_SERVICE_ROLE_KEY")) {
+    fail("production-readiness must not receive a service-role credential");
+  }
+  if (!serialized.includes("PRODUCTION_READINESS_SECRET")) {
+    fail("production-readiness requires its dedicated readiness secret");
+  }
+}
+
 function workflowDispatchInputs(workflow) {
   return workflow?.on?.workflow_dispatch?.inputs ?? {};
 }
@@ -137,7 +156,9 @@ export function validateDeploymentConfiguration({ backend, pages, rollback }) {
   requireContentsReadOnly(packageJob, "Pages package");
   requireEdgeReadyWait(packageJob, "Pages package");
   requireFrozenDenoCheck(packageJob, "Pages package");
+  requireDedicatedLiveLoad(packageJob);
   requireEnvironment(preflightJob, "production-readiness");
+  requireLeastPrivilegeReadiness(preflightJob);
   if (!needsJob(preflightJob, "package")) {
     fail("production-readiness must consume the package job");
   }

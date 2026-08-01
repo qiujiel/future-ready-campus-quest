@@ -8,7 +8,7 @@ Reading this document or merging its workflow does not authorize a deployment.
 
 1. Complete the configuration inventory in `github-environments.md`.
 2. Confirm the release commit is on `main`, signed off by the release owner,
-   and contains migrations through `20260730020900`.
+   and contains migrations through `20260730021000`.
 3. Record a current managed-backup or point-in-time recovery identifier and its
    recoverable timestamp. If production has neither, the release is blocked.
 4. Complete a restore rehearsal into a non-production project and record the
@@ -40,12 +40,13 @@ The workflow performs one ordered sequence from the approved commit:
 3. record `supabase migration list`;
 4. run `supabase db push --dry-run` and review the pending timestamps;
 5. apply pending migrations once with `supabase db push`;
-6. set the four custom Edge Function secrets from a mode-restricted temporary
+6. set the five custom Edge Function secrets from a mode-restricted temporary
    file outside the checkout;
-7. deploy all ten functions together from `supabase/config.toml`;
+7. deploy all eleven functions together from `supabase/config.toml`, including
+   the custom-secret-protected `production-readiness` endpoint;
 8. run `production-preflight.mjs --backend-only` to verify exact project
-   identity, migrations through `20260730020700`, required RPCs, Auth health,
-   and all function method boundaries;
+   identity, migrations through `20260730021000`, required RPCs, the exact
+   active cleanup schedule, Auth health, and all function method boundaries;
 9. delete temporary secret material in an always-run step.
 
 Expected deploy set:
@@ -53,6 +54,7 @@ Expected deploy set:
 - `join-cohort`, `manage-join-window`, `recover-student`;
 - `manage-group-identity`, `get-next-item`, `submit-response`, `complete-quest`;
 - `teacher-dashboard`, `teacher-controls`, `export-cohort`.
+- `production-readiness`.
 
 Do not run a second migration command manually after a partially failed
 workflow until the release owner has compared the remote migration list with

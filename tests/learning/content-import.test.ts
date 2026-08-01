@@ -187,27 +187,46 @@ describe("protected import safeguards", () => {
   });
 
   it("requires exact confirmation before targeting any hosted project", () => {
+    const stagingRef = "abcdefghijklmnopqrst";
+    const liveRef = "bcdefghijklmnopqrstu";
     expect(() =>
       assertImportConfiguration({
-        supabaseUrl: "https://staging-project.supabase.co",
+        supabaseUrl: `https://${stagingRef}.supabase.co`,
         serviceRoleKey: "synthetic-service-role-key",
       }),
-    ).toThrow(/confirm-project-ref=staging-project/i);
+    ).toThrow(new RegExp(`confirm-project-ref=${stagingRef}`, "i"));
 
     expect(() =>
       assertImportConfiguration({
-        supabaseUrl: "https://staging-project.supabase.co",
+        supabaseUrl: `https://${stagingRef}.supabase.co`,
         serviceRoleKey: "synthetic-service-role-key",
-        confirmedProjectRef: "different-project",
+        confirmedProjectRef: liveRef,
       }),
-    ).toThrow(/confirm-project-ref=staging-project/i);
+    ).toThrow(new RegExp(`confirm-project-ref=${stagingRef}`, "i"));
 
     expect(() =>
       assertImportConfiguration({
-        supabaseUrl: "https://live-project.supabase.co",
+        supabaseUrl: `https://${liveRef}.supabase.co`,
         serviceRoleKey: "synthetic-service-role-key",
-        confirmedProjectRef: "live-project",
+        confirmedProjectRef: liveRef,
       }),
     ).not.toThrow();
+  });
+
+  it("rejects insecure or non-root hosted project URLs", () => {
+    const projectRef = "abcdefghijklmnopqrst";
+    const configuration = {
+      serviceRoleKey: "synthetic-service-role-key",
+      confirmedProjectRef: projectRef,
+    };
+
+    expect(() => assertImportConfiguration({
+      ...configuration,
+      supabaseUrl: `http://${projectRef}.supabase.co`,
+    })).toThrow(/HTTPS project root/i);
+    expect(() => assertImportConfiguration({
+      ...configuration,
+      supabaseUrl: `https://${projectRef}.supabase.co/rest/v1`,
+    })).toThrow(/HTTPS project root/i);
   });
 });

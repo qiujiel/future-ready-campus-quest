@@ -60,6 +60,13 @@ function validConfiguration() {
               run: "deno check --frozen --config supabase/functions/deno.json --lock supabase/functions/deno.lock supabase/functions/*/index.ts",
             },
             {
+              env: {
+                LOAD_SUPABASE_PROJECT_REF:
+                  "${{ vars.LOAD_SUPABASE_PROJECT_REF }}",
+              },
+              run: "pnpm test:load:live",
+            },
+            {
               id: "pages-artifact",
               uses:
                 "actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b",
@@ -70,6 +77,10 @@ function validConfiguration() {
         preflight: {
           needs: "package",
           environment: "production-readiness",
+          env: {
+            PRODUCTION_READINESS_SECRET:
+              "${{ secrets.PRODUCTION_READINESS_SECRET }}",
+          },
           steps: [
             {
               uses:
@@ -204,6 +215,29 @@ describe("deployment workflow boundaries", () => {
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /frozen Deno dependency graph/i,
+    );
+  });
+
+  it("rejects a live load gate without the dedicated project ref", () => {
+    const configuration = validConfiguration();
+    const liveLoad = configuration.pages.jobs.package.steps.find((step) =>
+      step.run === "pnpm test:load:live"
+    );
+    delete liveLoad.env.LOAD_SUPABASE_PROJECT_REF;
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /live load.*project ref/i,
+    );
+  });
+
+  it("rejects service-role credentials in the readiness job", () => {
+    const configuration = validConfiguration();
+    configuration.pages.jobs.preflight.env
+      .PRODUCTION_SUPABASE_SERVICE_ROLE_KEY =
+        "${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY }}";
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /readiness.*service-role/i,
     );
   });
 });

@@ -62,13 +62,14 @@ Release record:
 - [ ] Backend workflow inputs exactly match the approved SHA and production ref.
 - [ ] `supabase migration list` is captured before mutation.
 - [ ] Migration dry-run contains only reviewed forward migrations, in timestamp
-  order, through `20260730020900`.
+  order, through `20260730021000`.
 - [ ] `production-backend` approval was granted by `________________` at
   `________________`.
-- [ ] Migration push, four custom secret updates, and all ten function deploys
+- [ ] Migration push, five custom secret updates, and all eleven function deploys
   succeeded in the same workflow run.
 - [ ] Backend preflight confirms Auth health, required migration history/RPCs,
-  function boundaries, and the exact non-load project identity.
+  the exact active cleanup schedule, function boundaries, and the exact
+  non-load project identity.
 - [ ] No secret value or protected content appears in logs or summaries.
 
 ## 5. Content and production readiness
@@ -87,6 +88,8 @@ Release record:
 - [ ] `production-readiness` approver reviewed the downloaded artifact's exact
   ID/digest plus the redaction-safe production preflight, then approved at
   `________________`.
+- [ ] GitHub readiness uses only `PRODUCTION_READINESS_SECRET`; no production
+  service-role key is present in any GitHub scope.
 
 ## 6. Publication approval and observation
 

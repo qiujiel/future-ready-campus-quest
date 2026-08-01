@@ -53,6 +53,8 @@ expired and unexpired records. Record before/after counts proving that only
 expired join windows, recovery records, and rate-limit events changed. Also
 verify exactly one active cron row exists for the stable job name. Production
 readiness is blocked if the schedule is absent, duplicated, inactive, or if the
+command/schedule is altered, as enforced by migration
+`20260730021000_release_schedule_readiness.sql`. Readiness also fails if the
 course-owner retention period remains unapproved.
 
 ## Archive, anonymize, and delete

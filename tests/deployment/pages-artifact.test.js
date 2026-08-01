@@ -100,4 +100,14 @@ describe("Pages artifact integrity", () => {
       runId: "12345",
     })).rejects.toThrow(/symbolic link/i);
   });
+
+  it("rejects hidden entries excluded by upload-pages-artifact", async () => {
+    const directory = await fixture();
+    await writeFile(join(directory, ".nojekyll"), "\n");
+
+    await expect(createPagesArtifact(directory, {
+      commitSha,
+      runId: "12345",
+    })).rejects.toThrow(/hidden.*upload-pages-artifact/i);
+  });
 });

@@ -32,6 +32,11 @@ async function regularFiles(root) {
     const entries = await readdir(directory, { withFileTypes: true });
     for (const entry of entries) {
       const path = resolve(directory, entry.name);
+      if (entry.name.startsWith(".")) {
+        throw new Error(
+          `Hidden entries are excluded by upload-pages-artifact: ${normalizedRelativePath(root, path)}`,
+        );
+      }
       if (entry.isSymbolicLink()) {
         throw new Error(
           `Pages artifact cannot contain a symbolic link: ${normalizedRelativePath(root, path)}`,

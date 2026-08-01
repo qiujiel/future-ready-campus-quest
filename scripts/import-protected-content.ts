@@ -14,15 +14,24 @@ export interface ImportConfiguration {
 }
 
 function projectRefFromUrl(url: string): string {
-  const hostname = new URL(url).hostname;
+  const parsed = new URL(url);
+  const hostname = parsed.hostname;
   if (["127.0.0.1", "localhost", "[::1]"].includes(hostname)) {
     return "local";
   }
   const suffix = ".supabase.co";
-  if (!hostname.endsWith(suffix)) {
-    throw new Error("SUPABASE_URL must use a Supabase project hostname.");
+  const projectRef = hostname.slice(0, -suffix.length);
+  if (
+    parsed.protocol !== "https:" ||
+    !hostname.endsWith(suffix) ||
+    !/^[a-z0-9]{20}$/.test(projectRef) ||
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new Error("SUPABASE_URL must use an HTTPS project root.");
   }
-  return hostname.slice(0, -suffix.length);
+  return projectRef;
 }
 
 export function assertImportConfiguration(

@@ -53,6 +53,9 @@ verify_jwt = true
 [functions.recover-student]
 verify_jwt = false
 
+[functions.production-readiness]
+verify_jwt = false
+
 [functions.manage-group-identity]
 verify_jwt = true
 

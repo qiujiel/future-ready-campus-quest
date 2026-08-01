@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { readDedicatedLoadConfiguration } from "../../scripts/load-project-guard.mjs";
 
 const studentCount = 30;
 const groupCount = 5;
@@ -9,16 +10,6 @@ function percentile(values, percentileValue) {
   return sorted[Math.ceil((percentileValue / 100) * sorted.length) - 1] ?? 0;
 }
 
-function required(name) {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(
-      `Missing ${name}. Run this only against the dedicated load-test project.`,
-    );
-  }
-  return value;
-}
-
 async function timed(action) {
   const started = performance.now();
   const value = await action();
@@ -26,13 +17,15 @@ async function timed(action) {
 }
 
 async function liveRun() {
-  const apiUrl = required("LOAD_SUPABASE_URL");
-  const anonKey = required("LOAD_SUPABASE_ANON_KEY");
-  const serviceKey = required("LOAD_SUPABASE_SERVICE_ROLE_KEY");
-  const teacherToken = required("LOAD_TEACHER_ACCESS_TOKEN");
-  const cohortId = required("LOAD_COHORT_ID");
-  const joinToken = required("LOAD_JOIN_TOKEN");
-  const contentVersionId = required("LOAD_CONTENT_VERSION_ID");
+  const {
+    apiUrl,
+    anonKey,
+    serviceKey,
+    teacherToken,
+    cohortId,
+    joinToken,
+    contentVersionId,
+  } = readDedicatedLoadConfiguration(process.env);
   const admin = createClient(apiUrl, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });

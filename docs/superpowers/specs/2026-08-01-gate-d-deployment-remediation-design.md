@@ -1,7 +1,7 @@
 # Gate D Deployment Remediation Design
 
-**Date:** 2026-08-01  
-**Base commit:** `47835657d3705d3d756a9e84f120679eb77aa988`  
+**Date:** 2026-08-01
+**Base commit:** `47835657d3705d3d756a9e84f120679eb77aa988`
 **Implementation branch:** `codex/gate-d-deployment-remediation`
 
 ## Goal
@@ -26,7 +26,7 @@ Production release is split into three independently auditable controls:
 3. A separate `github-pages` environment approval releases only the immutable
    artifact produced by the successful package job.
 
-The first approval grants access to read-only production-readiness credentials.
+The first approval grants access to a dedicated production-readiness secret.
 Its output can be reviewed before the second approval authorizes publication.
 The Pages deployment job has no production Supabase secret.
 
@@ -48,7 +48,7 @@ Environment secrets:
 
 - `SUPABASE_ACCESS_TOKEN`
 - `PRODUCTION_SUPABASE_DB_PASSWORD`
-- `PRODUCTION_SUPABASE_SERVICE_ROLE_KEY`
+- `PRODUCTION_READINESS_SECRET`
 - `ALLOWED_FRONTEND_ORIGINS`
 - `FRONTEND_APP_URL`
 - `JOIN_TOKEN_SIGNING_SECRET`
@@ -69,7 +69,7 @@ Environment variables:
 
 Environment secret:
 
-- `PRODUCTION_SUPABASE_SERVICE_ROLE_KEY`
+- `PRODUCTION_READINESS_SECRET`
 
 ### `github-pages`
 
@@ -120,13 +120,15 @@ The protected job performs this sequence:
 5. Record `supabase migration list`.
 6. Run `supabase db push --dry-run` and record the pending migration set.
 7. Apply pending migrations once, in timestamp order.
-8. Set the four custom Edge Function secrets through a temporary environment
-   file outside the repository and remove that file in an always-run step.
+8. Set the five custom Edge Function secrets, including the dedicated readiness
+   secret, through a temporary environment file outside the repository and
+   remove that file in an always-run step.
 9. Deploy all Edge Functions together so `supabase/config.toml` remains the
    source of JWT-verification settings.
 10. Run `scripts/production-preflight.mjs --backend-only` to verify project
-    identity, migration history, required RPCs, and Edge Function boundaries,
-    then record the compatible backend commit and migration marker.
+    identity, migration history, required RPCs, the exact cleanup schedule, and
+    Edge Function boundaries, then record the compatible backend commit and
+    migration marker.
 
 The workflow never imports protected course content. Import remains a separate,
 teacher-authorized operational step after backend deployment.
@@ -134,11 +136,14 @@ teacher-authorized operational step after backend deployment.
 ## Database readiness and retention
 
 A forward-only migration replaces `get_production_readiness_report` so it
-verifies migration history through `20260730020700`, including:
+verifies migration history through `20260730021000`, including:
 
 - `20260730020500_gate_d_security_hardening`;
 - `20260730020600_service_role_provisioning`;
-- `20260730020700_atomic_session_close`.
+- `20260730020700_atomic_session_close`;
+- `20260730020800_release_preflight_hardening`;
+- `20260730020900_retention_cleanup_schedule`;
+- `20260730021000_release_schedule_readiness`.
 
 It also verifies every Gate D RPC required by the deployed functions, including
 `assert_teacher_control_scope` and `close_teacher_session`. A hard-coded marker
@@ -148,6 +153,10 @@ A second forward-only migration schedules `run_expired_artifact_cleanup()` once
 per day with `pg_cron`. The cleanup function permits only the hosted scheduler's
 database owner or the service role. The migration uses a stable named job so a
 subsequent migration can replace or remove the schedule deliberately.
+
+A final readiness migration requires exactly one active job with the reviewed
+name, cron expression, and command; missing, duplicated, disabled, or altered
+scheduling blocks backend and Pages readiness.
 
 The release checklist requires a non-production scheduler rehearsal and proof
 that expired join windows, recovery tokens, and rate-limit events are cleaned
@@ -163,12 +172,15 @@ network orchestration. It must:
 - reject `LOAD_SUPABASE_PROJECT_REF` and `vadyhuipwbtgbzpeisbn`;
 - validate the Pages base path and production frontend origin;
 - verify Auth health;
-- require migration history through `20260730020700`;
+- require migration history through `20260730021000`;
 - require all Gate D RPCs;
+- call a custom-secret-protected readiness endpoint so the provider service
+  role remains inside Supabase;
+- require the exact single active cleanup job, schedule, and command;
 - require zero live join windows and recovery tokens;
 - require the approved 24-item, 8-concept content version;
 - require the smoke teacher/cohort and approved retention setting;
-- probe all ten Edge Function endpoints with a safe `GET` request and require
+- probe all eleven Edge Function endpoints with a safe `GET` request and require
   the deployed method-boundary response rather than a missing-function or
   server-error response;
 - output only non-sensitive readiness evidence.

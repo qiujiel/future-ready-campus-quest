@@ -1,5 +1,5 @@
 const DEDICATED_LOAD_PROJECT_REF = "vadyhuipwbtgbzpeisbn";
-const REQUIRED_GATE_D_MIGRATION = "20260730020700";
+const REQUIRED_GATE_D_MIGRATION = "20260730021000";
 
 export const EDGE_FUNCTION_NAMES = Object.freeze([
   "complete-quest",
@@ -8,6 +8,7 @@ export const EDGE_FUNCTION_NAMES = Object.freeze([
   "join-cohort",
   "manage-group-identity",
   "manage-join-window",
+  "production-readiness",
   "recover-student",
   "submit-response",
   "teacher-controls",
@@ -81,10 +82,7 @@ export function readPreflightConfiguration(
       environment,
       "PRODUCTION_SUPABASE_PUBLISHABLE_KEY",
     ),
-    serviceRoleKey: required(
-      environment,
-      "PRODUCTION_SUPABASE_SERVICE_ROLE_KEY",
-    ),
+    readinessSecret: required(environment, "PRODUCTION_READINESS_SECRET"),
     frontendOrigin: readFrontendOrigin(
       required(environment, "PRODUCTION_FRONTEND_ORIGIN"),
     ),
@@ -118,6 +116,9 @@ export function evaluateReadinessReport(report, configuration) {
   if (report?.requiredFunctionsPresent !== true) {
     failures.push("required Gate D functions are missing");
   }
+  if (report?.cleanupScheduleReady !== true) {
+    failures.push("required cleanup schedule is missing or altered");
+  }
 
   if (!configuration.backendOnly) {
     if (Number(report?.openJoinWindows) !== 0) {
@@ -147,6 +148,7 @@ export function evaluateReadinessReport(report, configuration) {
 
   const evidence = {
     latestGateDMigration: REQUIRED_GATE_D_MIGRATION,
+    cleanupScheduleReady: true,
   };
   if (!configuration.backendOnly) {
     evidence.contentVersion = report.contentVersion;
@@ -155,6 +157,32 @@ export function evaluateReadinessReport(report, configuration) {
   }
   evidence.basePath = configuration.basePath;
   return evidence;
+}
+
+export async function fetchReadinessReport(configuration, fetcher = fetch) {
+  const response = await fetcher(
+    `${configuration.url}/functions/v1/production-readiness`,
+    {
+      method: "POST",
+      headers: {
+        apikey: configuration.publishableKey,
+        Origin: configuration.frontendOrigin,
+        "Content-Type": "application/json",
+        "x-production-readiness-key": configuration.readinessSecret,
+      },
+      body: JSON.stringify({
+        contentVersion: configuration.contentVersion ?? "__backend_only__",
+        teacherId:
+          configuration.teacherId ?? "00000000-0000-0000-0000-000000000000",
+        cohortId:
+          configuration.cohortId ?? "00000000-0000-0000-0000-000000000000",
+      }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Production readiness endpoint failed: ${response.status}`);
+  }
+  return response.json();
 }
 
 export async function probeEdgeFunctions(configuration, fetcher = fetch) {
@@ -168,7 +196,7 @@ export async function probeEdgeFunctions(configuration, fetcher = fetch) {
             method: "GET",
             headers: {
               apikey: configuration.publishableKey,
-              Authorization: `Bearer ${configuration.serviceRoleKey}`,
+              Authorization: `Bearer ${configuration.publishableKey}`,
               Origin: configuration.frontendOrigin,
             },
           },

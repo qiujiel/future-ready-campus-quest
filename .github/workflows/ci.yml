@@ -80,12 +80,14 @@ jobs:
           FRONTEND_APP_URL: http://127.0.0.1:4173
           JOIN_TOKEN_SIGNING_SECRET: ci-only-join-signing-secret-32-bytes-minimum
           RECOVERY_TOKEN_SIGNING_SECRET: ci-only-recovery-signing-secret-32-bytes
+          PRODUCTION_READINESS_SECRET: ci-only-readiness-secret-32-bytes-minimum
         run: |
           printf '%s\n' \
             "ALLOWED_FRONTEND_ORIGINS=$ALLOWED_FRONTEND_ORIGINS" \
             "FRONTEND_APP_URL=$FRONTEND_APP_URL" \
             "JOIN_TOKEN_SIGNING_SECRET=$JOIN_TOKEN_SIGNING_SECRET" \
             "RECOVERY_TOKEN_SIGNING_SECRET=$RECOVERY_TOKEN_SIGNING_SECRET" \
+            "PRODUCTION_READINESS_SECRET=$PRODUCTION_READINESS_SECRET" \
             > /tmp/campus-quest-functions.env
           pnpm exec supabase functions serve \
             --env-file /tmp/campus-quest-functions.env \
@@ -121,6 +123,7 @@ jobs:
       - name: Run dedicated-project load gate
         if: ${{ vars.LOAD_TEST_ENABLED == 'true' }}
         env:
+          LOAD_SUPABASE_PROJECT_REF: ${{ vars.LOAD_SUPABASE_PROJECT_REF }}
           LOAD_SUPABASE_URL: ${{ secrets.LOAD_SUPABASE_URL }}
           LOAD_SUPABASE_ANON_KEY: ${{ secrets.LOAD_SUPABASE_ANON_KEY }}
           LOAD_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.LOAD_SUPABASE_SERVICE_ROLE_KEY }}
