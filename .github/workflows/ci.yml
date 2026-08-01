@@ -53,7 +53,11 @@ jobs:
           deno-version: v2.x
 
       - name: Check Edge Function modules
-        run: deno check supabase/functions/*/index.ts
+        run: >-
+          deno check --frozen
+          --config supabase/functions/deno.json
+          --lock supabase/functions/deno.lock
+          supabase/functions/*/index.ts
 
       - name: Start local Supabase
         run: pnpm exec supabase start
@@ -86,13 +90,18 @@ jobs:
           pnpm exec supabase functions serve \
             --env-file /tmp/campus-quest-functions.env \
             > /tmp/campus-quest-functions.log 2>&1 &
+          response_code=000
           for attempt in $(seq 1 30); do
-            if curl --silent --output /dev/null \
-              http://127.0.0.1:54321/functions/v1/join-cohort; then
+            response_code="$(curl --silent --output /dev/null \
+              --write-out '%{http_code}' \
+              --header 'Origin: http://127.0.0.1:4173' \
+              http://127.0.0.1:54321/functions/v1/join-cohort || true)"
+            if [ "$response_code" = "405" ]; then
               break
             fi
             sleep 1
           done
+          test "$response_code" = "405"
           pnpm test:integration
 
       - name: Build and scan the public artifact

@@ -37,6 +37,28 @@ function requireRun(job, pattern, message) {
   if (!pattern.test(combinedRuns(job))) fail(message);
 }
 
+function requireEdgeReadyWait(job, label) {
+  const runs = combinedRuns(job);
+  if (
+    !/%\{http_code\}/.test(runs) ||
+    !/Origin:/.test(runs) ||
+    !/response_code[\s\S]*405|405[\s\S]*response_code/.test(runs)
+  ) {
+    fail(`${label} Edge readiness must require the expected 405 response`);
+  }
+}
+
+function requireFrozenDenoCheck(job, label) {
+  const runs = combinedRuns(job);
+  if (
+    !/deno check[^\n]*--frozen/.test(runs) ||
+    !/--config supabase\/functions\/deno\.json/.test(runs) ||
+    !/--lock supabase\/functions\/deno\.lock/.test(runs)
+  ) {
+    fail(`${label} must check the committed frozen Deno dependency graph`);
+  }
+}
+
 function workflowDispatchInputs(workflow) {
   return workflow?.on?.workflow_dispatch?.inputs ?? {};
 }
@@ -109,8 +131,12 @@ export function validateDeploymentConfiguration({ backend, pages, rollback }) {
   );
   requireRun(backendJob, /secrets set/, "Edge Function secret deployment is missing");
   requireRun(backendJob, /functions deploy/, "Edge Function deployment is missing");
+  requireEdgeReadyWait(backendJob, "backend release");
+  requireFrozenDenoCheck(backendJob, "backend release");
 
   requireContentsReadOnly(packageJob, "Pages package");
+  requireEdgeReadyWait(packageJob, "Pages package");
+  requireFrozenDenoCheck(packageJob, "Pages package");
   requireEnvironment(preflightJob, "production-readiness");
   if (!needsJob(preflightJob, "package")) {
     fail("production-readiness must consume the package job");

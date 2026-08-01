@@ -37,6 +37,12 @@ function validConfiguration() {
             { run: "supabase db push --linked" },
             { run: "supabase secrets set --env-file /tmp/functions.env" },
             { run: "supabase functions deploy --project-ref \"$PRODUCTION_SUPABASE_PROJECT_REF\"" },
+            {
+              run: "response_code=$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Origin: http://127.0.0.1:4173' http://127.0.0.1/functions/v1/join-cohort)\nif [ \"$response_code\" = \"405\" ]; then break; fi",
+            },
+            {
+              run: "deno check --frozen --config supabase/functions/deno.json --lock supabase/functions/deno.lock supabase/functions/*/index.ts",
+            },
           ],
         },
       },
@@ -47,6 +53,12 @@ function validConfiguration() {
           permissions: { contents: "read" },
           steps: [
             { uses: pinnedCheckout },
+            {
+              run: "response_code=$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Origin: http://127.0.0.1:4173' http://127.0.0.1/functions/v1/join-cohort)\nif [ \"$response_code\" = \"405\" ]; then break; fi",
+            },
+            {
+              run: "deno check --frozen --config supabase/functions/deno.json --lock supabase/functions/deno.lock supabase/functions/*/index.ts",
+            },
             {
               id: "pages-artifact",
               uses:
@@ -164,10 +176,34 @@ describe("deployment workflow boundaries", () => {
 
   it("rejects rollback-expiring Pages artifacts", () => {
     const configuration = validConfiguration();
-    configuration.pages.jobs.package.steps[1].with["retention-days"] = 1;
+    configuration.pages.jobs.package.steps.find((step) =>
+      step.uses?.startsWith("actions/upload-pages-artifact@")
+    ).with["retention-days"] = 1;
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /90-day retention/i,
+    );
+  });
+
+  it("rejects an Edge readiness wait that accepts a startup 503", () => {
+    const configuration = validConfiguration();
+    configuration.pages.jobs.package.steps[1].run =
+      "if curl --silent http://127.0.0.1/functions/v1/join-cohort; then break; fi";
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /Edge readiness.*405/i,
+    );
+  });
+
+  it("rejects Edge checks without the committed frozen Deno lock", () => {
+    const configuration = validConfiguration();
+    const denoStep = configuration.backend.jobs.release.steps.find((step) =>
+      step.run?.startsWith("deno check")
+    );
+    denoStep.run = "deno check supabase/functions/*/index.ts";
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /frozen Deno dependency graph/i,
     );
   });
 });
