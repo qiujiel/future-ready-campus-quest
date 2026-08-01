@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc -b && vite build",
     "check:bundle": "node scripts/check-bundle.mjs dist",
+    "check:deployment": "node scripts/deployment-config.mjs",
     "check:repo": "node scripts/check-repository.mjs",
     "convert:protected-content": "node scripts/convert-protected-blueprint.ts",
     "dev": "vite",
@@ -48,6 +49,7 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.4.0",
     "jest-axe": "10.0.0",
+    "js-yaml": "4.3.0",
     "jsdom": "^27.0.1",
     "supabase": "^2.110.0",
     "typescript": "6.0.0-beta",
