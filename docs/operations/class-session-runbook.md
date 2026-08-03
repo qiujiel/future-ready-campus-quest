@@ -2,15 +2,22 @@
 
 ## Before class
 
-1. Confirm the local/test or production Supabase project is awake and the
-   health endpoint responds.
-2. Verify the expected migrations and the approved protected-content version
-   with 24 items across C1–C8.
-3. Sign in with the provisioned teacher account. Never share that account or
+1. Begin the scheduled health check early enough before class to allow an
+   authorized owner to reactivate a Supabase Free project paused after
+   inactivity and still complete every readiness check. Do not generate
+   synthetic keepalive traffic to avoid a provider pause.
+2. Confirm the exact intended local/test or production project is awake and the
+   health endpoint responds. If reactivation was needed, wait for normal health
+   and record only project identity, status, and time.
+3. After the project is healthy, re-run migration readiness through
+   `20260730021100`, approved protected-content readiness with 24 items across
+   C1–C8, Auth health, and all application-function method-boundary readiness.
+   A prior result from before a pause is insufficient.
+4. Sign in with the provisioned teacher account. Never share that account or
    use a student account for teacher checks.
-4. Create the cohort, confirm five groups of six when running a 30-student
+5. Create the cohort, confirm five groups of six when running a 30-student
    session, and leave joining closed while preparing the room.
-5. Check projection legibility, keyboard access, reduced-motion behavior, and
+6. Check projection legibility, keyboard access, reduced-motion behavior, and
    the device/network path students will use.
 
 ## Admit students

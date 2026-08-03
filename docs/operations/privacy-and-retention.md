@@ -80,8 +80,24 @@ release checklist. That contact coordinates access revocation, token
 invalidation, artifact removal, incident notes, and required school privacy
 notifications.
 
-Backup and restore evidence must use opaque identifiers and counts only. A
-restore rehearsal must target a separate non-production project, verify that
-RLS and private Storage remain private, and prove expired credentials are not
-reactivated. Backup contents, classroom exports, and restored personal data
-must never be copied into GitHub evidence.
+Free-plan recovery uses a two-copy custody rule: each verified encrypted archive
+is read back from institution-controlled cloud storage and encrypted
+offline/local storage. Retain each of the latest three successful pre-release
+backups for at least 30 days in both locations. A package may be deleted only
+when it is at least 30 days old and three newer verified packages exist in both
+locations, with data-owner approval.
+
+The institution-designated recovery custodian holds the `age` private identity
+separately from every archive and its storage locations. Plaintext may exist
+only in a newly created, mode-`0700` controlled staging or hosted-rehearsal
+workspace for the approved operation, protected by an always-run cleanup trap.
+It must not persist outside that workspace or enter shell history, logs, Git,
+GitHub, general temporary storage, or an operator backup.
+
+Backup and restore evidence uses opaque identifiers, aggregate counts, archive
+digest/size, and pass/fail results only. A restore rehearsal must target a
+separate non-production project, verify that RLS and private Storage remain
+private, and prove expired credentials are not reactivated. GitHub evidence
+must never contain a backup, classroom export, restored personal data, database
+row or SQL, Storage path, filename, signed URL, credential, encryption recipient
+or key material, or protected internal manifest.

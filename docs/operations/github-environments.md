@@ -33,6 +33,22 @@ operator review.
 These values must identify the load project, never production. Rotate the load
 fixture credentials after unintended disclosure or a shared rehearsal.
 
+## Recovery workflow inputs
+
+`backup_evidence_id`, `backup_created_at_utc`, `backup_archive_sha256`, and
+`restore_rehearsal_evidence_id` are non-secret dispatch inputs to the protected
+backend workflow. They are entered for one approved release and compared with
+the separately held recovery record. They are not repository or environment
+variables and are not repository or environment secrets.
+
+GitHub stores no backup archive, database connection string, database password,
+Storage administration key, encryption recipient or private key, plaintext
+export, object path, or protected manifest. Do not add any of those to Actions
+inputs, variables, secrets, artifacts, caches, summaries, issues, or release
+records. Input format and freshness validation does not establish that an
+external archive or rehearsal exists; the `production-backend` reviewer must
+verify that evidence independently.
+
 ## `production-backend` environment
 
 Required protection:
@@ -112,6 +128,10 @@ Before release, a repository administrator and a second reviewer verify:
 - the load URL contains `vadyhuipwbtgbzpeisbn` and the production URL does not;
 - each environment has the required reviewer and branch rule;
 - `github-pages` contains no Supabase credential;
+- the four recovery values are supplied only as per-run non-secret workflow
+  inputs and match the separately held release record;
+- no backup, connection string, Storage administration key, encryption key, or
+  protected manifest exists in any GitHub scope;
 - workflow Actions are allowed to run and GitHub Pages uses GitHub Actions as
   its source.
 

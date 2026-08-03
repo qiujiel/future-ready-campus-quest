@@ -36,10 +36,29 @@ Release record:
   are recorded in `private.data_retention_configuration`.
 - [ ] Operational/privacy incident owner: `________________`.
 - [ ] Teacher-private CSV handling matches school policy.
-- [ ] Current backup/PITR evidence ID: `________________`.
-- [ ] Recoverable production timestamp: `________________`.
-- [ ] Non-production restore rehearsal project ref: `________________`.
-- [ ] Restore rehearsal time/result/reviewer: `________________`.
+- [ ] Backup evidence ID: `________________`.
+- [ ] Backup creation time/recovery-point time (canonical UTC):
+  `________________`.
+- [ ] Encrypted archive SHA-256 and byte size:
+  `________________` / `________________`.
+- [ ] Cloud-copy read-back digest and size verification result/time:
+  `________________`.
+- [ ] Offline-copy read-back digest and size verification result/time:
+  `________________`.
+- [ ] No-write-since-recovery-point attestation by production owner/time:
+  `________________`.
+- [ ] Restore rehearsal evidence ID: `________________`.
+- [ ] Temporary Singapore recovery project ref: `________________`.
+- [ ] Database/Auth/RLS/retention validation result: `________________`.
+- [ ] `group-images` object-count/byte-total/digest validation result:
+  `________________`.
+- [ ] Rehearsal reviewer and time: `________________`.
+- [ ] Temporary recovery project deletion approval/result:
+  `________________`.
+- [ ] Load-test project reactivated and identity/health result:
+  `________________`.
+- [ ] The data owner accepted the Free-plan pause/availability limitation and
+  scheduled an early class health/reactivation check: `________________`.
 - [ ] Previous compatible Edge Function commit: `________________`.
 - [ ] Previous successful Pages run, commit, and manifest digest are recorded,
   or the first-release maintenance procedure in `rollback.md` is ready.
@@ -60,6 +79,10 @@ Release record:
 
 - [ ] Joining is closed and new quest starts are paused.
 - [ ] Backend workflow inputs exactly match the approved SHA and production ref.
+- [ ] All four recovery workflow inputs—`backup_evidence_id`,
+  `backup_created_at_utc`, `backup_archive_sha256`, and
+  `restore_rehearsal_evidence_id`—match the release record and separately held
+  evidence.
 - [ ] `supabase migration list` is captured before mutation.
 - [ ] Migration dry-run contains only reviewed forward migrations, in timestamp
   order, through `20260730021100`.

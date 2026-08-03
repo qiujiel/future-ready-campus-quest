@@ -9,10 +9,15 @@ Reading this document or merging its workflow does not authorize a deployment.
 1. Complete the configuration inventory in `github-environments.md`.
 2. Confirm the release commit is on `main`, signed off by the release owner,
    and contains migrations through `20260730021100`.
-3. Record a current managed-backup or point-in-time recovery identifier and its
-   recoverable timestamp. If production has neither, the release is blocked.
-4. Complete a restore rehearsal into a non-production project and record the
-   target ref, restored timestamp, result, and tester. Never rehearse against
+3. Establish one approved recovery path: either a current provider-managed
+   backup/PITR recovery point, or the verified Free-plan encrypted logical
+   package in `free-plan-recovery.md` with both custody copies read back and
+   matched to its recorded digest. If neither path is complete, release is
+   blocked.
+4. Complete and independently review a restore rehearsal in a separate hosted
+   non-production project. For the Free-plan path, the target must be a
+   temporary Singapore recovery project and the database, Auth, RLS, retention,
+   and private `group-images` validation must pass. Never rehearse against
    production or `vadyhuipwbtgbzpeisbn`.
 5. Confirm joins are closed and quest starts are paused for the release window.
 6. Confirm the previous compatible Edge Function commit and the rollback owner.
@@ -23,12 +28,24 @@ From GitHub Actions, select `Release Production Backend`, choose the `main`
 branch, and enter:
 
 - `expected_sha`: the approved full 40-character `main` commit SHA;
-- `production_project_ref`: the exact protected production project ref.
+- `production_project_ref`: the exact protected production project ref;
+- `backup_evidence_id`: the opaque `frcq-backup-YYYYMMDDTHHMMSSZ-xxxxxxxx`
+  identifier;
+- `backup_created_at_utc`: the canonical UTC backup creation/recovery-point
+  time;
+- `backup_archive_sha256`: the lowercase SHA-256 of the encrypted archive;
+- `restore_rehearsal_evidence_id`: the opaque
+  `frcq-restore-YYYYMMDDTHHMMSSZ-xxxxxxxx` identifier.
 
-Do not enter a password, token, URL, or secret as a workflow input. The job
-halts before protected work if either identity differs from the workflow event
-or environment configuration. The production owner then reviews the recorded
-backup evidence and approves or rejects `production-backend`.
+These four recovery values are non-secret evidence, not proof that an archive
+or rehearsal exists. Do not enter a password, token, URL, protected manifest,
+or secret as a workflow input. The job halts before protected work if an
+identity differs from the workflow event or environment configuration, or if
+the recovery values are malformed or stale. Before approving
+`production-backend`, the production owner compares all four inputs against the
+separately held release record, independently verifies both custody copies and
+the rehearsal result, and attests that no write occurred after the recovery
+point.
 
 ## Authoritative sequence
 
@@ -74,9 +91,13 @@ not content or credentials. The expected release dataset is 24 items covering
 ## Post-backend evidence
 
 Record the backend workflow run, approved SHA, production project ref, applied
-migration timestamps, function deploy result, backend-preflight output, backup
-evidence, approver, and completion time. Then run the Pages workflow; do not
-approve publication until its separate production-readiness output passes.
+migration timestamps, function deploy result, backend-preflight output,
+`backup_evidence_id`, `backup_created_at_utc`, `backup_archive_sha256`,
+`restore_rehearsal_evidence_id`, approver, and completion time. Keep archive
+byte size, custody read-back flags, aggregate validation, temporary target,
+reviewer, teardown, and load-test reactivation results in the release record.
+Then run the Pages workflow; do not approve publication until its separate
+production-readiness output passes.
 
 If any check fails, leave joining closed, do not import content or publish
 Pages, and follow `rollback.md`.
