@@ -1,5 +1,6 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
+import { forbiddenRecoveryArtifactPaths } from "./recovery-artifact-guard.mjs";
 
 const execFile = promisify(execFileCallback);
 
@@ -27,11 +28,15 @@ const historical = historyOutput
   .map((line) => line.slice(line.indexOf(" ") + 1))
   .filter((path) => path && !/^[a-f0-9]{40}$/.test(path));
 const candidates = new Set([...tracked, ...historical]);
-const violations = [...candidates].filter(
+const privacyViolations = [...candidates].filter(
   (path) =>
     path !== ".env.example" &&
     forbiddenTrackedPaths.some((pattern) => pattern.test(path)),
 );
+const violations = [...new Set([
+  ...privacyViolations,
+  ...forbiddenRecoveryArtifactPaths(candidates),
+])].sort();
 
 if (violations.length > 0) {
   for (const path of violations) console.error(`forbidden tracked path: ${path}`);
