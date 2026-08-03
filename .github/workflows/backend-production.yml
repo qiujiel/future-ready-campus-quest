@@ -11,14 +11,57 @@ on:
         description: Confirmed production Supabase project reference
         required: true
         type: string
+      backup_evidence_id:
+        description: Redaction-safe backup evidence identifier
+        required: true
+        type: string
+      backup_created_at_utc:
+        description: Redaction-safe UTC backup completion timestamp
+        required: true
+        type: string
+      backup_archive_sha256:
+        description: Redaction-safe SHA-256 for the backup archive
+        required: true
+        type: string
+      restore_rehearsal_evidence_id:
+        description: Redaction-safe restore rehearsal evidence identifier
+        required: true
+        type: string
 
 concurrency:
   group: campus-quest-production-backend
   cancel-in-progress: false
 
 jobs:
+  validate_recovery_evidence:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the approved source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 24
+
+      - name: Validate redaction-safe recovery evidence
+        env:
+          BACKUP_EVIDENCE_ID: ${{ inputs.backup_evidence_id }}
+          BACKUP_CREATED_AT_UTC: ${{ inputs.backup_created_at_utc }}
+          BACKUP_ARCHIVE_SHA256: ${{ inputs.backup_archive_sha256 }}
+          RESTORE_REHEARSAL_EVIDENCE_ID: ${{ inputs.restore_rehearsal_evidence_id }}
+        run: node scripts/recovery-evidence.mjs
+
   release:
     if: github.ref == 'refs/heads/main'
+    needs: validate_recovery_evidence
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: production-backend

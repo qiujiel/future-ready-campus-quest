@@ -14,11 +14,33 @@ function validConfiguration() {
           inputs: {
             expected_sha: { required: true },
             production_project_ref: { required: true },
+            backup_evidence_id: { required: true },
+            backup_created_at_utc: { required: true },
+            backup_archive_sha256: { required: true },
+            restore_rehearsal_evidence_id: { required: true },
           },
         },
       },
       jobs: {
+        validate_recovery_evidence: {
+          permissions: { contents: "read" },
+          steps: [
+            { uses: pinnedCheckout },
+            {
+              env: {
+                BACKUP_EVIDENCE_ID: "${{ inputs.backup_evidence_id }}",
+                BACKUP_CREATED_AT_UTC: "${{ inputs.backup_created_at_utc }}",
+                BACKUP_ARCHIVE_SHA256:
+                  "${{ inputs.backup_archive_sha256 }}",
+                RESTORE_REHEARSAL_EVIDENCE_ID:
+                  "${{ inputs.restore_rehearsal_evidence_id }}",
+              },
+              run: "node scripts/recovery-evidence.mjs",
+            },
+          ],
+        },
         release: {
+          needs: "validate_recovery_evidence",
           environment: "production-backend",
           permissions: { contents: "read" },
           steps: [
@@ -146,6 +168,47 @@ describe("deployment workflow boundaries", () => {
   it("accepts separated, least-privilege, immutable release workflows", () => {
     expect(() => validateDeploymentConfiguration(validConfiguration())).not
       .toThrow();
+  });
+
+  it("rejects a backend workflow missing recovery evidence inputs", () => {
+    const configuration = validConfiguration();
+    delete configuration.backend.on.workflow_dispatch.inputs.backup_archive_sha256;
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /required workflow input backup_archive_sha256/i,
+    );
+  });
+
+  it("rejects release without the recovery evidence dependency", () => {
+    const configuration = validConfiguration();
+    delete configuration.backend.jobs.release.needs;
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /recovery evidence.*dependency/i,
+    );
+  });
+
+  it("rejects a protected or secret-bearing evidence validation job", () => {
+    const protectedConfiguration = validConfiguration();
+    protectedConfiguration.backend.jobs.validate_recovery_evidence.environment =
+      "production-backend";
+    expect(() => validateDeploymentConfiguration(protectedConfiguration)).toThrow(
+      /evidence validation.*unprotected/i,
+    );
+
+    const secretConfiguration = validConfiguration();
+    secretConfiguration.backend.jobs.validate_recovery_evidence.steps[1].env.EXTRA =
+      "${{ secrets.PRODUCTION_SUPABASE_DB_PASSWORD }}";
+    expect(() => validateDeploymentConfiguration(secretConfiguration)).toThrow(
+      /evidence validation.*secret/i,
+    );
+  });
+
+  it("rejects recovery validation without every dispatch input mapping", () => {
+    const configuration = validConfiguration();
+    delete configuration.backend.jobs.validate_recovery_evidence.steps[1].env
+      .RESTORE_REHEARSAL_EVIDENCE_ID;
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /restore_rehearsal_evidence_id/i,
+    );
   });
 
   it("rejects a backend workflow that does not compare the load project", () => {

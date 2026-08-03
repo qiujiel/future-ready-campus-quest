@@ -4,6 +4,12 @@ import { pathToFileURL } from "node:url";
 import { load } from "js-yaml";
 
 const PINNED_ACTION = /^[^@\s]+@[0-9a-f]{40}$/;
+const RECOVERY_INPUTS = [
+  "backup_evidence_id",
+  "backup_created_at_utc",
+  "backup_archive_sha256",
+  "restore_rehearsal_evidence_id",
+];
 
 function fail(message) {
   throw new Error(`Deployment configuration invalid: ${message}`);
@@ -93,6 +99,29 @@ function requireInputs(workflow, names) {
   }
 }
 
+function requireRecoveryEvidenceGate(workflow, validationJob, releaseJob) {
+  requireInputs(workflow, RECOVERY_INPUTS);
+  if (!needsJob(releaseJob, "validate_recovery_evidence")) {
+    fail("backend release requires the recovery evidence dependency");
+  }
+  if (!validationJob || environmentName(validationJob)) {
+    fail("recovery evidence validation must be an unprotected job");
+  }
+  requireContentsReadOnly(validationJob, "recovery evidence validation");
+  const serialized = JSON.stringify(validationJob);
+  if (serialized.includes("secrets.")) {
+    fail("recovery evidence validation must not receive a secret");
+  }
+  if (!combinedRuns(validationJob).includes("node scripts/recovery-evidence.mjs")) {
+    fail("recovery evidence validation must run the repository validator");
+  }
+  for (const input of RECOVERY_INPUTS) {
+    if (!serialized.includes(`inputs.${input}`)) {
+      fail(`recovery evidence validation must map ${input}`);
+    }
+  }
+}
+
 function requirePinnedActions(workflows) {
   for (const workflow of workflows) {
     for (const job of Object.values(workflow?.jobs ?? {})) {
@@ -127,6 +156,7 @@ function requirePagesDeployPermissions(job) {
 
 export function validateDeploymentConfiguration({ backend, pages, rollback }) {
   const backendJob = backend?.jobs?.release;
+  const evidenceJob = backend?.jobs?.validate_recovery_evidence;
   const packageJob = pages?.jobs?.package;
   const preflightJob = pages?.jobs?.preflight;
   const deployJob = pages?.jobs?.deploy;
@@ -134,6 +164,7 @@ export function validateDeploymentConfiguration({ backend, pages, rollback }) {
   const rollbackDeploy = rollback?.jobs?.deploy;
 
   requireInputs(backend, ["expected_sha", "production_project_ref"]);
+  requireRecoveryEvidenceGate(backend, evidenceJob, backendJob);
   requireEnvironment(backendJob, "production-backend");
   requireContentsReadOnly(backendJob, "backend release");
   requireRun(
