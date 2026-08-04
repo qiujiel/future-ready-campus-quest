@@ -36,6 +36,21 @@ const identityStep = (configuration) =>
 
 function validConfiguration() {
   return {
+    ci: {
+      permissions: { contents: "read" },
+      jobs: {
+        secrets: {
+          steps: [
+            {
+              uses: "gitleaks/gitleaks-action@v2",
+              env: {
+                GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}",
+              },
+            },
+          ],
+        },
+      },
+    },
     backend: {
       on: {
         workflow_dispatch: {
@@ -237,6 +252,25 @@ describe("deployment workflow boundaries", () => {
   it("accepts separated, least-privilege, immutable release workflows", () => {
     expect(() => validateDeploymentConfiguration(validConfiguration())).not
       .toThrow();
+  });
+
+  it("requires the automatic GitHub token for pull-request secret scans", () => {
+    const configuration = validConfiguration();
+    delete configuration.ci.jobs.secrets.steps[0].env.GITHUB_TOKEN;
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /Gitleaks scan requires only the automatic GitHub token/i,
+    );
+  });
+
+  it("rejects additional secret material in the Gitleaks step", () => {
+    const configuration = validConfiguration();
+    configuration.ci.jobs.secrets.steps[0].env.EXTRA_SECRET =
+      "${{ secrets.PRODUCTION_READINESS_SECRET }}";
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /Gitleaks scan requires only the automatic GitHub token/i,
+    );
   });
 
   it("rejects a backend workflow missing recovery evidence inputs", () => {

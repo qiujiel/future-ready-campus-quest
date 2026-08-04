@@ -5,6 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 import { load } from "js-yaml";
 
 const PINNED_ACTION = /^[^@\s]+@[0-9a-f]{40}$/;
+const GITLEAKS_ACTION = "gitleaks/gitleaks-action@v2";
 const RECOVERY_INPUT_DEFINITIONS = {
   backup_evidence_id: {
     description: "Redaction-safe backup evidence identifier",
@@ -429,7 +430,37 @@ function requirePagesDeployPermissions(job) {
   }
 }
 
-export function validateDeploymentConfiguration({ backend, pages, rollback }) {
+function requireCiSecretScan(ci) {
+  const permissions = ci?.permissions ?? {};
+  if (
+    permissions.contents !== "read" ||
+    Object.keys(permissions).some((name) => name !== "contents")
+  ) {
+    fail("CI workflow must use only contents: read permission");
+  }
+
+  const job = ci?.jobs?.secrets;
+  if (!job || environmentName(job)) {
+    fail("CI secret scan must be an unprotected job");
+  }
+
+  const gitleaksSteps = (job.steps ?? []).filter(
+    (step) => step?.uses === GITLEAKS_ACTION,
+  );
+  if (gitleaksSteps.length !== 1) {
+    fail("CI requires exactly one Gitleaks secret scan");
+  }
+
+  const environment = gitleaksSteps[0].env ?? {};
+  if (
+    environment.GITHUB_TOKEN !== "${{ secrets.GITHUB_TOKEN }}" ||
+    Object.keys(environment).length !== 1
+  ) {
+    fail("CI Gitleaks scan requires only the automatic GitHub token");
+  }
+}
+
+export function validateDeploymentConfiguration({ ci, backend, pages, rollback }) {
   const backendJob = backend?.jobs?.release;
   const evidenceJob = backend?.jobs?.validate_recovery_evidence;
   const packageJob = pages?.jobs?.package;
@@ -438,6 +469,7 @@ export function validateDeploymentConfiguration({ backend, pages, rollback }) {
   const rollbackPrepare = rollback?.jobs?.prepare;
   const rollbackDeploy = rollback?.jobs?.deploy;
 
+  requireCiSecretScan(ci);
   requireInputs(backend, ["expected_sha", "production_project_ref"]);
   requireRecoveryEvidenceGate(backend, evidenceJob, backendJob);
   requireEnvironment(backendJob, "production-backend");
@@ -502,12 +534,13 @@ export async function loadDeploymentConfiguration(baseDirectory) {
   const workflowDirectory = resolve(baseDirectory, ".github", "workflows");
   const readWorkflow = async (name) =>
     load(await readFile(resolve(workflowDirectory, name), "utf8"));
-  const [backend, pages, rollback] = await Promise.all([
+  const [ci, backend, pages, rollback] = await Promise.all([
+    readWorkflow("ci.yml"),
     readWorkflow("backend-production.yml"),
     readWorkflow("pages.yml"),
     readWorkflow("pages-rollback.yml"),
   ]);
-  return { backend, pages, rollback };
+  return { ci, backend, pages, rollback };
 }
 
 async function main() {
