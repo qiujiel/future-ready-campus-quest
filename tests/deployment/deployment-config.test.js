@@ -5,6 +5,32 @@ import {
 
 const pinnedCheckout =
   "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09";
+const productionProjectRef = "ghohuwwjxgjqnbsauvzq";
+const loadProjectRef = "vadyhuipwbtgbzpeisbn";
+const productionUrl = `https://${productionProjectRef}.supabase.co`;
+const identityScript = [
+  "if ! printf '%s' \"$EXPECTED_SHA\" | grep -Eq '^[0-9a-f]{40}$'; then",
+  "  echo \"expected_sha must be a full lowercase commit SHA\" >&2",
+  "  exit 1",
+  "fi",
+  "test \"$EXPECTED_SHA\" = \"$GITHUB_SHA\"",
+  "test \"$CONFIRMED_PROJECT_REF\" = \"$PRODUCTION_SUPABASE_PROJECT_REF\"",
+  `test "$CONFIRMED_PROJECT_REF" = "${productionProjectRef}"`,
+  `test "$PRODUCTION_SUPABASE_PROJECT_REF" = "${productionProjectRef}"`,
+  `test "$LOAD_SUPABASE_PROJECT_REF" = "${loadProjectRef}"`,
+  `test "$PRODUCTION_SUPABASE_URL" = "${productionUrl}"`,
+  "test \"$PRODUCTION_SUPABASE_PROJECT_REF\" != \"$LOAD_SUPABASE_PROJECT_REF\"",
+].join("\n");
+
+const recoveryValidatorStep = (configuration) =>
+  configuration.backend.jobs.validate_recovery_evidence.steps.find((step) =>
+    step.run?.includes("recovery-evidence.mjs")
+  );
+
+const identityStep = (configuration) =>
+  configuration.backend.jobs.release.steps.find((step) =>
+    step.name === "Validate protected release identity"
+  );
 
 function validConfiguration() {
   return {
@@ -40,19 +66,26 @@ function validConfiguration() {
           ],
         },
         release: {
+          if: "github.ref == 'refs/heads/main'",
           needs: "validate_recovery_evidence",
           environment: "production-backend",
           permissions: { contents: "read" },
+          env: {
+            LOAD_SUPABASE_PROJECT_REF:
+              "${{ vars.LOAD_SUPABASE_PROJECT_REF }}",
+            PRODUCTION_SUPABASE_PROJECT_REF:
+              "${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}",
+            PRODUCTION_SUPABASE_URL: "${{ vars.VITE_SUPABASE_URL }}",
+          },
           steps: [
             { uses: pinnedCheckout },
             {
+              name: "Validate protected release identity",
               env: {
-                LOAD_SUPABASE_PROJECT_REF:
-                  "${{ vars.LOAD_SUPABASE_PROJECT_REF }}",
-                PRODUCTION_SUPABASE_PROJECT_REF:
-                  "${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}",
+                CONFIRMED_PROJECT_REF:
+                  "${{ inputs.production_project_ref }}",
               },
-              run: "test \"$PRODUCTION_SUPABASE_PROJECT_REF\" != \"$LOAD_SUPABASE_PROJECT_REF\"\ntest \"$PRODUCTION_SUPABASE_PROJECT_REF\" != vadyhuipwbtgbzpeisbn",
+              run: identityScript,
             },
             { run: "supabase migration list --linked" },
             { run: "supabase db push --dry-run --linked" },
@@ -186,6 +219,16 @@ describe("deployment workflow boundaries", () => {
     );
   });
 
+  it("rejects a release condition that can run after recovery validation fails", () => {
+    const configuration = validConfiguration();
+    configuration.backend.jobs.release.if =
+      "${{ always() && github.ref == 'refs/heads/main' }}";
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /release must require successful recovery evidence validation/i,
+    );
+  });
+
   it("rejects a protected or secret-bearing evidence validation job", () => {
     const protectedConfiguration = validConfiguration();
     protectedConfiguration.backend.jobs.validate_recovery_evidence.environment =
@@ -202,6 +245,76 @@ describe("deployment workflow boundaries", () => {
     );
   });
 
+  it("rejects recovery validation with non-read-only permissions", () => {
+    const configuration = validConfiguration();
+    configuration.backend.jobs.validate_recovery_evidence.permissions.actions =
+      "write";
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /only contents: read/i,
+    );
+  });
+
+  it.each([
+    ["validation job", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence[
+        "continue-on-error"
+      ] = true;
+    }],
+    ["validator step", (configuration) => {
+      recoveryValidatorStep(configuration)["continue-on-error"] = true;
+    }],
+  ])("rejects continue-on-error on the recovery %s", (_scope, mutate) => {
+    const configuration = validConfiguration();
+    mutate(configuration);
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /recovery evidence validation must be fail-closed/i,
+    );
+  });
+
+  it("rejects a conditional validator step that can skip recovery validation", () => {
+    const configuration = validConfiguration();
+    recoveryValidatorStep(configuration).if = false;
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /recovery evidence validator must run unconditionally/i,
+    );
+  });
+
+  it("rejects a missing or echo-only validator invocation", () => {
+    const missingConfiguration = validConfiguration();
+    recoveryValidatorStep(missingConfiguration).run = "true";
+    expect(() => validateDeploymentConfiguration(missingConfiguration)).toThrow(
+      /run the repository validator/i,
+    );
+
+    const echoConfiguration = validConfiguration();
+    recoveryValidatorStep(echoConfiguration).run =
+      "echo node scripts/recovery-evidence.mjs";
+    expect(() => validateDeploymentConfiguration(echoConfiguration)).toThrow(
+      /run the repository validator/i,
+    );
+  });
+
+  it("rejects inherited dot- or bracket-form secrets in recovery validation", () => {
+    const workflowConfiguration = validConfiguration();
+    workflowConfiguration.backend.env = {
+      INHERITED_SECRET: "${{ secrets.PRODUCTION_SUPABASE_DB_PASSWORD }}",
+    };
+    expect(() => validateDeploymentConfiguration(workflowConfiguration)).toThrow(
+      /evidence validation.*secret/i,
+    );
+
+    const jobConfiguration = validConfiguration();
+    jobConfiguration.backend.jobs.validate_recovery_evidence.env = {
+      INHERITED_SECRET: '${{ secrets["PRODUCTION_SUPABASE_DB_PASSWORD"] }}',
+    };
+    expect(() => validateDeploymentConfiguration(jobConfiguration)).toThrow(
+      /evidence validation.*secret/i,
+    );
+  });
+
   it("rejects recovery validation without every dispatch input mapping", () => {
     const configuration = validConfiguration();
     delete configuration.backend.jobs.validate_recovery_evidence.steps[1].env
@@ -211,10 +324,134 @@ describe("deployment workflow boundaries", () => {
     );
   });
 
+  it("rejects inexact or extra recovery input mappings", () => {
+    const wrongInputConfiguration = validConfiguration();
+    recoveryValidatorStep(wrongInputConfiguration).env.BACKUP_EVIDENCE_ID =
+      "${{ inputs.restore_rehearsal_evidence_id }}";
+    expect(() => validateDeploymentConfiguration(wrongInputConfiguration)).toThrow(
+      /backup_evidence_id/i,
+    );
+
+    const extraMappingConfiguration = validConfiguration();
+    recoveryValidatorStep(extraMappingConfiguration).env.EXTRA =
+      "${{ inputs.backup_evidence_id }}";
+    expect(() => validateDeploymentConfiguration(extraMappingConfiguration)).toThrow(
+      /exactly four approved environment mappings/i,
+    );
+  });
+
+  it.each([
+    [
+      "production project",
+      `test "$PRODUCTION_SUPABASE_PROJECT_REF" = "${productionProjectRef}"`,
+      "test \"$PRODUCTION_SUPABASE_PROJECT_REF\" = \"wrongproductionref123\"",
+      /exact production project/i,
+    ],
+    [
+      "load project",
+      `test "$LOAD_SUPABASE_PROJECT_REF" = "${loadProjectRef}"`,
+      "test \"$LOAD_SUPABASE_PROJECT_REF\" = \"wrongloadprojectref123\"",
+      /exact load project/i,
+    ],
+    [
+      "production URL",
+      `test "$PRODUCTION_SUPABASE_URL" = "${productionUrl}"`,
+      `test "$PRODUCTION_SUPABASE_URL" = "https://${loadProjectRef}.supabase.co"`,
+      /exact production URL/i,
+    ],
+  ])("rejects mutation of the exact %s assertion", (_label, required, mutation, error) => {
+    const configuration = validConfiguration();
+    identityStep(configuration).run = identityStep(configuration).run.replace(
+      required,
+      mutation,
+    );
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(error);
+  });
+
+  it("rejects an echo-only production identity assertion", () => {
+    const configuration = validConfiguration();
+    const required =
+      `test "$PRODUCTION_SUPABASE_PROJECT_REF" = "${productionProjectRef}"`;
+    identityStep(configuration).run = identityStep(configuration).run.replace(
+      required,
+      `echo '${required}'`,
+    );
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /exact production project/i,
+    );
+  });
+
+  it("rejects fail-open shell semantics in production identity validation", () => {
+    const configuration = validConfiguration();
+    identityStep(configuration).run =
+      `set +e\n${identityStep(configuration).run}`;
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /canonical fail-closed identity script/i,
+    );
+  });
+
+  it.each([
+    ["workflow", (configuration) => {
+      configuration.backend.defaults = { run: { shell: "bash {0}" } };
+    }],
+    ["release job", (configuration) => {
+      configuration.backend.jobs.release.defaults = {
+        run: { shell: "bash {0}" },
+      };
+    }],
+    ["identity step", (configuration) => {
+      identityStep(configuration).shell = "bash {0}";
+    }],
+  ])("rejects a %s shell override around production identity validation", (_scope, mutate) => {
+    const configuration = validConfiguration();
+    mutate(configuration);
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /canonical fail-closed identity execution/i,
+    );
+  });
+
+  it("rejects continue-on-error for production identity validation", () => {
+    const configuration = validConfiguration();
+    identityStep(configuration)["continue-on-error"] = true;
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /canonical fail-closed identity execution/i,
+    );
+  });
+
+  it("rejects a production mutation configured to run after identity failure", () => {
+    const configuration = validConfiguration();
+    configuration.backend.jobs.release.steps.find((step) =>
+      step.run?.includes("supabase db push --linked")
+    ).if = "always()";
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /production mutation must require successful identity validation/i,
+    );
+  });
+
+  it("rejects production mutation steps before exact identity validation", () => {
+    const configuration = validConfiguration();
+    const steps = configuration.backend.jobs.release.steps;
+    const validationIndex = steps.indexOf(identityStep(configuration));
+    const [validation] = steps.splice(validationIndex, 1);
+    steps.splice(4, 0, validation);
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /identity validation must precede production mutation/i,
+    );
+  });
+
   it("rejects a backend workflow that does not compare the load project", () => {
     const configuration = validConfiguration();
-    configuration.backend.jobs.release.steps[1].run =
-      "test \"$PRODUCTION_SUPABASE_PROJECT_REF\" != vadyhuipwbtgbzpeisbn";
+    identityStep(configuration).run = identityStep(configuration).run.replace(
+      "test \"$PRODUCTION_SUPABASE_PROJECT_REF\" != \"$LOAD_SUPABASE_PROJECT_REF\"",
+      "true",
+    );
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /load project separation/i,

@@ -58,7 +58,7 @@
 - Produces: `validateRecoveryEvidence(input, options): Readonly<RecoveryEvidence>`, `readRecoveryEvidence(environment, options): Readonly<RecoveryEvidence>`, and a CLI that reads `BACKUP_EVIDENCE_ID`, `BACKUP_CREATED_AT_UTC`, `BACKUP_ARCHIVE_SHA256`, and `RESTORE_REHEARSAL_EVIDENCE_ID` without reading secrets.
 - ID formats: `frcq-backup-YYYYMMDDTHHMMSSZ-xxxxxxxx` and `frcq-restore-YYYYMMDDTHHMMSSZ-xxxxxxxx`, where `x` is lowercase hexadecimal.
 - Timestamp format: canonical UTC seconds, `YYYY-MM-DDTHH:MM:SSZ`.
-- Freshness: at most 24 hours old; at most five minutes in the future for clock skew.
+- Freshness: strictly less than 24 hours old; at most five minutes in the future for clock skew.
 
 - [ ] **Step 1: Write the failing validator tests**
 
@@ -180,7 +180,7 @@ export function validateRecoveryEvidence(input, { now = new Date() } = {}) {
   if (!RESTORE_ID.test(evidence.restoreRehearsalEvidenceId)) fail("restoreRehearsalEvidenceId format");
   const createdAt = canonicalTimestamp(evidence.backupCreatedAtUtc);
   const age = now.valueOf() - createdAt.valueOf();
-  if (age > MAX_AGE_MS) fail("backup must be less than 24 hours old");
+  if (age >= MAX_AGE_MS) fail("backup must be less than 24 hours old");
   if (age < -MAX_FUTURE_SKEW_MS) fail("backup timestamp is in the future");
   return Object.freeze(evidence);
 }
@@ -348,6 +348,16 @@ const RECOVERY_INPUTS = [
   "backup_archive_sha256",
   "restore_rehearsal_evidence_id",
 ];
+const RECOVERY_ENVIRONMENT = {
+  BACKUP_EVIDENCE_ID: "backup_evidence_id",
+  BACKUP_CREATED_AT_UTC: "backup_created_at_utc",
+  BACKUP_ARCHIVE_SHA256: "backup_archive_sha256",
+  RESTORE_REHEARSAL_EVIDENCE_ID: "restore_rehearsal_evidence_id",
+};
+
+function containsSecretsContext(value) {
+  return /\$\{\{\s*secrets\s*(?:\.|\[)/i.test(JSON.stringify(value ?? {}));
+}
 
 function requireRecoveryEvidenceGate(workflow, validationJob, releaseJob) {
   requireInputs(workflow, RECOVERY_INPUTS);
@@ -358,17 +368,26 @@ function requireRecoveryEvidenceGate(workflow, validationJob, releaseJob) {
     fail("recovery evidence validation must be an unprotected job");
   }
   requireContentsReadOnly(validationJob, "recovery evidence validation");
-  const serialized = JSON.stringify(validationJob);
-  if (serialized.includes("secrets.")) {
+  if (
+    containsSecretsContext(workflow?.env) ||
+    containsSecretsContext(validationJob)
+  ) {
     fail("recovery evidence validation must not receive a secret");
   }
-  if (!combinedRuns(validationJob).includes("node scripts/recovery-evidence.mjs")) {
+  const validatorSteps = (validationJob.steps ?? []).filter((step) =>
+    String(step?.run ?? "").trim() === "node scripts/recovery-evidence.mjs"
+  );
+  if (validatorSteps.length !== 1) {
     fail("recovery evidence validation must run the repository validator");
   }
-  for (const input of RECOVERY_INPUTS) {
-    if (!serialized.includes(`inputs.${input}`)) {
+  const environment = validatorSteps[0].env ?? {};
+  for (const [name, input] of Object.entries(RECOVERY_ENVIRONMENT)) {
+    if (environment[name] !== `\${{ inputs.${input} }}`) {
       fail(`recovery evidence validation must map ${input}`);
     }
+  }
+  if (Object.keys(environment).length !== 4) {
+    fail("recovery evidence validation requires exactly four approved environment mappings");
   }
 }
 ```
@@ -396,6 +415,11 @@ Add the four required string inputs with redaction-safe descriptions. Add `valid
 ```
 
 Add `needs: validate_recovery_evidence` to `release`. Do not move or remove `environment: production-backend`; no validation job receives an environment or secret.
+Before any `db push`, secret update, or function deploy, the protected identity
+step must directly assert production ref `ghohuwwjxgjqnbsauvzq`, load ref
+`vadyhuipwbtgbzpeisbn`, and production URL
+`https://ghohuwwjxgjqnbsauvzq.supabase.co`, in addition to comparing the
+confirmed input with the configured production ref.
 
 - [ ] **Step 6: Run focused workflow tests and the live parser**
 
@@ -427,7 +451,7 @@ git commit -m "ci: gate backend release on recovery evidence"
 **Interfaces:**
 - Consumes: repository-relative path strings.
 - Produces: `forbiddenRecoveryArtifactPaths(paths: Iterable<string>): string[]`, sorted and deduplicated.
-- Rejects: `.age`, `.backup`, `.dump`, `roles.sql`, `data.sql`, `history_schema.sql`, `history_data.sql`, `storage-manifest.json`, `recovery-manifest.json`, and anything under a `recovery-package` or `recovery-backup` directory.
+- Rejects: `.age`, `.backup`, `.dump`, `roles.sql`, `schema.sql`, `data.sql`, `history_schema.sql`, `history_data.sql`, `storage-manifest.json`, `recovery-manifest.json`, and anything under a `recovery-package` or `recovery-backup` directory.
 - Allows: timestamped Supabase migrations, design/runbook Markdown, and ordinary application JSON/assets.
 
 - [ ] **Step 1: Write the failing path-classifier tests**
@@ -444,6 +468,7 @@ describe("recovery artifact repository guard", () => {
     expect(forbiddenRecoveryArtifactPaths([
       "private/frcq-backup.age",
       "roles.sql",
+      "schema.sql",
       "data.sql",
       "history_schema.sql",
       "history_data.sql",
@@ -451,7 +476,7 @@ describe("recovery artifact repository guard", () => {
       "tmp/recovery-package/objects/opaque.webp",
       "archive/project.backup",
       "archive/project.dump",
-    ])).toHaveLength(9);
+    ])).toHaveLength(10);
   });
 
   it("allows migrations, recovery documentation, and public fixtures", () => {
@@ -490,7 +515,7 @@ Create `scripts/recovery-artifact-guard.mjs`:
 const RECOVERY_ARTIFACT = [
   /\.age$/i,
   /\.(?:backup|dump)$/i,
-  /(^|\/)(?:roles|data|history_schema|history_data)\.sql$/i,
+  /(^|\/)(?:roles|schema|data|history_schema|history_data)\.sql$/i,
   /(^|\/)(?:storage|recovery)-manifest\.json$/i,
   /(^|\/)recovery-(?:package|backup)(\/|$)/i,
 ];
@@ -651,18 +676,18 @@ Create `docs/operations/free-plan-recovery.md` with these exact sections:
 Document the supported future commands as templates that use the exact locally linked production identity and an interactive hidden database-password prompt; never place a password or connection string in a command argument, shell history, output, or committed file. Include the five official logical exports:
 
 ```bash
-pnpm exec supabase db dump --linked -f roles.sql --role-only
-pnpm exec supabase db dump --linked -f schema.sql
-pnpm exec supabase db dump --linked -f data.sql --use-copy --data-only -x "storage.buckets_vectors" -x "storage.vector_indexes"
-pnpm exec supabase db dump --linked -f history_schema.sql --schema supabase_migrations
-pnpm exec supabase db dump --linked -f history_data.sql --use-copy --data-only --schema supabase_migrations
+pnpm exec supabase db dump --linked -f "$staging_dir/roles.sql" --role-only
+pnpm exec supabase db dump --linked -f "$staging_dir/schema.sql"
+pnpm exec supabase db dump --linked -f "$staging_dir/data.sql" --use-copy --data-only -x "storage.buckets_vectors" -x "storage.vector_indexes"
+pnpm exec supabase db dump --linked -f "$staging_dir/history_schema.sql" --schema supabase_migrations
+pnpm exec supabase db dump --linked -f "$staging_dir/history_data.sql" --use-copy --data-only --schema supabase_migrations
 ```
 
-State that these are documentation for an explicitly approved future execution, not authorization. Require `umask 077`, `mktemp -d`, a cleanup trap, `age` recipient encryption, encrypted-archive `shasum -a 256`, two read-back digest checks, a 24-hour freshness limit, no writes after recovery point, aggregate-only evidence, and the latest-three/30-day rule. Describe Storage export using the official Supabase Storage CLI/API migration guidance without embedding service-role keys or object paths in commands or logs.
+State that these are documentation for an explicitly approved future execution, not authorization. Keep the approved checkout as the working directory, use absolute staging output paths, and clean only from that safe checkout. Require `umask 077`, `mktemp -d`, a cleanup trap, `age` recipient encryption, filename-free stdin hashing for the encrypted archive and both retained copies, a strict less-than-24-hour freshness limit, no writes after recovery point, aggregate-only evidence, and the latest-three/30-day rule. Capture quiesced source counts for Auth, cohorts, private/public profiles, attempts, responses, evidence, and audit rows inside the encrypted manifest and require exact rehearsal target equality. Define versioned Storage pagination to exhaustion, duplicate/error rejection, exact source identity, two complete digest inventories, and automatic new-table exposure disabled before restore.
 
 - [ ] **Step 4: Align backend release and GitHub configuration documentation**
 
-Update `backend-release.md` so its preconditions accept either provider-managed backup/PITR or the verified Free-plan encrypted logical package plus hosted rehearsal. Add the four exact dispatch inputs and require the owner to compare them against the separately held evidence before approving `production-backend`.
+Update `backend-release.md` so the selected Free-plan encrypted logical package plus hosted rehearsal is the only recovery method accepted by this workflow. State that a later plan change requires a separately designed and validated evidence method. Add the four exact dispatch inputs and require the owner to compare them against the separately held evidence before approving `production-backend`.
 
 Update `github-environments.md` to say the four recovery values are non-secret workflow inputs, not repository/environment variables or secrets. Preserve the existing variable/secret inventory unchanged and state that no backup, database connection string, Storage admin key, encryption key, or protected manifest belongs in GitHub.
 
@@ -672,7 +697,8 @@ Replace the generic backup/PITR lines with fields for:
 
 ```text
 backup evidence ID
-backup creation/recovery-point time
+quiesced recovery-point time
+backup_created_at_utc archive creation/completion time
 encrypted archive SHA-256 and byte size
 cloud-copy digest verification
 offline-copy digest verification

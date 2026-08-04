@@ -7,11 +7,38 @@ const read = (name) => readFile(
 );
 
 const dumpCommands = [
-  "pnpm exec supabase db dump --linked -f roles.sql --role-only",
-  "pnpm exec supabase db dump --linked -f schema.sql",
-  "pnpm exec supabase db dump --linked -f data.sql --use-copy --data-only -x \"storage.buckets_vectors\" -x \"storage.vector_indexes\"",
-  "pnpm exec supabase db dump --linked -f history_schema.sql --schema supabase_migrations",
-  "pnpm exec supabase db dump --linked -f history_data.sql --use-copy --data-only --schema supabase_migrations",
+  "pnpm exec supabase db dump --linked -f \"$staging_dir/roles.sql\" --role-only",
+  "pnpm exec supabase db dump --linked -f \"$staging_dir/schema.sql\"",
+  "pnpm exec supabase db dump --linked -f \"$staging_dir/data.sql\" --use-copy --data-only -x \"storage.buckets_vectors\" -x \"storage.vector_indexes\"",
+  "pnpm exec supabase db dump --linked -f \"$staging_dir/history_schema.sql\" --schema supabase_migrations",
+  "pnpm exec supabase db dump --linked -f \"$staging_dir/history_data.sql\" --use-copy --data-only --schema supabase_migrations",
+];
+
+const productionProjectRef = "ghohuwwjxgjqnbsauvzq";
+const loadProjectRef = "vadyhuipwbtgbzpeisbn";
+const productionUrl = `https://${productionProjectRef}.supabase.co`;
+
+const sourceCountTables = [
+  "`auth.users`",
+  "`public.cohorts`",
+  "`public.student_private_profiles`",
+  "`public.student_public_profiles`",
+  "`public.quest_attempts`",
+  "`public.student_responses`",
+  "`public.concept_evidence`",
+  "`public.audit_events`",
+];
+
+const remoteApprovalLabels = [
+  "Recovery custodian and key provisioning",
+  "Cloud and offline custody locations",
+  "Production read/export window",
+  "Load-test project pause",
+  "Temporary recovery project creation",
+  "Restore operation",
+  "Optional rehearsal deployment",
+  "Temporary recovery project deletion",
+  "Load-test project reactivation",
 ];
 
 const recoveryInputs = [
@@ -34,25 +61,66 @@ const assertPatterns = (source, patterns) => {
   for (const pattern of patterns) expect(source).toMatch(pattern);
 };
 
+const rejectPatterns = (source, patterns) => {
+  for (const pattern of patterns) expect(source).not.toMatch(pattern);
+};
+
+const section = (source, heading) => {
+  const marker = `## ${heading}`;
+  const start = source.indexOf(marker);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const next = source.indexOf("\n## ", start + marker.length);
+  return source.slice(start, next < 0 ? source.length : next);
+};
+
+const escapePattern = (value) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const assertRunbookPolicy = (runbook) => {
+  const authority = section(runbook, "Authority and project identities");
+  const staging = section(runbook, "Phase A — approve and quiesce production");
+  const database = section(
+    runbook,
+    "Phase B — export roles, schema, data, and migration history",
+  );
+  const storage = section(runbook, "Phase C — export and inventory `group-images`");
+  const packagePhase = section(runbook, "Phase D — package, encrypt, copy, and verify");
+  const rehearsalProject = section(
+    runbook,
+    "Phase F — create the temporary Singapore recovery project with approval",
+  );
+  const validation = section(runbook, "Phase G — restore and validate with approval");
+  const githubEvidence = section(runbook, "GitHub evidence entry");
+
   assertPhrases(runbook, [
     ...dumpCommands,
+    productionProjectRef,
+    loadProjectRef,
+    productionUrl,
     "This runbook documents commands for an explicitly approved future operation.",
     "It is not authorization",
     "interactive hidden prompt",
     "never place it or a connection",
+    "approved_checkout=\"$(git rev-parse --show-toplevel)\"",
     "umask 077",
     "mktemp -d",
     "trap cleanup EXIT HUP INT TERM",
     "age --recipients-file",
-    "shasum -a 256",
     "cloud-copy and offline-copy",
     "less than 24 hours",
     "no write occurred after its recovery point",
     "aggregate-only evidence",
     "latest three",
     "at least 30 days",
-    "official Supabase Storage CLI/API migration guidance",
+    "Storage export procedure `storage-export-v1`",
+    "fixed page size of `100`",
+    "continue until a page returns fewer than `100` entries",
+    "reject duplicate object paths",
+    "second complete source digest inventory",
+    "disable automatic exposure of new tables",
+    "archive creation/completion time",
+    "quiesced recovery point",
+    "approved full 40-character source SHA",
     "obtain a new",
     "Obtain separate approval to create",
     "After separate restore approval",
@@ -62,23 +130,82 @@ const assertRunbookPolicy = (runbook) => {
   assertPatterns(runbook, [
     /never.*restore.*vadyhuipwbtgbzpeisbn/is,
     /Do not embed.*object\s+paths.*commands, logs/is,
+    /target counts[\s\S]*exactly equal[\s\S]*source counts/is,
+    /independent reviewer[\s\S]*source-to-target count comparison/is,
+  ]);
+
+  assertPhrases(authority, [productionProjectRef, loadProjectRef, productionUrl]);
+  assertPhrases(staging, [
+    "approved_checkout=\"$(git rev-parse --show-toplevel)\"",
+    "cd \"$approved_checkout\"",
+  ]);
+  assertPhrases(database, [...dumpCommands, ...sourceCountTables]);
+  expect(runbook.indexOf("approved_checkout=\"$(git rev-parse --show-toplevel)\"")).toBeLessThan(
+    runbook.indexOf("pnpm exec supabase link --project-ref ghohuwwjxgjqnbsauvzq"),
+  );
+  expect(database.indexOf("capture one quiesced source-count baseline")).toBeLessThan(
+    database.indexOf(dumpCommands[0]),
+  );
+  assertPhrases(storage, [
+    productionProjectRef,
+    loadProjectRef,
+    productionUrl,
+    "Storage export procedure `storage-export-v1`",
+    "fixed page size of `100`",
+    "continue until a page returns fewer than `100` entries",
+    "reject duplicate object paths",
+    "second complete source digest inventory",
+  ]);
+  assertPatterns(packagePhase, [
+    /shasum -a 256 < "\$ENCRYPTED_ARCHIVE"/,
+    /shasum -a 256 < "\$CLOUD_ARCHIVE"/,
+    /shasum -a 256 < "\$OFFLINE_ARCHIVE"/,
+  ]);
+  expect(rehearsalProject).toContain("disable automatic exposure of new tables");
+  assertPatterns(validation, [
+    /target counts[\s\S]*exactly equal[\s\S]*source counts/is,
+  ]);
+  assertPhrases(githubEvidence, [
+    "archive creation/completion time",
+    "quiesced recovery point",
+    "component completion flags",
+    "encrypted archive SHA-256 and byte size",
+  ]);
+
+  rejectPatterns(runbook, [
+    /cd "\$staging_dir"/,
+    /shasum -a 256\s+"\$[^"]+"/,
+    /component completion flags,\s+byte sizes,\s+and digests outside/is,
+    /target counts? may differ/i,
+    /sampled target counts?/i,
   ]);
 };
 
 const assertBackendReleasePolicy = (backend) => {
   assertPhrases(backend, [
-    "provider-managed",
+    "selected Supabase Free plan",
+    "only accepted recovery path",
     "verified Free-plan encrypted logical",
     "restore rehearsal",
     ...recoveryInputs,
+    "archive creation/completion time",
+    "quiesced recovery point is recorded separately",
     "Before approving",
     "separately held release record",
     "independently verifies both custody copies",
     "attests that no write occurred after the recovery",
+    "Any later plan change",
+    "separately designed and validated evidence method",
   ]);
   assertPatterns(backend, [
-    /either a current provider-managed[\s\S]*or the verified Free-plan encrypted logical/is,
+    /only accepted recovery path[\s\S]*verified Free-plan encrypted logical/is,
     /Before approving\s+`production-backend`[\s\S]*compares all four inputs/is,
+  ]);
+  rejectPatterns(backend, [
+    /either[^\n]*provider-managed[^\n]*or/i,
+    /either a current provider-managed[\s\S]*or the verified Free-plan encrypted logical/is,
+    /backup creation\/recovery-point time/i,
+    /provider-managed backup\/PITR recovery point, or/i,
   ]);
 };
 
@@ -158,10 +285,14 @@ const assertClassSessionPolicy = (classroom) => {
 const assertChecklistPolicy = (checklist) => {
   assertPhrases(checklist, [
     "Default decision: HOLD",
+    productionProjectRef,
+    loadProjectRef,
+    productionUrl,
     "checked by two people",
     "distinct required-reviewer gates",
     "Backup evidence ID",
-    "Backup creation time/recovery-point time",
+    "Quiesced recovery point",
+    "`backup_created_at_utc` archive creation/completion time",
     "Encrypted archive SHA-256 and byte size",
     "Cloud-copy read-back digest and size verification",
     "Offline-copy read-back digest and size verification",
@@ -171,8 +302,15 @@ const assertChecklistPolicy = (checklist) => {
     "Database/Auth/RLS/retention validation result",
     "`group-images` object-count/byte-total/digest validation result",
     "Rehearsal reviewer and time",
-    "Temporary recovery project deletion approval/result",
-    "Load-test project reactivated and identity/health result",
+    "Pinned Supabase CLI version `2.110.0`",
+    "Component-completion flags",
+    "Internal manifest-to-release binding review 1",
+    "Internal manifest-to-release binding review 2",
+    "full approved 40-character source SHA",
+    "two distinct named people",
+    "source commit",
+    "source project ref",
+    ...remoteApprovalLabels,
     ...recoveryInputs,
     "Package evidence: artifact ID",
     "manifest SHA-256",
@@ -182,12 +320,37 @@ const assertChecklistPolicy = (checklist) => {
     "**ROLL BACK**",
     "Release owner signature/time",
     "Independent reviewer signature/time",
+    "Any unchecked item means **HOLD**",
+    "No operator, owner, approver, or reviewer may waive",
+  ]);
+
+  for (const label of remoteApprovalLabels) {
+    expect(checklist).toMatch(new RegExp(
+      `${escapePattern(label)}[^\n]*Approver:[^\n]*UTC:[^\n]*Result:`,
+      "i",
+    ));
+  }
+
+  assertPatterns(checklist, [
+    /Internal manifest-to-release binding review 1[^\n]*Reviewer name:[^\n]*UTC:[^\n]*Result:/i,
+    /Internal manifest-to-release binding review 2[^\n]*Reviewer name:[^\n]*UTC:[^\n]*Result:/i,
+    /full approved 40-character source SHA[\s\S]*source project ref[\s\S]*2\.110\.0[\s\S]*component-completion flags/is,
+    /source counts[\s\S]*target counts[\s\S]*exactly equal/is,
+  ]);
+  rejectPatterns(checklist, [
+    /Backup creation time\/recovery-point time/i,
+    /may waive[^\n]*unchecked/i,
+    /unchecked[^\n]*may proceed/i,
+    /HOLD[^\n]*optional/i,
+    /same person[^\n]*both binding reviews/i,
   ]);
 };
 
 const assertReadinessReviewPolicy = (review) => {
   assertPhrases(review, [
     "Decision: HOLD",
+    productionProjectRef,
+    loadProjectRef,
     "Repository completion does not authorize deployment",
     "encryption/recovery custodian",
     "two custody locations",
@@ -229,12 +392,13 @@ describe("Free-plan recovery operations", () => {
     const checklist = await read("release-checklist.md");
     for (const field of [
       "backup evidence ID",
-      "backup creation time",
+      "backup_created_at_utc",
+      "quiesced recovery point",
       "encrypted archive SHA-256",
       "restore rehearsal evidence ID",
       "cloud-copy",
       "offline-copy",
-      "load-test project reactivated",
+      "load-test project reactivation",
     ]) expect(checklist.toLowerCase()).toContain(field.toLowerCase());
   });
 
@@ -278,6 +442,8 @@ describe("Free-plan recovery operations", () => {
       rollback: await read("rollback.md"),
       privacy: await read("privacy-and-retention.md"),
       classroom: await read("class-session-runbook.md"),
+      checklist: await read("release-checklist.md"),
+      readiness: await read("deployment-readiness-review.md"),
     };
     const mutations = [
       ...dumpCommands.map((phrase) => [
@@ -286,11 +452,25 @@ describe("Free-plan recovery operations", () => {
         phrase,
       ]),
       ...[
+        productionProjectRef,
+        loadProjectRef,
+        productionUrl,
+        "approved_checkout=\"$(git rev-parse --show-toplevel)\"",
+        "Storage export procedure `storage-export-v1`",
+        "fixed page size of `100`",
+        "continue until a page returns fewer than `100` entries",
+        "reject duplicate object paths",
+        "second complete source digest inventory",
+        "disable automatic exposure of new tables",
+        "archive creation/completion time",
+        "quiesced recovery point",
+        "approved full 40-character source SHA",
         "obtain a new",
         "Obtain separate approval to create",
         "After separate restore approval",
         "obtain explicit approval to delete",
         "Obtain separate approval to reactivate",
+        ...sourceCountTables,
       ].map((phrase) => [assertRunbookPolicy, documents.runbook, phrase]),
       ...recoveryInputs.map((phrase) => [
         assertBackendReleasePolicy,
@@ -298,10 +478,13 @@ describe("Free-plan recovery operations", () => {
         phrase,
       ]),
       ...[
-        "provider-managed",
+        "selected Supabase Free plan",
+        "only accepted recovery path",
         "verified Free-plan encrypted logical",
         "Before approving",
         "separately held release record",
+        "Any later plan change",
+        "separately designed and validated evidence method",
       ].map((phrase) => [assertBackendReleasePolicy, documents.backend, phrase]),
       ...recoveryInputs.map((phrase) => [
         assertGitHubPolicy,
@@ -343,6 +526,27 @@ describe("Free-plan recovery operations", () => {
         "Auth health",
         "application-function method-boundary readiness",
       ].map((phrase) => [assertClassSessionPolicy, documents.classroom, phrase]),
+      ...[
+        productionProjectRef,
+        loadProjectRef,
+        productionUrl,
+        "Quiesced recovery point",
+        "`backup_created_at_utc` archive creation/completion time",
+        "Pinned Supabase CLI version `2.110.0`",
+        "Component-completion flags",
+        "Internal manifest-to-release binding review 1",
+        "Internal manifest-to-release binding review 2",
+        "full approved 40-character source SHA",
+        "two distinct named people",
+        "Any unchecked item means **HOLD**",
+        "No operator, owner, approver, or reviewer may waive",
+        ...remoteApprovalLabels,
+      ].map((phrase) => [assertChecklistPolicy, documents.checklist, phrase]),
+      ...[
+        "Decision: HOLD",
+        "Repository completion does not authorize deployment",
+        "complete every item and signature",
+      ].map((phrase) => [assertReadinessReviewPolicy, documents.readiness, phrase]),
     ];
 
     for (const [validate, source, phrase] of mutations) {
@@ -354,5 +558,42 @@ describe("Free-plan recovery operations", () => {
       "Generate",
     );
     expect(() => assertClassSessionPolicy(keepaliveContradiction)).toThrow();
+
+    const unsafeCwd = documents.runbook.replace(
+      "cd \"$approved_checkout\"",
+      "cd \"$staging_dir\"",
+    );
+    expect(() => assertRunbookPolicy(unsafeCwd)).toThrow();
+
+    const linkBeforeCheckout = `pnpm exec supabase link --project-ref ${productionProjectRef}\n${documents.runbook}`;
+    expect(() => assertRunbookPolicy(linkBeforeCheckout)).toThrow();
+
+    const unsafeHash = documents.runbook.replace(
+      "shasum -a 256 < \"$ENCRYPTED_ARCHIVE\"",
+      "shasum -a 256 \"$ENCRYPTED_ARCHIVE\"",
+    );
+    expect(() => assertRunbookPolicy(unsafeHash)).toThrow();
+
+    const countMismatchWaiver = `${documents.runbook}\nTarget counts may differ from source counts after a partial restore.`;
+    expect(() => assertRunbookPolicy(countMismatchWaiver)).toThrow();
+
+    const providerAlternative = `${documents.backend}\nEither a current provider-managed backup or the Free-plan package is accepted.`;
+    expect(() => assertBackendReleasePolicy(providerAlternative)).toThrow();
+
+    const holdWaiver = `${documents.checklist}\nAn operator may waive an unchecked item and proceed despite HOLD.`;
+    expect(() => assertChecklistPolicy(holdWaiver)).toThrow();
+
+    const sameBindingReviewer = `${documents.checklist}\nThe same person may complete both binding reviews.`;
+    expect(() => assertChecklistPolicy(sameBindingReviewer)).toThrow();
+
+    for (const [exact, mutation] of [
+      [productionProjectRef, "ghohuwwjxgjqnbsauvzx"],
+      [loadProjectRef, "vadyhuipwbtgbzpeisbm"],
+      [productionUrl, `https://${loadProjectRef}.supabase.co`],
+    ]) {
+      expect(() => assertRunbookPolicy(
+        documents.runbook.split(exact).join(mutation),
+      )).toThrow();
+    }
   });
 });

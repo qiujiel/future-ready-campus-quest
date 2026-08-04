@@ -1,7 +1,7 @@
 const RECOVERY_ARTIFACT = [
   /\.age$/i,
   /\.(?:backup|dump)$/i,
-  /(^|\/)(?:roles|data|history_schema|history_data)\.sql$/i,
+  /(^|\/)(?:roles|schema|data|history_schema|history_data)\.sql$/i,
   /(^|\/)(?:storage|recovery)-manifest\.json$/i,
   /(^|\/)recovery-(?:package|backup)(\/|$)/i,
 ];

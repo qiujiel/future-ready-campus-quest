@@ -87,9 +87,11 @@ jobs:
           fi
           test "$EXPECTED_SHA" = "$GITHUB_SHA"
           test "$CONFIRMED_PROJECT_REF" = "$PRODUCTION_SUPABASE_PROJECT_REF"
-          test -n "$LOAD_SUPABASE_PROJECT_REF"
+          test "$CONFIRMED_PROJECT_REF" = "ghohuwwjxgjqnbsauvzq"
+          test "$PRODUCTION_SUPABASE_PROJECT_REF" = "ghohuwwjxgjqnbsauvzq"
+          test "$LOAD_SUPABASE_PROJECT_REF" = "vadyhuipwbtgbzpeisbn"
+          test "$PRODUCTION_SUPABASE_URL" = "https://ghohuwwjxgjqnbsauvzq.supabase.co"
           test "$PRODUCTION_SUPABASE_PROJECT_REF" != "$LOAD_SUPABASE_PROJECT_REF"
-          test "$PRODUCTION_SUPABASE_PROJECT_REF" != "vadyhuipwbtgbzpeisbn"
 
       - name: Check out the approved source
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09

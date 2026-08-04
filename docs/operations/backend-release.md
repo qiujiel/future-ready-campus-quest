@@ -9,11 +9,11 @@ Reading this document or merging its workflow does not authorize a deployment.
 1. Complete the configuration inventory in `github-environments.md`.
 2. Confirm the release commit is on `main`, signed off by the release owner,
    and contains migrations through `20260730021100`.
-3. Establish one approved recovery path: either a current provider-managed
-   backup/PITR recovery point, or the verified Free-plan encrypted logical
-   package in `free-plan-recovery.md` with both custody copies read back and
-   matched to its recorded digest. If neither path is complete, release is
-   blocked.
+3. This project selected Supabase Free plan, so the only accepted recovery path
+   for this workflow is the verified Free-plan encrypted logical package in
+   `free-plan-recovery.md`, with both custody copies read back and matched to its
+   recorded digest. A provider-managed backup or PITR is not an alternative to
+   the four evidence inputs enforced by this workflow.
 4. Complete and independently review a restore rehearsal in a separate hosted
    non-production project. For the Free-plan path, the target must be a
    temporary Singapore recovery project and the database, Auth, RLS, retention,
@@ -21,6 +21,10 @@ Reading this document or merging its workflow does not authorize a deployment.
    production or `vadyhuipwbtgbzpeisbn`.
 5. Confirm joins are closed and quest starts are paused for the release window.
 6. Confirm the previous compatible Edge Function commit and the rollback owner.
+
+Any later plan change requires a separately designed and validated evidence method,
+workflow discriminator, tests, and approval procedure before a
+provider-managed recovery point can be accepted by a release workflow.
 
 ## Protected workflow invocation
 
@@ -31,8 +35,7 @@ branch, and enter:
 - `production_project_ref`: the exact protected production project ref;
 - `backup_evidence_id`: the opaque `frcq-backup-YYYYMMDDTHHMMSSZ-xxxxxxxx`
   identifier;
-- `backup_created_at_utc`: the canonical UTC backup creation/recovery-point
-  time;
+- `backup_created_at_utc`: the canonical UTC archive creation/completion time;
 - `backup_archive_sha256`: the lowercase SHA-256 of the encrypted archive;
 - `restore_rehearsal_evidence_id`: the opaque
   `frcq-restore-YYYYMMDDTHHMMSSZ-xxxxxxxx` identifier.
@@ -45,7 +48,8 @@ the recovery values are malformed or stale. Before approving
 `production-backend`, the production owner compares all four inputs against the
 separately held release record, independently verifies both custody copies and
 the rehearsal result, and attests that no write occurred after the recovery
-point.
+point. The quiesced recovery point is recorded separately in the release
+record; it is never substituted for `backup_created_at_utc`.
 
 ## Authoritative sequence
 
@@ -94,8 +98,9 @@ Record the backend workflow run, approved SHA, production project ref, applied
 migration timestamps, function deploy result, backend-preflight output,
 `backup_evidence_id`, `backup_created_at_utc`, `backup_archive_sha256`,
 `restore_rehearsal_evidence_id`, approver, and completion time. Keep archive
-byte size, custody read-back flags, aggregate validation, temporary target,
-reviewer, teardown, and load-test reactivation results in the release record.
+byte size, the separate quiesced recovery point, custody read-back flags,
+aggregate validation, temporary target, reviewer, teardown, and load-test
+reactivation results in the release record.
 Then run the Pages workflow; do not approve publication until its separate
 production-readiness output passes.
 

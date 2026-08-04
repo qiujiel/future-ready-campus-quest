@@ -40,6 +40,8 @@ fixture credentials after unintended disclosure or a shared rehearsal.
 backend workflow. They are entered for one approved release and compared with
 the separately held recovery record. They are not repository or environment
 variables and are not repository or environment secrets.
+`backup_created_at_utc` is the archive creation/completion time; the quiesced
+recovery point remains a separate release-record field.
 
 GitHub stores no backup archive, database connection string, database password,
 Storage administration key, encryption recipient or private key, plaintext
@@ -62,7 +64,7 @@ Variables:
 
 | Name | Validation |
 | --- | --- |
-| `PRODUCTION_SUPABASE_PROJECT_REF` | exact project ref, different from `LOAD_SUPABASE_PROJECT_REF` and `vadyhuipwbtgbzpeisbn` |
+| `PRODUCTION_SUPABASE_PROJECT_REF` | exactly `ghohuwwjxgjqnbsauvzq` |
 | `PRODUCTION_FRONTEND_ORIGIN` | deployed HTTPS origin, with no path |
 
 Secrets:
@@ -124,7 +126,8 @@ Before release, a repository administrator and a second reviewer verify:
 - all names above exist at the specified scope;
 - no production credential exists as a repository secret when an environment
   secret is specified;
-- the production project URL contains the exact protected project ref;
+- the production project URL equals
+  `https://ghohuwwjxgjqnbsauvzq.supabase.co` exactly;
 - the load URL contains `vadyhuipwbtgbzpeisbn` and the production URL does not;
 - each environment has the required reviewer and branch rule;
 - `github-pages` contains no Supabase credential;

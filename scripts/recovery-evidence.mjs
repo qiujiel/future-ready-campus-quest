@@ -42,7 +42,7 @@ export function validateRecoveryEvidence(input, { now = new Date() } = {}) {
   if (!RESTORE_ID.test(evidence.restoreRehearsalEvidenceId)) fail("restoreRehearsalEvidenceId format");
   const createdAt = canonicalTimestamp(evidence.backupCreatedAtUtc);
   const age = now.valueOf() - createdAt.valueOf();
-  if (age > MAX_AGE_MS) fail("backup must be less than 24 hours old");
+  if (age >= MAX_AGE_MS) fail("backup must be less than 24 hours old");
   if (age < -MAX_FUTURE_SKEW_MS) fail("backup timestamp is in the future");
   return Object.freeze(evidence);
 }

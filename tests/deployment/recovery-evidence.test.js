@@ -13,8 +13,17 @@ const valid = {
 const now = new Date("2026-08-04T04:00:00Z");
 
 describe("Free-plan recovery evidence", () => {
-  it("accepts canonical redaction-safe evidence within 24 hours", () => {
+  it("accepts canonical redaction-safe evidence strictly within 24 hours", () => {
     expect(validateRecoveryEvidence(valid, { now })).toEqual(valid);
+  });
+
+  it("accepts a backup one second younger than 24 hours", () => {
+    expect(validateRecoveryEvidence({
+      ...valid,
+      backupCreatedAtUtc: "2026-08-03T04:00:01Z",
+    }, { now })).toMatchObject({
+      backupCreatedAtUtc: "2026-08-03T04:00:01Z",
+    });
   });
 
   it("maps only the four approved environment values", () => {
@@ -42,6 +51,13 @@ describe("Free-plan recovery evidence", () => {
     expect(() => validateRecoveryEvidence({
       ...valid,
       backupCreatedAtUtc: "2026-08-03T03:59:59Z",
+    }, { now })).toThrow(/less than 24 hours old/i);
+  });
+
+  it("rejects a backup exactly 24 hours old", () => {
+    expect(() => validateRecoveryEvidence({
+      ...valid,
+      backupCreatedAtUtc: "2026-08-03T04:00:00Z",
     }, { now })).toThrow(/less than 24 hours old/i);
   });
 

@@ -7,6 +7,8 @@ describe("recovery artifact repository guard", () => {
     expect(forbiddenRecoveryArtifactPaths([
       "private/frcq-backup.age",
       "roles.sql",
+      "schema.sql",
+      "private/schema.sql",
       "data.sql",
       "history_schema.sql",
       "history_data.sql",
@@ -14,12 +16,13 @@ describe("recovery artifact repository guard", () => {
       "tmp/recovery-package/objects/opaque.webp",
       "archive/project.backup",
       "archive/project.dump",
-    ])).toHaveLength(9);
+    ])).toHaveLength(11);
   });
 
   it("allows migrations, recovery documentation, and public fixtures", () => {
     expect(forbiddenRecoveryArtifactPaths([
       "supabase/migrations/20260730021100_production_readiness.sql",
+      "supabase/migrations/20260730021200_schema.sql",
       "docs/operations/free-plan-recovery.md",
       "tests/fixtures/public-synthetic-bank.json",
     ])).toEqual([]);

@@ -12,6 +12,9 @@ Release record:
 | Independent reviewer | `________________` |
 | Approved main commit (40 characters) | `________________` |
 | Production Supabase project ref | `________________` |
+| Production Supabase URL | `________________` |
+| Dedicated load-test project ref | `________________` |
+| Pinned Supabase CLI version | `________________` |
 | Backend workflow run | `________________` |
 | Pages workflow run | `________________` |
 | Planned window and timezone | `________________` |
@@ -19,10 +22,11 @@ Release record:
 ## 1. Configuration and separation
 
 - [ ] The exact inventory in `github-environments.md` was checked by two people.
-- [ ] The production ref and URL match each other.
-- [ ] The production ref is neither `LOAD_SUPABASE_PROJECT_REF` nor
-  `vadyhuipwbtgbzpeisbn`.
-- [ ] Load fixtures identify only `vadyhuipwbtgbzpeisbn`.
+- [ ] The production ref equals `ghohuwwjxgjqnbsauvzq` exactly.
+- [ ] The production URL equals
+  `https://ghohuwwjxgjqnbsauvzq.supabase.co` exactly.
+- [ ] The dedicated load ref and load fixtures equal only
+  `vadyhuipwbtgbzpeisbn`; neither may be used as production or a restore target.
 - [ ] `production-backend`, `production-readiness`, and `github-pages` have
   distinct required-reviewer gates, self-review prevention, and `main` rules.
 - [ ] `github-pages` contains no Supabase secret.
@@ -36,11 +40,30 @@ Release record:
   are recorded in `private.data_retention_configuration`.
 - [ ] Operational/privacy incident owner: `________________`.
 - [ ] Teacher-private CSV handling matches school policy.
+- [ ] Recovery custodian and key provisioning — Approver: `____________`; UTC: `____________`; Result: `____________`.
+- [ ] Cloud and offline custody locations — Approver: `____________`; UTC: `____________`; Result: `____________`.
+- [ ] Production read/export window — Approver: `____________`; UTC: `____________`; Result: `____________`.
+- [ ] Load-test project pause — Approver: `____________`; UTC: `____________`; Result: `____________`.
+- [ ] Temporary recovery project creation — Approver: `____________`; UTC: `____________`; Result: `____________`.
+- [ ] Restore operation — Approver: `____________`; UTC: `____________`; Result: `____________`.
+- [ ] Optional rehearsal deployment — Approver: `____________`; UTC: `____________`; Result: `approved deployment / reviewer-confirmed not required`.
+- [ ] Temporary recovery project deletion — Approver: `____________`; UTC: `____________`; Result: `____________`.
+- [ ] Load-test project reactivation — Approver: `____________`; UTC: `____________`; Result: `____________`.
+
+The optional rehearsal-deployment result must explicitly say either that the
+deployment was approved and completed or that an independent reviewer confirmed
+it was not required. A blank or assumed `N/A` leaves the item unchecked.
+
 - [ ] Backup evidence ID: `________________`.
-- [ ] Backup creation time/recovery-point time (canonical UTC):
+- [ ] Quiesced recovery point (canonical UTC): `________________`.
+- [ ] `backup_created_at_utc` archive creation/completion time (canonical UTC):
   `________________`.
 - [ ] Encrypted archive SHA-256 and byte size:
   `________________` / `________________`.
+- [ ] Pinned Supabase CLI version `2.110.0` matches the internal manifest and
+  approved release tooling.
+- [ ] Component-completion flags for roles, schema, data, migration-history
+  schema, migration-history data, and Storage export are all complete.
 - [ ] Cloud-copy read-back digest and size verification result/time:
   `________________`.
 - [ ] Offline-copy read-back digest and size verification result/time:
@@ -49,14 +72,22 @@ Release record:
   `________________`.
 - [ ] Restore rehearsal evidence ID: `________________`.
 - [ ] Temporary Singapore recovery project ref: `________________`.
+- [ ] Internal manifest full approved 40-character source SHA (the source commit),
+  exact source project ref, pinned CLI version `2.110.0`, command versions, and
+  component-completion flags match the release record.
+- [ ] The two binding reviews below were completed by two distinct named people;
+  self-review and use of the same person for both reviews are prohibited.
+- [ ] Internal manifest-to-release binding review 1 — Reviewer name: `____________`; UTC: `____________`; Result: `____________`.
+- [ ] Internal manifest-to-release binding review 2 — Reviewer name: `____________`; UTC: `____________`; Result: `____________`.
+- [ ] Encrypted source counts and independently captured target counts exactly equal
+  for Auth users, cohorts, private/public profiles, quest attempts, student
+  responses, concept evidence, and audit events; result/time: `____________`.
 - [ ] Database/Auth/RLS/retention validation result: `________________`.
 - [ ] `group-images` object-count/byte-total/digest validation result:
   `________________`.
 - [ ] Rehearsal reviewer and time: `________________`.
-- [ ] Temporary recovery project deletion approval/result:
-  `________________`.
-- [ ] Load-test project reactivated and identity/health result:
-  `________________`.
+- [ ] Temporary recovery project deletion and load-test reactivation identity/
+  health results match their separately approved records: `________________`.
 - [ ] The data owner accepted the Free-plan pause/availability limitation and
   scheduled an early class health/reactivation check: `________________`.
 - [ ] Previous compatible Edge Function commit: `________________`.
@@ -130,7 +161,9 @@ Release record:
 
 ## Decision
 
-Any unchecked item means **HOLD**. Record one outcome:
+Any unchecked item means **HOLD**. No operator, owner, approver, or reviewer may waive
+an unchecked control, substitute a combined approval, or sign GO while one is
+incomplete. Record one outcome:
 
 - [ ] **GO** — all controls passed; owners accepted the release.
 - [ ] **HOLD** — blocker/owner: `________________________________________`.
