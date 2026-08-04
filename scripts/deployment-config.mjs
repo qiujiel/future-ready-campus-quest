@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 import { load } from "js-yaml";
 
 const PINNED_ACTION = /^[^@\s]+@[0-9a-f]{40}$/;
@@ -17,7 +18,39 @@ const RECOVERY_ENVIRONMENT = {
   RESTORE_REHEARSAL_EVIDENCE_ID: "restore_rehearsal_evidence_id",
 };
 const RECOVERY_VALIDATOR_COMMAND = "node scripts/recovery-evidence.mjs";
+const RECOVERY_VALIDATION_STEPS = [
+  {
+    name: "Check out the approved source",
+    uses: "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+    with: {
+      ref: "${{ github.sha }}",
+      "fetch-depth": 0,
+    },
+  },
+  {
+    name: "Set up Node",
+    uses: "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444",
+    with: { "node-version": 24 },
+  },
+  {
+    name: "Validate redaction-safe recovery evidence",
+    env: Object.fromEntries(
+      Object.entries(RECOVERY_ENVIRONMENT).map(([name, input]) => [
+        name,
+        `\${{ inputs.${input} }}`,
+      ]),
+    ),
+    run: RECOVERY_VALIDATOR_COMMAND,
+  },
+];
 const RELEASE_CONDITION = "github.ref == 'refs/heads/main'";
+const RECOVERY_VALIDATION_JOB = {
+  if: RELEASE_CONDITION,
+  "runs-on": "ubuntu-latest",
+  "timeout-minutes": 5,
+  permissions: { contents: "read" },
+  steps: RECOVERY_VALIDATION_STEPS,
+};
 const PRODUCTION_PROJECT_REF = "ghohuwwjxgjqnbsauvzq";
 const LOAD_PROJECT_REF = "vadyhuipwbtgbzpeisbn";
 const PRODUCTION_URL = `https://${PRODUCTION_PROJECT_REF}.supabase.co`;
@@ -215,6 +248,16 @@ function requireRecoveryEvidenceGate(workflow, validationJob, releaseJob) {
     fail("recovery evidence validation must not use a shell override");
   }
   if (
+    [
+      workflow?.env,
+      workflow?.defaults,
+      validationJob?.env,
+      validationJob?.defaults,
+    ].some((value) => value !== undefined)
+  ) {
+    fail("recovery evidence validation must not inherit execution overrides");
+  }
+  if (
     Object.prototype.hasOwnProperty.call(validatorStep, "continue-on-error")
   ) {
     fail("recovery evidence validation must be fail-closed");
@@ -230,6 +273,12 @@ function requireRecoveryEvidenceGate(workflow, validationJob, releaseJob) {
   }
   if (Object.keys(environment).length !== Object.keys(RECOVERY_ENVIRONMENT).length) {
     fail("recovery evidence validation requires exactly four approved environment mappings");
+  }
+  if (!isDeepStrictEqual(validationJob.steps, RECOVERY_VALIDATION_STEPS)) {
+    fail("recovery evidence validation requires canonical ordered evidence steps");
+  }
+  if (!isDeepStrictEqual(validationJob, RECOVERY_VALIDATION_JOB)) {
+    fail("recovery evidence validation requires the canonical evidence job");
   }
 }
 

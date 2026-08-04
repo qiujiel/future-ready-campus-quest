@@ -99,7 +99,7 @@ in Phase B. The public record contains only the aggregate evidence listed below.
      (
        cd "$approved_checkout" || exit 1
        find "$staging_dir" -type f -exec shred -f {} \; 2>/dev/null || true
-       rm -rf -- "$staging_dir"
+       rm -rf -- "$staging_dir" 2>/dev/null
      )
    }
    cleanup_and_verify() {
@@ -136,6 +136,8 @@ in Phase B. The public record contains only the aggregate evidence listed below.
    the staging directory is mode `0700`. Platform filesystems may not guarantee
    overwrite semantics, so encryption and access restriction remain mandatory;
    the cleanup check must confirm removal rather than assume `shred` succeeded.
+   The removal command suppresses path-bearing diagnostics without discarding its failure status,
+   which the generic finalizer reports without naming the staging directory.
 
 ## Phase B — export roles, schema, data, and migration history
 

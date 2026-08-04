@@ -153,6 +153,8 @@ const assertRunbookPolicy = (runbook) => {
     "trap 'cleanup_and_verify || exit 1; exit 129' HUP",
     "trap 'cleanup_and_verify || exit 1; exit 130' INT",
     "trap 'cleanup_and_verify || exit 1; exit 143' TERM",
+    "rm -rf -- \"$staging_dir\" 2>/dev/null",
+    "suppresses path-bearing diagnostics without discarding its failure status",
   ]);
   assertPhrases(database, [...dumpCommands, ...sourceCountTables]);
   expect(runbook.indexOf("approved_checkout=\"$(git rev-parse --show-toplevel)\"")).toBeLessThan(
@@ -645,6 +647,12 @@ describe("Free-plan recovery operations", () => {
       "trap cleanup EXIT",
     );
     expect(() => assertRunbookPolicy(cleanupOnlyExitTrap)).toThrow();
+
+    const noisyCleanup = documents.runbook.replace(
+      "rm -rf -- \"$staging_dir\" 2>/dev/null",
+      "rm -rf -- \"$staging_dir\"",
+    );
+    expect(() => assertRunbookPolicy(noisyCleanup)).toThrow();
 
     const countMismatchWaiver = `${documents.runbook}\nTarget counts may differ from source counts after a partial restore.`;
     expect(() => assertRunbookPolicy(countMismatchWaiver)).toThrow();

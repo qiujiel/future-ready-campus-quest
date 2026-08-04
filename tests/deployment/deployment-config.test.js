@@ -5,6 +5,8 @@ import {
 
 const pinnedCheckout =
   "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09";
+const pinnedSetupNode =
+  "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444";
 const productionProjectRef = "ghohuwwjxgjqnbsauvzq";
 const loadProjectRef = "vadyhuipwbtgbzpeisbn";
 const productionUrl = `https://${productionProjectRef}.supabase.co`;
@@ -49,10 +51,26 @@ function validConfiguration() {
       },
       jobs: {
         validate_recovery_evidence: {
+          if: "github.ref == 'refs/heads/main'",
+          "runs-on": "ubuntu-latest",
+          "timeout-minutes": 5,
           permissions: { contents: "read" },
           steps: [
-            { uses: pinnedCheckout },
             {
+              name: "Check out the approved source",
+              uses: pinnedCheckout,
+              with: {
+                ref: "${{ github.sha }}",
+                "fetch-depth": 0,
+              },
+            },
+            {
+              name: "Set up Node",
+              uses: pinnedSetupNode,
+              with: { "node-version": 24 },
+            },
+            {
+              name: "Validate redaction-safe recovery evidence",
               env: {
                 BACKUP_EVIDENCE_ID: "${{ inputs.backup_evidence_id }}",
                 BACKUP_CREATED_AT_UTC: "${{ inputs.backup_created_at_utc }}",
@@ -238,7 +256,7 @@ describe("deployment workflow boundaries", () => {
     );
 
     const secretConfiguration = validConfiguration();
-    secretConfiguration.backend.jobs.validate_recovery_evidence.steps[1].env.EXTRA =
+    recoveryValidatorStep(secretConfiguration).env.EXTRA =
       "${{ secrets.PRODUCTION_SUPABASE_DB_PASSWORD }}";
     expect(() => validateDeploymentConfiguration(secretConfiguration)).toThrow(
       /evidence validation.*secret/i,
@@ -294,6 +312,98 @@ describe("deployment workflow boundaries", () => {
       "echo node scripts/recovery-evidence.mjs";
     expect(() => validateDeploymentConfiguration(echoConfiguration)).toThrow(
       /run the repository validator/i,
+    );
+  });
+
+  it("rejects a pre-validator step that can replace the repository validator", () => {
+    const configuration = validConfiguration();
+    configuration.backend.jobs.validate_recovery_evidence.steps.splice(2, 0, {
+      run: "printf 'process.exit(0)\\n' > scripts/recovery-evidence.mjs",
+    });
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /canonical ordered evidence steps/i,
+    );
+  });
+
+  it.each([
+    ["post-validator step", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.steps.push({
+        run: "true",
+      });
+    }],
+    ["checkout ref", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.steps[0].with.ref =
+        "${{ github.ref }}";
+    }],
+    ["checkout depth", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.steps[0].with[
+        "fetch-depth"
+      ] = 1;
+    }],
+    ["Node version", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.steps[1].with[
+        "node-version"
+      ] = 22;
+    }],
+    ["step order", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.steps.reverse();
+    }],
+  ])("rejects a non-canonical recovery evidence %s", (_scope, mutate) => {
+    const configuration = validConfiguration();
+    mutate(configuration);
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /canonical ordered evidence steps/i,
+    );
+  });
+
+  it.each([
+    ["workflow NODE_OPTIONS", (configuration) => {
+      configuration.backend.env = {
+        NODE_OPTIONS: "--require ./bypass.cjs",
+      };
+    }],
+    ["validation-job NODE_OPTIONS", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.env = {
+        NODE_OPTIONS: "--require ./bypass.cjs",
+      };
+    }],
+    ["workflow working directory", (configuration) => {
+      configuration.backend.defaults = {
+        run: { "working-directory": "/tmp/redirected-checkout" },
+      };
+    }],
+    ["validation-job working directory", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.defaults = {
+        run: { "working-directory": "/tmp/redirected-checkout" },
+      };
+    }],
+  ])("rejects a %s inherited by recovery validation", (_scope, mutate) => {
+    const configuration = validConfiguration();
+    mutate(configuration);
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /must not inherit execution overrides/i,
+    );
+  });
+
+  it.each([
+    ["runner", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence["runs-on"] =
+        "self-hosted";
+    }],
+    ["container", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.container = {
+        image: "example.invalid/redirected-node:latest",
+      };
+    }],
+  ])("rejects a non-canonical recovery evidence job %s", (_scope, mutate) => {
+    const configuration = validConfiguration();
+    mutate(configuration);
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /canonical evidence job/i,
     );
   });
 
@@ -372,7 +482,7 @@ describe("deployment workflow boundaries", () => {
 
   it("rejects recovery validation without every dispatch input mapping", () => {
     const configuration = validConfiguration();
-    delete configuration.backend.jobs.validate_recovery_evidence.steps[1].env
+    delete recoveryValidatorStep(configuration).env
       .RESTORE_REHEARSAL_EVIDENCE_ID;
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /restore_rehearsal_evidence_id/i,
