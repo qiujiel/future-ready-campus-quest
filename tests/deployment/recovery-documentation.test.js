@@ -153,7 +153,6 @@ const assertRunbookPolicy = (runbook) => {
     "trap 'cleanup_and_verify || exit 1; exit 129' HUP",
     "trap 'cleanup_and_verify || exit 1; exit 130' INT",
     "trap 'cleanup_and_verify || exit 1; exit 143' TERM",
-    "rm -rf -- \"$staging_dir\" 2>/dev/null",
     "suppresses path-bearing diagnostics without discarding its failure status",
   ]);
   assertPhrases(database, [...dumpCommands, ...sourceCountTables]);
@@ -182,10 +181,16 @@ const assertRunbookPolicy = (runbook) => {
   expect(staging.indexOf("set +x")).toBeLessThan(staging.indexOf(
     "git_status_baseline=\"$(git status --porcelain --untracked-files=all)\"",
   ));
+  const cleanupStart = staging.indexOf("cleanup() {");
   const finalizerStart = staging.indexOf("cleanup_and_verify() {");
   const exitHandlerStart = staging.indexOf("finalize_on_exit() {");
-  expect(finalizerStart).toBeGreaterThanOrEqual(0);
+  expect(cleanupStart).toBeGreaterThanOrEqual(0);
+  expect(finalizerStart).toBeGreaterThan(cleanupStart);
   expect(exitHandlerStart).toBeGreaterThan(finalizerStart);
+  const cleanupBody = staging.slice(cleanupStart, finalizerStart);
+  expect(
+    cleanupBody.match(/rm -rf -- "\$staging_dir"[^\n]*/g),
+  ).toEqual(["rm -rf -- \"$staging_dir\" 2>/dev/null"]);
   const cleanupFinalizer = staging.slice(finalizerStart, exitHandlerStart);
   assertPhrases(cleanupFinalizer, [
     "set +x",
@@ -648,11 +653,16 @@ describe("Free-plan recovery operations", () => {
     );
     expect(() => assertRunbookPolicy(cleanupOnlyExitTrap)).toThrow();
 
-    const noisyCleanup = documents.runbook.replace(
-      "rm -rf -- \"$staging_dir\" 2>/dev/null",
-      "rm -rf -- \"$staging_dir\"",
-    );
-    expect(() => assertRunbookPolicy(noisyCleanup)).toThrow();
+    const noisyCleanupWithDecoy = documents.runbook
+      .replace(
+        "rm -rf -- \"$staging_dir\" 2>/dev/null",
+        "rm -rf -- \"$staging_dir\"",
+      )
+      .replace(
+        "cleanup_and_verify() {",
+        "rm -rf -- \"$staging_dir\" 2>/dev/null\ncleanup_and_verify() {",
+      );
+    expect(() => assertRunbookPolicy(noisyCleanupWithDecoy)).toThrow();
 
     const countMismatchWaiver = `${documents.runbook}\nTarget counts may differ from source counts after a partial restore.`;
     expect(() => assertRunbookPolicy(countMismatchWaiver)).toThrow();

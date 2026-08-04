@@ -42,10 +42,27 @@ function validConfiguration() {
           inputs: {
             expected_sha: { required: true },
             production_project_ref: { required: true },
-            backup_evidence_id: { required: true },
-            backup_created_at_utc: { required: true },
-            backup_archive_sha256: { required: true },
-            restore_rehearsal_evidence_id: { required: true },
+            backup_evidence_id: {
+              description: "Redaction-safe backup evidence identifier",
+              required: true,
+              type: "string",
+            },
+            backup_created_at_utc: {
+              description: "Redaction-safe UTC backup completion timestamp",
+              required: true,
+              type: "string",
+            },
+            backup_archive_sha256: {
+              description: "Redaction-safe SHA-256 for the backup archive",
+              required: true,
+              type: "string",
+            },
+            restore_rehearsal_evidence_id: {
+              description:
+                "Redaction-safe restore rehearsal evidence identifier",
+              required: true,
+              type: "string",
+            },
           },
         },
       },
@@ -62,6 +79,7 @@ function validConfiguration() {
               with: {
                 ref: "${{ github.sha }}",
                 "fetch-depth": 0,
+                "persist-credentials": false,
               },
             },
             {
@@ -229,6 +247,34 @@ describe("deployment workflow boundaries", () => {
     );
   });
 
+  it.each([
+    ["default", (input) => {
+      input.default = "evidence-already-present";
+    }],
+    ["choice options", (input) => {
+      input.type = "choice";
+      input.options = ["evidence-already-present"];
+    }],
+    ["missing type", (input) => {
+      delete input.type;
+    }],
+    ["wrong type", (input) => {
+      input.type = "boolean";
+    }],
+    ["extra field", (input) => {
+      input.unexpected = true;
+    }],
+  ])("rejects a recovery workflow input with %s", (_scope, mutate) => {
+    const configuration = validConfiguration();
+    mutate(
+      configuration.backend.on.workflow_dispatch.inputs.backup_evidence_id,
+    );
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /canonical recovery workflow input backup_evidence_id/i,
+    );
+  });
+
   it("rejects release without the recovery evidence dependency", () => {
     const configuration = validConfiguration();
     delete configuration.backend.jobs.release.needs;
@@ -340,6 +386,36 @@ describe("deployment workflow boundaries", () => {
       configuration.backend.jobs.validate_recovery_evidence.steps[0].with[
         "fetch-depth"
       ] = 1;
+    }],
+    ["checkout credential persistence omission", (configuration) => {
+      delete configuration.backend.jobs.validate_recovery_evidence.steps[0]
+        .with["persist-credentials"];
+    }],
+    ["checkout credential persistence", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.steps[0].with[
+        "persist-credentials"
+      ] = true;
+    }],
+    ["checkout redirected path", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.steps[0].with.path =
+        "/tmp/redirected-checkout";
+    }],
+    ["checkout disabled cleanup", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.steps[0].with.clean =
+        false;
+    }],
+    ["checkout Git LFS", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.steps[0].with.lfs =
+        true;
+    }],
+    ["checkout submodules", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.steps[0].with.submodules =
+        true;
+    }],
+    ["checkout sparse selection", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.steps[0].with[
+        "sparse-checkout"
+      ] = "scripts";
     }],
     ["Node version", (configuration) => {
       configuration.backend.jobs.validate_recovery_evidence.steps[1].with[

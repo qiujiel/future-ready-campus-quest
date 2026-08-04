@@ -5,12 +5,29 @@ import { isDeepStrictEqual } from "node:util";
 import { load } from "js-yaml";
 
 const PINNED_ACTION = /^[^@\s]+@[0-9a-f]{40}$/;
-const RECOVERY_INPUTS = [
-  "backup_evidence_id",
-  "backup_created_at_utc",
-  "backup_archive_sha256",
-  "restore_rehearsal_evidence_id",
-];
+const RECOVERY_INPUT_DEFINITIONS = {
+  backup_evidence_id: {
+    description: "Redaction-safe backup evidence identifier",
+    required: true,
+    type: "string",
+  },
+  backup_created_at_utc: {
+    description: "Redaction-safe UTC backup completion timestamp",
+    required: true,
+    type: "string",
+  },
+  backup_archive_sha256: {
+    description: "Redaction-safe SHA-256 for the backup archive",
+    required: true,
+    type: "string",
+  },
+  restore_rehearsal_evidence_id: {
+    description: "Redaction-safe restore rehearsal evidence identifier",
+    required: true,
+    type: "string",
+  },
+};
+const RECOVERY_INPUTS = Object.keys(RECOVERY_INPUT_DEFINITIONS);
 const RECOVERY_ENVIRONMENT = {
   BACKUP_EVIDENCE_ID: "backup_evidence_id",
   BACKUP_CREATED_AT_UTC: "backup_created_at_utc",
@@ -25,6 +42,7 @@ const RECOVERY_VALIDATION_STEPS = [
     with: {
       ref: "${{ github.sha }}",
       "fetch-depth": 0,
+      "persist-credentials": false,
     },
   },
   {
@@ -156,6 +174,17 @@ function requireInputs(workflow, names) {
   }
 }
 
+function requireCanonicalRecoveryInputs(workflow) {
+  const inputs = workflowDispatchInputs(workflow);
+  for (const [name, definition] of Object.entries(
+    RECOVERY_INPUT_DEFINITIONS,
+  )) {
+    if (!isDeepStrictEqual(inputs[name], definition)) {
+      fail(`canonical recovery workflow input ${name}`);
+    }
+  }
+}
+
 function containsSecretsContext(value) {
   const source = JSON.stringify(value ?? {});
   let expressionStart = source.indexOf("${{");
@@ -200,6 +229,7 @@ function requireDirectRunLine(step, line, message) {
 
 function requireRecoveryEvidenceGate(workflow, validationJob, releaseJob) {
   requireInputs(workflow, RECOVERY_INPUTS);
+  requireCanonicalRecoveryInputs(workflow);
   if (!needsJob(releaseJob, "validate_recovery_evidence")) {
     fail("backend release requires the recovery evidence dependency");
   }
