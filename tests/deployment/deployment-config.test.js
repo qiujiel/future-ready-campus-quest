@@ -37,7 +37,7 @@ const identityStep = (configuration) =>
 function validConfiguration() {
   return {
     ci: {
-      permissions: { contents: "read" },
+      permissions: { contents: "read", "pull-requests": "read" },
       jobs: {
         secrets: {
           steps: [
@@ -260,6 +260,15 @@ describe("deployment workflow boundaries", () => {
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /Gitleaks scan requires only the automatic GitHub token/i,
+    );
+  });
+
+  it("requires read-only pull-request access for secret scans", () => {
+    const configuration = validConfiguration();
+    delete configuration.ci.permissions["pull-requests"];
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /CI workflow requires contents and pull-requests read permission/i,
     );
   });
 

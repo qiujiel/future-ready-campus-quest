@@ -434,9 +434,12 @@ function requireCiSecretScan(ci) {
   const permissions = ci?.permissions ?? {};
   if (
     permissions.contents !== "read" ||
-    Object.keys(permissions).some((name) => name !== "contents")
+    permissions["pull-requests"] !== "read" ||
+    Object.keys(permissions).some(
+      (name) => name !== "contents" && name !== "pull-requests",
+    )
   ) {
-    fail("CI workflow must use only contents: read permission");
+    fail("CI workflow requires contents and pull-requests read permission");
   }
 
   const job = ci?.jobs?.secrets;
