@@ -52,13 +52,32 @@ in Phase B. The public record contains only the aggregate evidence listed below.
    two people. Stop if the local link is absent, differs from
    `ghohuwwjxgjqnbsauvzq`, or equals `vadyhuipwbtgbzpeisbn`.
 
-   Establish the approved checkout before repository-pinned package resolution,
-   then link the pinned CLI by entering the database password only at its
-   interactive hidden prompt:
+   Before linking the CLI, reading production, or creating staging, start a new
+   controlled shell that does not persist history and establish the approved
+   checkout. Run the repository privacy/history check and the recovery-artifact
+   guard from that checkout:
 
    ```bash
    approved_checkout="$(git rev-parse --show-toplevel)"
    cd "$approved_checkout"
+   pnpm check:repo
+   pnpm exec vitest run tests/deployment/recovery-artifact-guard.test.js
+   ```
+
+   Record only aggregate pass/fail results. After an independent reviewer accepts both local guard results,
+   capture the exact Git status baseline without displaying it:
+
+   ```bash
+   set +x
+   git_status_baseline="$(git status --porcelain --untracked-files=all)"
+   ```
+
+   Never echo, log, or otherwise print this value; it may contain protected paths
+   or backup filenames. Keep command tracing disabled, and retain the value in
+   the same controlled shell through the final comparison. Only then link the
+   pinned CLI by entering the database password at its interactive hidden prompt:
+
+   ```bash
    pnpm exec supabase link --project-ref ghohuwwjxgjqnbsauvzq
    ```
 
@@ -69,8 +88,8 @@ in Phase B. The public record contains only the aggregate evidence listed below.
    stop on any mismatch.
 3. Close joining, pause new quest starts, stop importers and all other writers,
    and record the UTC recovery point. No writes are permitted after that point.
-4. Start a new controlled shell that does not persist history. Create private
-   staging and install an always-run cleanup trap before any plaintext export:
+4. In that same controlled shell, create private staging and install an
+   always-run cleanup trap before any plaintext export:
 
    ```bash
    cd "$approved_checkout"
@@ -83,7 +102,33 @@ in Phase B. The public record contains only the aggregate evidence listed below.
        rm -rf -- "$staging_dir"
      )
    }
-   trap cleanup EXIT HUP INT TERM
+   cleanup_and_verify() {
+     set +x
+     trap - EXIT
+     trap '' HUP INT TERM
+     cleanup_result=0
+     cleanup || cleanup_result=1
+     test ! -e "$staging_dir" || cleanup_result=1
+     git_status_after_cleanup="$(git status --porcelain --untracked-files=all)" || cleanup_result=1
+     test "$git_status_after_cleanup" = "$git_status_baseline" || cleanup_result=1
+     unset git_status_after_cleanup git_status_baseline
+     trap - HUP INT TERM
+     if test "$cleanup_result" -ne 0; then
+       echo "Cleanup verification is a cleanup failure and a privacy incident." >&2
+       return 1
+     fi
+   }
+   finalize_on_exit() {
+     exit_status="$?"
+     if ! cleanup_and_verify; then
+       exit_status=1
+     fi
+     exit "$exit_status"
+   }
+   trap finalize_on_exit EXIT
+   trap 'cleanup_and_verify || exit 1; exit 129' HUP
+   trap 'cleanup_and_verify || exit 1; exit 130' INT
+   trap 'cleanup_and_verify || exit 1; exit 143' TERM
    ```
 
    Keep the approved checkout as the working directory so repository-pinned
@@ -209,13 +254,16 @@ protected filename:
 
 ```bash
 cd "$approved_checkout"
-cleanup || exit 1
-trap - EXIT HUP INT TERM
-test ! -e "$staging_dir"
-test -z "$(git status --porcelain --untracked-files=all)"
+cleanup_and_verify || exit 1
 ```
 
-Disarm the trap only after cleanup succeeds. Then verify that no plaintext,
+The same finalizer runs on the explicit success path, ordinary shell exit, and
+HUP, INT, or TERM. It disables tracing, disarms the EXIT handler to avoid
+recursion, and ignores further terminating signals until cleanup and comparison
+finish, then reports only a generic failure. Never print either status
+value. Any incomplete cleanup or added, removed, or changed Git-status entry is
+a cleanup failure and a privacy incident; follow the failure procedure without
+disclosing the affected path or backup filename. Then verify that no plaintext,
 credential, archive, or protected manifest remains in staging, the checkout,
 shell history, Git status, or captured output. A package is valid
 only while it is less than 24 hours old when the backend workflow starts and

@@ -297,21 +297,76 @@ describe("deployment workflow boundaries", () => {
     );
   });
 
-  it("rejects inherited dot- or bracket-form secrets in recovery validation", () => {
-    const workflowConfiguration = validConfiguration();
-    workflowConfiguration.backend.env = {
-      INHERITED_SECRET: "${{ secrets.PRODUCTION_SUPABASE_DB_PASSWORD }}",
-    };
-    expect(() => validateDeploymentConfiguration(workflowConfiguration)).toThrow(
+  it.each([
+    ["workflow env using dot form", (configuration) => {
+      configuration.backend.env = {
+        INHERITED_SECRET:
+          "${{ secrets.PRODUCTION_SUPABASE_DB_PASSWORD }}",
+      };
+    }],
+    ["validation-job env using bracket form", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.env = {
+        INHERITED_SECRET:
+          '${{ secrets["PRODUCTION_SUPABASE_DB_PASSWORD"] }}',
+      };
+    }],
+    ["validation-job defaults using toJSON", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.defaults = {
+        run: { "working-directory": "${{ toJSON(secrets) }}" },
+      };
+    }],
+    ["validation-step env using toJSON", (configuration) => {
+      recoveryValidatorStep(configuration).env.EXTRA =
+        "${{ toJSON(secrets) }}";
+    }],
+    ["validation-step run using toJSON", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.steps.unshift({
+        run: "echo '${{ toJSON(secrets) }}'",
+      });
+    }],
+    ["validation-step run with quoted closing braces before toJSON", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.steps.unshift({
+        run: "echo \"${{ contains('}}', toJSON(secrets)) }}\"",
+      });
+    }],
+    ["validation-step with using toJSON", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.steps[0].with = {
+        token: "${{ toJSON(secrets) }}",
+      };
+    }],
+    ["validation-step shell using toJSON", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.steps.unshift({
+        run: "echo safe",
+        shell: "${{ toJSON(secrets) }}",
+      });
+    }],
+  ])("rejects a secrets context token in recovery %s", (_scope, mutate) => {
+    const configuration = validConfiguration();
+    mutate(configuration);
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /evidence validation.*secret/i,
     );
+  });
 
-    const jobConfiguration = validConfiguration();
-    jobConfiguration.backend.jobs.validate_recovery_evidence.env = {
-      INHERITED_SECRET: '${{ secrets["PRODUCTION_SUPABASE_DB_PASSWORD"] }}',
-    };
-    expect(() => validateDeploymentConfiguration(jobConfiguration)).toThrow(
-      /evidence validation.*secret/i,
+  it.each([
+    ["workflow default", (configuration) => {
+      configuration.backend.defaults = { run: { shell: "bash {0}" } };
+    }],
+    ["validation-job default", (configuration) => {
+      configuration.backend.jobs.validate_recovery_evidence.defaults = {
+        run: { shell: "bash {0}" },
+      };
+    }],
+    ["validator-step", (configuration) => {
+      recoveryValidatorStep(configuration).shell = "bash {0}";
+    }],
+  ])("rejects a %s shell override around recovery evidence validation", (_scope, mutate) => {
+    const configuration = validConfiguration();
+    mutate(configuration);
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /recovery evidence validation.*shell override/i,
     );
   });
 
@@ -396,22 +451,20 @@ describe("deployment workflow boundaries", () => {
   it.each([
     ["workflow", (configuration) => {
       configuration.backend.defaults = { run: { shell: "bash {0}" } };
-    }],
+    }, /recovery evidence validation.*shell override/i],
     ["release job", (configuration) => {
       configuration.backend.jobs.release.defaults = {
         run: { shell: "bash {0}" },
       };
-    }],
+    }, /canonical fail-closed identity execution/i],
     ["identity step", (configuration) => {
       identityStep(configuration).shell = "bash {0}";
-    }],
-  ])("rejects a %s shell override around production identity validation", (_scope, mutate) => {
+    }, /canonical fail-closed identity execution/i],
+  ])("rejects a %s shell override around production identity validation", (_scope, mutate, error) => {
     const configuration = validConfiguration();
     mutate(configuration);
 
-    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
-      /canonical fail-closed identity execution/i,
-    );
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(error);
   });
 
   it("rejects continue-on-error for production identity validation", () => {

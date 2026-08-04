@@ -102,9 +102,13 @@ const assertRunbookPolicy = (runbook) => {
     "interactive hidden prompt",
     "never place it or a connection",
     "approved_checkout=\"$(git rev-parse --show-toplevel)\"",
+    "pnpm check:repo",
+    "pnpm exec vitest run tests/deployment/recovery-artifact-guard.test.js",
+    "set +x",
+    "git_status_baseline=\"$(git status --porcelain --untracked-files=all)\"",
     "umask 077",
     "mktemp -d",
-    "trap cleanup EXIT HUP INT TERM",
+    "trap finalize_on_exit EXIT",
     "age --recipients-file",
     "cloud-copy and offline-copy",
     "less than 24 hours",
@@ -138,10 +142,64 @@ const assertRunbookPolicy = (runbook) => {
   assertPhrases(staging, [
     "approved_checkout=\"$(git rev-parse --show-toplevel)\"",
     "cd \"$approved_checkout\"",
+    "pnpm check:repo",
+    "pnpm exec vitest run tests/deployment/recovery-artifact-guard.test.js",
+    "independent reviewer accepts both local guard results",
+    "set +x",
+    "git_status_baseline=\"$(git status --porcelain --untracked-files=all)\"",
+    "cleanup_and_verify() {",
+    "finalize_on_exit() {",
+    "trap finalize_on_exit EXIT",
+    "trap 'cleanup_and_verify || exit 1; exit 129' HUP",
+    "trap 'cleanup_and_verify || exit 1; exit 130' INT",
+    "trap 'cleanup_and_verify || exit 1; exit 143' TERM",
   ]);
   assertPhrases(database, [...dumpCommands, ...sourceCountTables]);
   expect(runbook.indexOf("approved_checkout=\"$(git rev-parse --show-toplevel)\"")).toBeLessThan(
     runbook.indexOf("pnpm exec supabase link --project-ref ghohuwwjxgjqnbsauvzq"),
+  );
+  for (const prerequisite of [
+    "pnpm check:repo",
+    "pnpm exec vitest run tests/deployment/recovery-artifact-guard.test.js",
+    "independent reviewer accepts both local guard results",
+  ]) {
+    expect(staging.indexOf(prerequisite)).toBeLessThan(
+      staging.indexOf(
+        "git_status_baseline=\"$(git status --porcelain --untracked-files=all)\"",
+      ),
+    );
+  }
+  expect(staging.indexOf(
+    "git_status_baseline=\"$(git status --porcelain --untracked-files=all)\"",
+  )).toBeLessThan(
+    staging.indexOf("pnpm exec supabase link --project-ref ghohuwwjxgjqnbsauvzq"),
+  );
+  expect(staging.indexOf(
+    "git_status_baseline=\"$(git status --porcelain --untracked-files=all)\"",
+  )).toBeLessThan(staging.indexOf("staging_dir=\"$(mktemp -d)\""));
+  expect(staging.indexOf("set +x")).toBeLessThan(staging.indexOf(
+    "git_status_baseline=\"$(git status --porcelain --untracked-files=all)\"",
+  ));
+  const finalizerStart = staging.indexOf("cleanup_and_verify() {");
+  const exitHandlerStart = staging.indexOf("finalize_on_exit() {");
+  expect(finalizerStart).toBeGreaterThanOrEqual(0);
+  expect(exitHandlerStart).toBeGreaterThan(finalizerStart);
+  const cleanupFinalizer = staging.slice(finalizerStart, exitHandlerStart);
+  assertPhrases(cleanupFinalizer, [
+    "set +x",
+    "trap - EXIT",
+    "trap '' HUP INT TERM",
+    "cleanup",
+    "test ! -e \"$staging_dir\"",
+    "git_status_after_cleanup=\"$(git status --porcelain --untracked-files=all)\"",
+    "test \"$git_status_after_cleanup\" = \"$git_status_baseline\"",
+    "cleanup failure and a privacy incident",
+    "trap - HUP INT TERM",
+  ]);
+  expect(cleanupFinalizer.indexOf("set +x")).toBeLessThan(
+    cleanupFinalizer.indexOf(
+      "git_status_after_cleanup=\"$(git status --porcelain --untracked-files=all)\"",
+    ),
   );
   expect(database.indexOf("capture one quiesced source-count baseline")).toBeLessThan(
     database.indexOf(dumpCommands[0]),
@@ -161,6 +219,7 @@ const assertRunbookPolicy = (runbook) => {
     /shasum -a 256 < "\$CLOUD_ARCHIVE"/,
     /shasum -a 256 < "\$OFFLINE_ARCHIVE"/,
   ]);
+  assertPhrases(packagePhase, ["cleanup_and_verify || exit 1"]);
   expect(rehearsalProject).toContain("disable automatic exposure of new tables");
   assertPatterns(validation, [
     /target counts[\s\S]*exactly equal[\s\S]*source counts/is,
@@ -178,6 +237,7 @@ const assertRunbookPolicy = (runbook) => {
     /component completion flags,\s+byte sizes,\s+and digests outside/is,
     /target counts? may differ/i,
     /sampled target counts?/i,
+    /test -z "\$\(git status --porcelain --untracked-files=all\)"/,
   ]);
 };
 
@@ -573,6 +633,18 @@ describe("Free-plan recovery operations", () => {
       "shasum -a 256 \"$ENCRYPTED_ARCHIVE\"",
     );
     expect(() => assertRunbookPolicy(unsafeHash)).toThrow();
+
+    const emptyCleanupStatus = documents.runbook.replace(
+      "test \"$git_status_after_cleanup\" = \"$git_status_baseline\"",
+      "test -z \"$git_status_after_cleanup\"",
+    );
+    expect(() => assertRunbookPolicy(emptyCleanupStatus)).toThrow();
+
+    const cleanupOnlyExitTrap = documents.runbook.replace(
+      "trap finalize_on_exit EXIT",
+      "trap cleanup EXIT",
+    );
+    expect(() => assertRunbookPolicy(cleanupOnlyExitTrap)).toThrow();
 
     const countMismatchWaiver = `${documents.runbook}\nTarget counts may differ from source counts after a partial restore.`;
     expect(() => assertRunbookPolicy(countMismatchWaiver)).toThrow();

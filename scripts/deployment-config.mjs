@@ -124,7 +124,34 @@ function requireInputs(workflow, names) {
 }
 
 function containsSecretsContext(value) {
-  return /\$\{\{\s*secrets\s*(?:\.|\[)/i.test(JSON.stringify(value ?? {}));
+  const source = JSON.stringify(value ?? {});
+  let expressionStart = source.indexOf("${{");
+  while (expressionStart >= 0) {
+    let cursor = expressionStart + 3;
+    let inString = false;
+    let unquotedExpression = "";
+    while (cursor < source.length - 1) {
+      if (source[cursor] === "'") {
+        if (inString && source[cursor + 1] === "'") {
+          cursor += 2;
+          continue;
+        }
+        inString = !inString;
+        unquotedExpression += " ";
+        cursor += 1;
+        continue;
+      }
+      if (!inString && source.slice(cursor, cursor + 2) === "}}") {
+        if (/\bsecrets\b/i.test(unquotedExpression)) return true;
+        expressionStart = source.indexOf("${{", cursor + 2);
+        break;
+      }
+      if (!inString) unquotedExpression += source[cursor];
+      cursor += 1;
+    }
+    if (cursor >= source.length - 1) return false;
+  }
+  return false;
 }
 
 function directRunLines(step) {
@@ -158,10 +185,18 @@ function requireRecoveryEvidenceGate(workflow, validationJob, releaseJob) {
     fail("recovery evidence validation must be fail-closed");
   }
   requireContentsReadOnly(validationJob, "recovery evidence validation");
-  if (
-    containsSecretsContext(workflow?.env) ||
-    containsSecretsContext(validationJob)
-  ) {
+  const secretEligibleMaterial = [
+    workflow?.env,
+    validationJob?.env,
+    validationJob?.defaults,
+    ...(validationJob?.steps ?? []).map((step) => ({
+      env: step?.env,
+      run: step?.run,
+      with: step?.with,
+      shell: step?.shell,
+    })),
+  ];
+  if (secretEligibleMaterial.some(containsSecretsContext)) {
     fail("recovery evidence validation must not receive a secret");
   }
   const validatorSteps = (validationJob.steps ?? []).filter((step) =>
@@ -171,6 +206,14 @@ function requireRecoveryEvidenceGate(workflow, validationJob, releaseJob) {
     fail("recovery evidence validation must run the repository validator");
   }
   const validatorStep = validatorSteps[0];
+  const hasShellOverride = [
+    workflow?.defaults?.run,
+    validationJob?.defaults?.run,
+    validatorStep,
+  ].some((scope) => Object.prototype.hasOwnProperty.call(scope ?? {}, "shell"));
+  if (hasShellOverride) {
+    fail("recovery evidence validation must not use a shell override");
+  }
   if (
     Object.prototype.hasOwnProperty.call(validatorStep, "continue-on-error")
   ) {
