@@ -62,6 +62,18 @@ test("completes the synthetic student review journey", async ({
   await activate(page.getByRole("button", { name: "Continue to campus map" }));
 
   await expect(
+    page.getByRole("heading", { name: "Briefing Plaza" }),
+  ).toBeVisible();
+  await activate(page.getByRole("button", { name: "Enter Diagnostic Gate" }));
+
+  await expect(
+    page.getByRole("heading", { name: "Diagnostic Gate" }),
+  ).toBeVisible();
+  await activate(
+    page.getByRole("button", { name: "Continue to Learning Labs" }),
+  );
+
+  await expect(
     page.getByRole("heading", { name: "Adaptive Learning Labs" }),
   ).toBeVisible();
   await activate(page.getByRole("button", { name: "Reduce animation" }));
