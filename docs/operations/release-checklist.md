@@ -152,6 +152,10 @@ it was not required. A blank or assumed `N/A` leaves the item unchecked.
 ## 6. Publication approval and observation
 
 - [ ] Intended Pages URL/base path: `________________`.
+- [ ] `ALLOWED_FRONTEND_ORIGINS` exactly matches the intended HTTPS origin and
+  contains no Pages path.
+- [ ] `FRONTEND_APP_URL` equals the intended HTTPS origin plus
+  `VITE_BASE_PATH`, so generated join and recovery links retain the Pages path.
 - [ ] Final deploy job depends on the successful readiness job and does not
   rebuild or receive a Supabase credential.
 - [ ] `github-pages` approval was granted by `________________` at

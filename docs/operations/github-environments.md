@@ -74,13 +74,27 @@ Secrets:
 | `SUPABASE_ACCESS_TOKEN` | CLI authorization for the production organization |
 | `PRODUCTION_SUPABASE_DB_PASSWORD` | linked migration access |
 | `PRODUCTION_READINESS_SECRET` | custom authorization for the least-privilege readiness endpoint |
-| `ALLOWED_FRONTEND_ORIGINS` | Edge Function CORS allow-list |
-| `FRONTEND_APP_URL` | recovery-link frontend origin |
+| `ALLOWED_FRONTEND_ORIGINS` | exact browser origin only; no path or trailing slash |
+| `FRONTEND_APP_URL` | full hosted application base URL, including the Pages base path |
 | `JOIN_TOKEN_SIGNING_SECRET` | join-token signing secret |
 | `RECOVERY_TOKEN_SIGNING_SECRET` | recovery-token signing secret |
 
-`ALLOWED_FRONTEND_ORIGINS` and `FRONTEND_APP_URL` must agree with
-`PRODUCTION_FRONTEND_ORIGIN`. Signing and readiness secrets must be
+`ALLOWED_FRONTEND_ORIGINS` must exactly equal `PRODUCTION_FRONTEND_ORIGIN`.
+`FRONTEND_APP_URL` must combine that origin with `VITE_BASE_PATH`, without a
+hash route; one trailing slash is accepted and normalized. For the intended
+GitHub Pages site, configure the public values as follows:
+
+```text
+PRODUCTION_FRONTEND_ORIGIN=https://qiujiel.github.io
+VITE_BASE_PATH=/future-ready-campus-quest/
+ALLOWED_FRONTEND_ORIGINS=https://qiujiel.github.io
+FRONTEND_APP_URL=https://qiujiel.github.io/future-ready-campus-quest
+```
+
+This distinction is required because browser CORS sends only an origin, while
+join and recovery links must retain the repository Pages path. The backend
+workflow validates the relationship before writing any Function secret.
+Signing and readiness secrets must be
 independently generated, at least 32 bytes, and never reused from local, CI, or
 the load project. The backend workflow also installs
 `PRODUCTION_READINESS_SECRET` as an Edge Function secret.

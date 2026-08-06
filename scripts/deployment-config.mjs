@@ -119,6 +119,22 @@ function requireRun(job, pattern, message) {
   if (!pattern.test(combinedRuns(job))) fail(message);
 }
 
+function requireProductionFunctionConfigurationValidation(job) {
+  const secretStep = (job?.steps ?? []).find((step) =>
+    String(step?.run ?? "").includes("supabase secrets set"),
+  );
+  const run = String(secretStep?.run ?? "");
+  const validationIndex = run.indexOf(
+    "node scripts/production-function-config.mjs",
+  );
+  const secretMutationIndex = run.indexOf("supabase secrets set");
+  if (validationIndex < 0 || validationIndex > secretMutationIndex) {
+    fail(
+      "production Function configuration validation must precede Function secrets",
+    );
+  }
+}
+
 function requireEdgeReadyWait(job, label) {
   const runs = combinedRuns(job);
   if (
@@ -484,6 +500,7 @@ export function validateDeploymentConfiguration({ ci, backend, pages, rollback }
     /db push[^\n]*--dry-run/,
     "backend migration dry-run is missing",
   );
+  requireProductionFunctionConfigurationValidation(backendJob);
   requireRun(backendJob, /secrets set/, "Edge Function secret deployment is missing");
   requireRun(backendJob, /functions deploy/, "Edge Function deployment is missing");
   requireEdgeReadyWait(backendJob, "backend release");

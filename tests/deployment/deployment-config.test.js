@@ -141,7 +141,12 @@ function validConfiguration() {
             { run: "supabase migration list --linked" },
             { run: "supabase db push --dry-run --linked" },
             { run: "supabase db push --linked" },
-            { run: "supabase secrets set --env-file /tmp/functions.env" },
+            {
+              run: [
+                "node scripts/production-function-config.mjs",
+                "supabase secrets set --env-file /tmp/functions.env",
+              ].join("\n"),
+            },
             { run: "supabase functions deploy --project-ref \"$PRODUCTION_SUPABASE_PROJECT_REF\"" },
             {
               run: "for readiness_function in join-cohort recover-student; do response_code=$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Origin: http://127.0.0.1:4173' http://127.0.0.1/functions/v1/$readiness_function); if [ \"$response_code\" = \"405\" ]; then break; fi; done",
@@ -737,6 +742,21 @@ describe("deployment workflow boundaries", () => {
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /load project separation/i,
+    );
+  });
+
+  it("rejects production Function secrets that bypass hosted URL validation", () => {
+    const configuration = validConfiguration();
+    const secretStep = configuration.backend.jobs.release.steps.find((step) =>
+      step.run?.includes("supabase secrets set")
+    );
+    secretStep.run = secretStep.run.replace(
+      "node scripts/production-function-config.mjs",
+      "true",
+    );
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /Function configuration validation.*secrets/i,
     );
   });
 
