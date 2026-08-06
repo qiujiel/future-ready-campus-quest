@@ -26,11 +26,13 @@ export class TeacherGatewayError extends Error {
 async function throwTeacherGatewayError(
   context: unknown,
 ): Promise<never> {
-  const response = (
-    context as {
-      response?: Response;
-    } | null
-  )?.response;
+  const response = context instanceof Response
+    ? context
+    : (
+      context as {
+        response?: Response;
+      } | null
+    )?.response;
   if (response) {
     try {
       const body = (await response.clone().json()) as { error?: unknown };

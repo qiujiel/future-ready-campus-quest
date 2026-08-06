@@ -116,7 +116,7 @@ it was not required. A blank or assumed `N/A` leaves the item unchecked.
   evidence.
 - [ ] `supabase migration list` is captured before mutation.
 - [ ] Migration dry-run contains only reviewed forward migrations, in timestamp
-  order, through `20260730021100`.
+  order, through `20260806000700`.
 - [ ] `production-backend` approval was granted by `________________` at
   `________________`.
 - [ ] Migration push, five custom secret updates, and all eleven function deploys
@@ -131,6 +131,9 @@ it was not required. A blank or assumed `N/A` leaves the item unchecked.
 - [ ] Protected content was imported only by an authorized owner using exact
   non-local project confirmation.
 - [ ] Approved version key: `________________`; item/concept counts: `24 / 8`.
+- [ ] Teacher-private question-bank review returns the approved 24 items with
+  accepted responses, rationales, sources, and C1–C8 coverage; a student token
+  is denied.
 - [ ] Smoke teacher and unarchived owned cohort exist as opaque fixtures.
 - [ ] No live join window or recovery token remains from testing.
 - [ ] Daily cleanup job `campus-quest-expired-artifact-cleanup` has exactly one
@@ -156,6 +159,10 @@ it was not required. A blank or assumed `N/A` leaves the item unchecked.
 - [ ] Served release metadata matches the approved commit and the release record.
 - [ ] Teacher sign-in/dashboard/export and student join/quest/completion smoke
   checks pass without recording names, answers, or tokens.
+- [ ] One shared student URL accepts display name plus short group code, and no
+  student can start until the teacher launches the cohort quest.
+- [ ] Teacher roster move, remove, reset, and recovery controls pass with
+  confirmation, ownership enforcement, session revocation, and audit evidence.
 - [ ] Joining remains closed until the teacher intentionally opens the class.
 - [ ] Observation owner and end time: `________________` / `________________`.
 

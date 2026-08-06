@@ -11,8 +11,8 @@ select is(
     '00000000-0000-0000-0000-000000000001'::uuid,
     '00000000-0000-0000-0000-000000000002'::uuid
   )->>'latestGateDMigration',
-  '20260730021100',
-  'readiness records the complete deployment-readiness migration set'
+  '20260806000700',
+  'readiness records the complete student-ready deployment migration set'
 );
 
 select is(

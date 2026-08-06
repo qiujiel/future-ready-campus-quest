@@ -61,8 +61,12 @@ values into evidence.
 
 ## Supabase migration and function sequence
 
-The repository contains ordered migrations through `20260730021100`, including
-retention cleanup scheduling and schedule uniqueness/readiness controls.
+The original reviewed baseline contains the retention cleanup scheduling and
+schedule uniqueness/readiness controls through `20260730021100`. The current
+student-ready extension adds ordered, forward-only classroom migrations through
+`20260806000700` for group codes, classroom readiness, roster controls, atomic
+launch, adaptive completion, teacher question-bank review, and release-preflight
+coverage.
 `supabase/config.toml` declares the eleven expected Edge Functions, including
 `production-readiness`. The protected backend procedure records the remote
 migration list, performs a dry-run before one forward migration push, deploys

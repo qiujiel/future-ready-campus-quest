@@ -9,7 +9,11 @@ function required(name: string): string {
 const apiUrl = required("TEST_SUPABASE_URL");
 const anonKey = required("TEST_SUPABASE_ANON_KEY");
 const serviceRoleKey = required("TEST_SUPABASE_SERVICE_ROLE_KEY");
-const allowedOrigin = "http://127.0.0.1:4173";
+const allowedOrigin = process.env.TEST_FRONTEND_ORIGIN ??
+  "http://127.0.0.1:4173";
+const frontendAppUrl = (
+  process.env.TEST_FRONTEND_APP_URL ?? allowedOrigin
+).replace(/\/$/, "");
 
 function syntheticContentBank() {
   return {
@@ -154,7 +158,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
     });
     if (opened.error) throw opened.error;
     expect(opened.data).toMatchObject({
-      studentUrl: "http://127.0.0.1:4173/#/join",
+      studentUrl: `${frontendAppUrl}/#/join`,
       groups: [
         {
           groupNumber: 1,
@@ -203,7 +207,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
       joined: 1,
       joining: {
         open: true,
-        studentUrl: "http://127.0.0.1:4173/#/join",
+        studentUrl: `${frontendAppUrl}/#/join`,
       },
     });
     expect(
@@ -417,7 +421,10 @@ it("completes a valid join against real Auth and database boundaries", async () 
     });
     if (recovery.error) throw recovery.error;
     expect(recovery.data.recoveryUrl).toMatch(
-      /^http:\/\/127\.0\.0\.1:4173\/#\/recover\/[A-Za-z0-9_-]+$/,
+      new RegExp(
+        `^${frontendAppUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}` +
+          "/#/recover/[A-Za-z0-9_-]+$",
+      ),
     );
 
     const removed = await teacherClient.functions.invoke("teacher-controls", {

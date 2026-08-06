@@ -311,7 +311,7 @@ project, uses rehearsal-only secrets, and requires its own approval.
 
 The rehearsal passes only if an independent reviewer confirms:
 
-- migrations through `20260730021100`, required database objects, RPCs,
+- migrations through `20260806000700`, required database objects, RPCs,
   triggers, cron configuration, constraints, indexes, and RLS policies;
 - aggregate database and Auth counts, teacher ownership, isolation, and
   anonymous/student/teacher/unauthorized method boundaries;

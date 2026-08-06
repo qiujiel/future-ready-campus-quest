@@ -319,7 +319,7 @@ begin
       and identity_editor_id = p_student_id;
     update public.groups
     set identity_editor_id = coalesce(identity_editor_id, p_student_id)
-    where id = p_target_group_id;
+    where id = v_target.id;
     v_affected := 1;
   elsif p_action = 'remove-student' then
     update public.student_private_profiles

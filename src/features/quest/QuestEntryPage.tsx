@@ -142,12 +142,12 @@ export function QuestEntryPage({
   }, [gateway, loadAttempt]);
 
   useEffect(() => {
-    if (!pollIntervalMs || attempt?.status === "completed") return;
+    if (!pollIntervalMs || attempt) return;
     const timer = window.setInterval(() => {
       void loadAttempt().catch(() => undefined);
     }, pollIntervalMs);
     return () => window.clearInterval(timer);
-  }, [attempt?.status, loadAttempt, pollIntervalMs]);
+  }, [attempt, loadAttempt, pollIntervalMs]);
 
   useEffect(() => {
     if (!attemptId || !queue) return;

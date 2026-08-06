@@ -26,7 +26,7 @@ test("completes the synthetic student review journey", async ({
 
   await page.goto("/#/preview/student");
   await expect(
-    page.getByRole("heading", { name: "Join your campus quest" }),
+    page.getByRole("heading", { name: "Join your group" }),
   ).toBeVisible();
   await screenshot(`join-${testInfo.project.name}.png`, {
     fullPage: true,
@@ -39,16 +39,9 @@ test("completes the synthetic student review journey", async ({
     ).toBe(true);
   }
 
-  await page.getByLabel(/assigned group number/i).fill("2");
-  await page.getByLabel(/^real name/i).fill("Synthetic Learner");
-  await page.getByLabel(/^nickname/i).fill("Bright Comet");
-  if (keyboardOnly) {
-    await page.getByLabel(/class privacy notice/i).focus();
-    await page.keyboard.press("Space");
-  } else {
-    await page.getByLabel(/class privacy notice/i).tap();
-  }
-  await activate(page.getByRole("button", { name: "Join the campus" }), true);
+  await page.getByLabel(/^your name/i).fill("Bright Comet");
+  await page.getByLabel(/^group code/i).fill("PREVIEW2");
+  await activate(page.getByRole("button", { name: "Join Group" }), true);
 
   await expect(
     page.getByRole("heading", { name: "Future Makers" }),

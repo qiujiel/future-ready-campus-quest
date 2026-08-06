@@ -16,11 +16,13 @@ export function SessionControls({
   cohortTitle,
   activeStudents,
   gateway = supabaseTeacherControlGateway,
+  onChanged,
 }: {
   cohortId: string;
   cohortTitle: string;
   activeStudents: number;
   gateway?: TeacherControlGateway;
+  onChanged?: () => void | Promise<void>;
 }) {
   const [pending, setPending] = useState<TeacherControlCommand | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,6 +53,7 @@ export function SessionControls({
         ? `Control confirmed. Access expires at ${receipt.expiresAt}.`
         : `Control confirmed. ${receipt.affected} active students affected.`);
       setPending(null);
+      await onChanged?.();
     } catch {
       setStatus("The control was not applied.");
     } finally {

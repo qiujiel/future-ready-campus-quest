@@ -8,7 +8,7 @@ Reading this document or merging its workflow does not authorize a deployment.
 
 1. Complete the configuration inventory in `github-environments.md`.
 2. Confirm the release commit is on `main`, signed off by the release owner,
-   and contains migrations through `20260730021100`.
+   and contains migrations through `20260806000700`.
 3. This project selected Supabase Free plan, so the only accepted recovery path
    for this workflow is the verified Free-plan encrypted logical package in
    `free-plan-recovery.md`, with both custody copies read back and matched to its
@@ -66,7 +66,7 @@ The workflow performs one ordered sequence from the approved commit:
 7. deploy all eleven functions together from `supabase/config.toml`, including
    the custom-secret-protected `production-readiness` endpoint;
 8. run `production-preflight.mjs --backend-only` to verify exact project
-   identity, migrations through `20260730021100`, required RPCs, the exact
+   identity, migrations through `20260806000700`, required RPCs, the exact
    unique active cleanup schedule, Auth health, and all application-function
    method boundaries probed server-side with provider-managed credentials;
 9. delete temporary secret material in an always-run step.

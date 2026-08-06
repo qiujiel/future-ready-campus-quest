@@ -104,3 +104,28 @@ it("requires named confirmation before launching real student attempts", async (
     /confirmed.*6 active students affected/i,
   );
 });
+
+it("refreshes classroom readiness after a confirmed control", async () => {
+  const onChanged = vi.fn(async () => undefined);
+  render(
+    <SessionControls
+      cohortId="d3000000-0000-4000-8000-000000000001"
+      cohortTitle="ICT 2A"
+      activeStudents={0}
+      gateway={{
+        execute: vi.fn(async () => ({
+          affected: 0,
+          expiresAt: "2030-01-01T09:15:00.000Z",
+        })),
+      }}
+      onChanged={onChanged}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: /^open joining$/i }));
+  fireEvent.click(
+    screen.getByRole("button", { name: /confirm open class joining for ICT 2A/i }),
+  );
+
+  await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
+});

@@ -28,7 +28,7 @@ function environment(overrides = {}) {
 function readinessReport(overrides = {}) {
   return {
     requiredMigrationsPresent: true,
-    latestGateDMigration: "20260730021100",
+    latestGateDMigration: "20260806000700",
     requiredFunctionsPresent: true,
     cleanupScheduleReady: true,
     edgeFunctionsReady: 10,
@@ -98,7 +98,7 @@ describe("production readiness report", () => {
     const configuration = readPreflightConfiguration(environment());
 
     expect(evaluateReadinessReport(readinessReport(), configuration)).toEqual({
-      latestGateDMigration: "20260730021100",
+      latestGateDMigration: "20260806000700",
       cleanupScheduleReady: true,
       edgeFunctionsReady: 10,
       contentVersion: {
@@ -134,7 +134,7 @@ describe("production readiness report", () => {
     });
 
     expect(evaluateReadinessReport(readinessReport(), configuration)).toEqual({
-      latestGateDMigration: "20260730021100",
+      latestGateDMigration: "20260806000700",
       cleanupScheduleReady: true,
       edgeFunctionsReady: 10,
       basePath: "/campus-quest/",

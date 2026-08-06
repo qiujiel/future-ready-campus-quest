@@ -105,6 +105,11 @@ export function TeacherShell({
     setSelectedConcept(conceptId);
   }
 
+  async function refreshReadiness() {
+    if (!gateway.getReadiness) return;
+    setReadiness(await gateway.getReadiness(cohortId));
+  }
+
   if (error) {
     return (
       <main className="teacher-shell">
@@ -162,10 +167,7 @@ export function TeacherShell({
       {readiness ? (
         <ClassroomReadiness
           report={readiness}
-          onChanged={async () => {
-            if (!gateway.getReadiness) return;
-            setReadiness(await gateway.getReadiness(cohortId));
-          }}
+          onChanged={refreshReadiness}
         />
       ) : null}
       <div className="teacher-dashboard-grid">
@@ -184,6 +186,7 @@ export function TeacherShell({
         cohortId={summary.cohortId}
         cohortTitle="Current cohort"
         activeStudents={summary.active}
+        onChanged={refreshReadiness}
       />
       <QuestionBank cohortId={summary.cohortId} gateway={gateway} />
       <ExportPanel cohortId={summary.cohortId} />
