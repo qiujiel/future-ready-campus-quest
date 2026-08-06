@@ -95,7 +95,20 @@ it("signs a teacher in and continues to cohort setup", async () => {
 
 it("creates a teacher-owned cohort with five groups of six by default", async () => {
   const gateway = createGateway();
-  render(<TeacherSetupPage gateway={gateway} />);
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/teacher/setup",
+        element: <TeacherSetupPage gateway={gateway} />,
+      },
+      {
+        path: "/teacher/cohorts/:cohortId",
+        element: <CurrentPath />,
+      },
+    ],
+    { initialEntries: ["/teacher/setup"] },
+  );
+  render(<RouterProvider router={router} />);
 
   fireEvent.change(screen.getByLabelText(/cohort title/i), {
     target: { value: "Thursday seminar" },

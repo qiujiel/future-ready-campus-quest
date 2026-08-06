@@ -9,6 +9,7 @@ import {
   type TeacherGateway,
 } from "../../teacher/api/teacherClient";
 import { CohortOverview } from "./CohortOverview";
+import { ClassroomReadiness } from "./ClassroomReadiness";
 import { ConceptHeatmap } from "./ConceptHeatmap";
 import { GroupDrilldown } from "./GroupDrilldown";
 import { MostMissedItems } from "./MostMissedItems";
@@ -60,6 +61,9 @@ export function TeacherShell({
   const params = useParams();
   const cohortId = providedCohortId ?? params.cohortId ?? "";
   const [summary, setSummary] = useState<TeacherDashboardSummary | null>(null);
+  const [readiness, setReadiness] = useState<
+    Awaited<ReturnType<NonNullable<TeacherGateway["getReadiness"]>>> | null
+  >(null);
   const [error, setError] = useState(false);
   const [selectedConcept, setSelectedConcept] = useState<ConceptId | null>(
     (params.conceptId as ConceptId | undefined) ?? null,
@@ -70,6 +74,22 @@ export function TeacherShell({
     void gateway.getSummary(cohortId).then(
       (value) => {
         if (active) setSummary(value);
+      },
+      () => {
+        if (active) setError(true);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [cohortId, gateway]);
+
+  useEffect(() => {
+    let active = true;
+    if (!gateway.getReadiness) return;
+    void gateway.getReadiness(cohortId).then(
+      (value) => {
+        if (active) setReadiness(value);
       },
       () => {
         if (active) setError(true);
@@ -138,6 +158,7 @@ export function TeacherShell({
         active={summary.active}
         completed={summary.completed}
       />
+      {readiness ? <ClassroomReadiness report={readiness} /> : null}
       <div className="teacher-dashboard-grid">
         <ConceptHeatmap
           concepts={summary.conceptAggregates}

@@ -1,21 +1,43 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   type AuthGateway,
   supabaseAuthGateway,
 } from "../../shared/api/authGateway";
+import type {
+  JoinWindowReceipt,
+  TeacherCohortListItem,
+} from "../../shared/api/contracts";
 
 export function TeacherSetupPage({
   gateway = supabaseAuthGateway,
+  stayAfterCreate = false,
 }: {
   gateway?: AuthGateway;
+  stayAfterCreate?: boolean;
 }) {
+  const navigate = useNavigate();
   const [cohortId, setCohortId] = useState("");
-  const [joinWindow, setJoinWindow] = useState<{
-    joinUrl: string;
-    expiresAt: string;
-  } | null>(null);
+  const [cohorts, setCohorts] = useState<TeacherCohortListItem[]>([]);
+  const [joinWindow, setJoinWindow] = useState<JoinWindowReceipt | null>(null);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!gateway.listCohorts) return;
+    void gateway.listCohorts().then(
+      (result) => {
+        if (active) setCohorts(result);
+      },
+      () => {
+        if (active) setStatus("Existing cohorts could not be loaded.");
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [gateway]);
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,7 +52,11 @@ export function TeacherSetupPage({
         requestKey: crypto.randomUUID(),
       });
       setCohortId(result.cohortId);
-      setStatus("Cohort created. Joining remains closed.");
+      if (stayAfterCreate) {
+        setStatus("Cohort created. Joining remains closed.");
+      } else {
+        navigate(`/teacher/cohorts/${result.cohortId}`, { replace: true });
+      }
     } catch {
       setStatus("The cohort could not be created. Try again.");
     } finally {
@@ -42,10 +68,7 @@ export function TeacherSetupPage({
     if (!cohortId || !gateway.openJoinWindow) return;
     setBusy(true);
     try {
-      const window = await gateway.openJoinWindow(
-        cohortId,
-        crypto.randomUUID(),
-      );
+      const window = await gateway.openJoinWindow(cohortId, crypto.randomUUID());
       setJoinWindow(window);
       setStatus("The 15-minute join window is open.");
     } catch {
@@ -73,6 +96,27 @@ export function TeacherSetupPage({
     <main className="route-shell route-shell--wide">
       <p className="eyebrow">Cohort setup</p>
       <h1>Prepare the class quest</h1>
+      {cohorts.length ? (
+        <section className="control-panel" aria-labelledby="existing-cohorts">
+          <h2 id="existing-cohorts">Open an existing cohort</h2>
+          <ul>
+            {cohorts.map((cohort) => (
+              <li key={cohort.cohortId}>
+                <strong>{cohort.title}</strong>{" "}
+                <span>
+                  {cohort.groupCount} groups · {cohort.groupCapacity} students each
+                </span>{" "}
+                <a
+                  href={`#/teacher/cohorts/${cohort.cohortId}`}
+                  aria-label={`Open ${cohort.title} dashboard`}
+                >
+                  Open dashboard
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <form className="stacked-form" onSubmit={create}>
         <label>
           Cohort title
@@ -81,25 +125,11 @@ export function TeacherSetupPage({
         <div className="field-grid">
           <label>
             Number of groups
-            <input
-              name="groupCount"
-              type="number"
-              min={1}
-              max={20}
-              defaultValue={5}
-              required
-            />
+            <input name="groupCount" type="number" min={1} max={20} defaultValue={5} required />
           </label>
           <label>
             Students per group
-            <input
-              name="groupCapacity"
-              type="number"
-              min={1}
-              max={20}
-              defaultValue={6}
-              required
-            />
+            <input name="groupCapacity" type="number" min={1} max={20} defaultValue={6} required />
           </label>
         </div>
         <button type="submit" disabled={busy || Boolean(cohortId)}>
@@ -111,33 +141,37 @@ export function TeacherSetupPage({
           <h2 id="join-controls">Class joining</h2>
           <p>Joining is closed by default. Open it only when the class is ready.</p>
           <div className="hero-actions">
-            <button
-              type="button"
-              onClick={openWindow}
-              disabled={busy || Boolean(joinWindow)}
-            >
-              Open 15-minute window
+            <button type="button" onClick={openWindow} disabled={busy || Boolean(joinWindow)}>
+              Open joining for 15 minutes
             </button>
-            <button
-              type="button"
-              onClick={closeWindow}
-              disabled={busy || !joinWindow}
-            >
+            <button type="button" onClick={closeWindow} disabled={busy || !joinWindow}>
               Close joining
             </button>
           </div>
           {joinWindow ? (
-            <p className="join-receipt">
-              Class link: <a href={joinWindow.joinUrl}>{joinWindow.joinUrl}</a>
-              <br />
-              Expires: <time dateTime={joinWindow.expiresAt}>{joinWindow.expiresAt}</time>
-            </p>
+            <div className="join-receipt">
+              <p>
+                <a href={joinWindow.studentUrl}>Student application</a>
+                <br />
+                Expires: <time dateTime={joinWindow.expiresAt}>{joinWindow.expiresAt}</time>
+              </p>
+              <table>
+                <caption>Group codes for this join window</caption>
+                <thead><tr><th>Group</th><th>Code</th></tr></thead>
+                <tbody>
+                  {joinWindow.groups.map((group) => (
+                    <tr key={group.groupId}>
+                      <th scope="row">Group {group.groupNumber}</th>
+                      <td><strong>{group.joinCode}</strong></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : null}
         </section>
       ) : null}
-      <p role="status" aria-live="polite">
-        {status}
-      </p>
+      <p role="status" aria-live="polite">{status}</p>
     </main>
   );
 }

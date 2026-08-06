@@ -11,7 +11,7 @@ supabase/.branches/
 .worktrees/
 
 # Future application outputs and secrets.
-node_modules/
+node_modules
 dist/
 *.tsbuildinfo
 playwright-report/

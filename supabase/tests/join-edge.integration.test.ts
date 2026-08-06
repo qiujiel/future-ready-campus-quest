@@ -143,6 +143,53 @@ it("completes a valid join against real Auth and database boundaries", async () 
     });
     expect(payload.identity).not.toHaveProperty("realName");
     studentId = payload.identity.studentId;
+
+    const readiness = await teacherClient.functions.invoke(
+      "teacher-dashboard",
+      { body: { cohortId, view: "readiness" } },
+    );
+    if (readiness.error) throw readiness.error;
+    expect(readiness.data.readiness).toMatchObject({
+      cohortId,
+      expected: 1,
+      joined: 1,
+      joining: {
+        open: true,
+        studentUrl: "http://127.0.0.1:4173/#/join",
+      },
+      groups: [
+        {
+          groupNumber: 1,
+          joinCode,
+          joinEnabled: true,
+          students: [
+            {
+              studentId,
+              displayName: "Synthetic Integration Learner",
+              activityStatus: "joined",
+            },
+          ],
+        },
+      ],
+    });
+    expect(JSON.stringify(readiness.data)).not.toContain("requestKey");
+    expect(JSON.stringify(readiness.data)).not.toContain("joinWindowId");
+
+    const studentClient = createClient(apiUrl, anonKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: { Origin: allowedOrigin } },
+    });
+    const studentSession = await studentClient.auth.setSession({
+      access_token: String(payload.accessToken),
+      refresh_token: String(payload.refreshToken),
+    });
+    if (studentSession.error) throw studentSession.error;
+    const deniedReadiness = await studentClient.functions.invoke(
+      "teacher-dashboard",
+      { body: { cohortId, view: "readiness" } },
+    );
+    expect(deniedReadiness.error).not.toBeNull();
+
     const stored = await teacherClient
       .from("student_private_profiles")
       .select("real_name,cohort_id,group_id")

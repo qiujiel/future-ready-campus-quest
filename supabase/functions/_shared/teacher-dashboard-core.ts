@@ -1,9 +1,12 @@
 import type {
+  ClassroomReadinessReport,
   ConceptAggregate,
   ConceptId,
   EvidenceCounts,
+  TeacherReadinessGroup,
   TeacherDashboardSummary,
 } from "../../../src/shared/api/contracts.ts";
+import { deriveGroupJoinCode } from "./join-core.ts";
 
 const conceptIds: readonly ConceptId[] = [
   "C1",
@@ -45,6 +48,60 @@ export interface TeacherDashboardRepository {
     actorUserId: string,
     cohortId: string,
   ): Promise<TeacherDashboardSummary | null>;
+}
+
+export interface TrustedReadinessReport extends Omit<
+  ClassroomReadinessReport,
+  "joining" | "groups"
+> {
+  joining: {
+    open: boolean;
+    joinWindowId: string | null;
+    requestKey: string | null;
+    expiresAt: string | null;
+  };
+  groups: Array<Omit<TeacherReadinessGroup, "joinCode">>;
+}
+
+export async function prepareClassroomReadiness(
+  report: TrustedReadinessReport,
+  signingSecret: string,
+  studentUrl: string,
+): Promise<ClassroomReadinessReport> {
+  const requestKey = report.joining.open
+    ? report.joining.requestKey
+    : null;
+  const groups = await Promise.all(
+    report.groups.map(async (group) => ({
+      ...group,
+      joinCode:
+        requestKey && group.joinEnabled
+          ? await deriveGroupJoinCode(
+            requestKey,
+            group.groupNumber,
+            signingSecret,
+          )
+          : null,
+    })),
+  );
+
+  return {
+    cohortId: report.cohortId,
+    title: report.title,
+    expected: report.expected,
+    joined: report.joined,
+    active: report.active,
+    started: report.started,
+    submitted: report.submitted,
+    incomplete: report.incomplete,
+    errors: report.errors,
+    joining: {
+      open: report.joining.open,
+      expiresAt: report.joining.expiresAt,
+      studentUrl,
+    },
+    groups,
+  };
 }
 
 export async function loadTeacherDashboard(

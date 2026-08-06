@@ -62,6 +62,28 @@ export interface OpenJoinWindowInput {
   requestKey: string;
 }
 
+export interface TeacherCohortListItem {
+  cohortId: string;
+  title: string;
+  groupCount: number;
+  groupCapacity: number;
+  createdAt: string;
+}
+
+export interface TeacherGroupJoinCode {
+  groupId: string;
+  groupNumber: number;
+  joinCode: string;
+  enabled: boolean;
+}
+
+export interface JoinWindowReceipt {
+  joinUrl: string;
+  studentUrl: string;
+  expiresAt: string;
+  groups: TeacherGroupJoinCode[];
+}
+
 export interface CloseJoinWindowInput {
   action: "close";
   cohortId: string;
@@ -234,6 +256,49 @@ export interface TeacherDashboardSummary {
   mostMissed: MissedItemAggregate[];
   teamScores: TeacherTeamScore[];
   generatedAt: string;
+}
+
+export type TeacherStudentActivityStatus =
+  | "joined"
+  | "started"
+  | "incomplete"
+  | "submitted";
+
+export interface TeacherRosterStudent {
+  studentId: string;
+  displayName: string;
+  joinedAt: string;
+  lastActiveAt: string | null;
+  activityStatus: TeacherStudentActivityStatus;
+  currentPhase: LearningPhase | null;
+}
+
+export interface TeacherReadinessGroup {
+  groupId: string;
+  groupNumber: number;
+  displayName: string;
+  capacity: number;
+  joinCode: string | null;
+  joinEnabled: boolean;
+  students: TeacherRosterStudent[];
+}
+
+export interface ClassroomReadinessReport {
+  cohortId: string;
+  title: string;
+  expected: number;
+  joined: number;
+  active: number;
+  started: number;
+  submitted: number;
+  incomplete: number;
+  errors: number;
+  joining: {
+    open: boolean;
+    expiresAt: string | null;
+    studentUrl: string;
+  };
+  groups: TeacherReadinessGroup[];
 }
 
 export type TeacherControlCommand =

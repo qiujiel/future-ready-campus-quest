@@ -1,11 +1,13 @@
 import { z } from "npm:zod@4.4.3";
-import { callerClient } from "../_shared/auth.ts";
+import { callerClient, frontendAppUrl } from "../_shared/auth.ts";
 import { corsHeaders, RequestOriginError } from "../_shared/cors.ts";
 import { jsonResponse, readJson } from "../_shared/http.ts";
 import {
   loadTeacherDashboard,
+  prepareClassroomReadiness,
   TeacherDashboardBoundaryError,
   type TeacherDashboardRepository,
+  type TrustedReadinessReport,
 } from "../_shared/teacher-dashboard-core.ts";
 import type {
   ConceptId,
@@ -17,6 +19,7 @@ import type {
 const requestSchema = z.object({
   cohortId: z.uuid(),
   studentId: z.uuid().optional(),
+  view: z.literal("readiness").optional(),
 });
 
 Deno.serve(async (request) => {
@@ -36,6 +39,29 @@ Deno.serve(async (request) => {
         "COHORT_NOT_AVAILABLE",
         404,
       );
+    }
+
+    if (input.view === "readiness") {
+      const result = await client.rpc(
+        "get_teacher_classroom_readiness",
+        { p_cohort_id: input.cohortId },
+      );
+      if (result.error || !result.data) {
+        throw new TeacherDashboardBoundaryError(
+          "COHORT_NOT_AVAILABLE",
+          404,
+        );
+      }
+      const signingSecret = Deno.env.get("JOIN_TOKEN_SIGNING_SECRET");
+      if (!signingSecret || signingSecret.length < 32) {
+        throw new Error("JOIN_TOKEN_SIGNING_SECRET is not configured.");
+      }
+      const readiness = await prepareClassroomReadiness(
+        result.data as TrustedReadinessReport,
+        signingSecret,
+        `${frontendAppUrl()}/#/join`,
+      );
+      return jsonResponse({ readiness }, 200, headers);
     }
 
     const repository: TeacherDashboardRepository = {
