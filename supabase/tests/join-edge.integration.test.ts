@@ -20,17 +20,7 @@ async function authUserCount(): Promise<number> {
   return users.data.users.length;
 }
 
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(value),
-  );
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-}
-
-it("rejects a closed join token before creating a synthetic Auth user", async () => {
+it("rejects an unknown group code before creating a synthetic Auth user", async () => {
   const before = await authUserCount();
   const response = await fetch(`${apiUrl}/functions/v1/join-cohort`, {
     method: "POST",
@@ -40,16 +30,14 @@ it("rejects a closed join token before creating a synthetic Auth user", async ()
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      joinToken: "invalid-shared-token-with-sufficient-entropy",
-      groupNumber: 1,
-      realName: "Synthetic Learner",
-      privacyConfirmed: true,
+      joinCode: "ZZZZZZZZ",
+      displayName: "Synthetic Learner",
       requestKey: crypto.randomUUID(),
     }),
   });
 
-  expect(response.status).toBe(410);
-  expect(await response.json()).toEqual({ error: "JOIN_WINDOW_CLOSED" });
+  expect(response.status).toBe(404);
+  expect(await response.json()).toEqual({ error: "INVALID_JOIN_CODE" });
   expect(await authUserCount()).toBe(before);
 });
 
@@ -74,9 +62,11 @@ it("completes a valid join against real Auth and database boundaries", async () 
   const admin = createClient(apiUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+  const teacherEmail = `${crypto.randomUUID()}@teacher.integration.invalid`;
+  const teacherPassword = `${crypto.randomUUID()}-GateD!`;
   const teacher = await admin.auth.admin.createUser({
-    email: `${crypto.randomUUID()}@teacher.integration.invalid`,
-    password: `${crypto.randomUUID()}-GateD!`,
+    email: teacherEmail,
+    password: teacherPassword,
     email_confirm: true,
     app_metadata: { role: "teacher" },
   });
@@ -103,15 +93,34 @@ it("completes a valid join against real Auth and database boundaries", async () 
     if (cohort.error) throw cohort.error;
     cohortId = cohort.data.id;
 
-    const rawToken = `integration-${crypto.randomUUID()}-${crypto.randomUUID()}`;
-    const joinWindow = await admin.from("cohort_join_windows").insert({
-      cohort_id: cohortId,
-      token_hash: await sha256Hex(rawToken),
-      request_key: crypto.randomUUID(),
-      expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-      created_by: teacherId,
+    const teacherClient = createClient(apiUrl, anonKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: { Origin: allowedOrigin } },
     });
-    if (joinWindow.error) throw joinWindow.error;
+    const teacherSession = await teacherClient.auth.signInWithPassword({
+      email: teacherEmail,
+      password: teacherPassword,
+    });
+    if (teacherSession.error) throw teacherSession.error;
+    const opened = await teacherClient.functions.invoke("manage-join-window", {
+      body: {
+        action: "open",
+        cohortId,
+        requestKey: crypto.randomUUID(),
+      },
+    });
+    if (opened.error) throw opened.error;
+    expect(opened.data).toMatchObject({
+      studentUrl: "http://127.0.0.1:4173/#/join",
+      groups: [
+        {
+          groupNumber: 1,
+          joinCode: expect.stringMatching(/^[2-9A-HJ-NP-Z]{8}$/),
+          enabled: true,
+        },
+      ],
+    });
+    const joinCode = String(opened.data.groups[0].joinCode);
 
     const response = await fetch(`${apiUrl}/functions/v1/join-cohort`, {
       method: "POST",
@@ -121,10 +130,8 @@ it("completes a valid join against real Auth and database boundaries", async () 
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        joinToken: rawToken,
-        groupNumber: 1,
-        realName: "Synthetic Integration Learner",
-        privacyConfirmed: true,
+        joinCode,
+        displayName: "Synthetic Integration Learner",
         requestKey: crypto.randomUUID(),
       }),
     });
@@ -136,6 +143,13 @@ it("completes a valid join against real Auth and database boundaries", async () 
     });
     expect(payload.identity).not.toHaveProperty("realName");
     studentId = payload.identity.studentId;
+    const stored = await teacherClient
+      .from("student_private_profiles")
+      .select("real_name,cohort_id,group_id")
+      .eq("student_id", studentId)
+      .single();
+    if (stored.error) throw stored.error;
+    expect(stored.data.real_name).toBe("Synthetic Integration Learner");
   } finally {
     if (studentId) await admin.auth.admin.deleteUser(studentId, false);
     if (cohortId) await admin.from("cohorts").delete().eq("id", cohortId);

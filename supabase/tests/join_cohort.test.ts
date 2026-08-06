@@ -1,5 +1,6 @@
 import {
-  createJoinWindowToken,
+  createGroupJoinCodes,
+  deriveGroupJoinCode,
   JoinBoundaryError,
   joinStudent,
   type JoinDependencies,
@@ -12,11 +13,8 @@ import type {
 } from "../../src/shared/api/contracts";
 
 const baseInput: JoinCohortInput = {
-  joinToken: "shared-class-token-with-sufficient-entropy",
-  groupNumber: 1,
-  realName: "  Synthetic   Learner  ",
-  nickname: "  Bright   Comet ",
-  privacyConfirmed: true,
+  joinCode: "FJP5-Z8YN",
+  displayName: "  Synthetic   Learner  ",
   requestKey: "50000000-0000-4000-8000-000000000001",
 };
 
@@ -40,10 +38,12 @@ function createDependencies(capacity = 6): JoinDependencies & {
       remainingCapacity = value;
     },
     stored,
-    async findCompletedJoin(tokenHash, requestKey) {
-      return stored.get(`${tokenHash}:${requestKey}`) ?? null;
+    async findCompletedJoin(codeHash, requestKey) {
+      return stored.get(`${codeHash}:${requestKey}`) ?? null;
     },
-    async preflightJoin() {},
+    async preflightJoin() {
+      return { groupNumber: 4 };
+    },
     async createSyntheticUser() {
       this.createdUsers += 1;
       const studentId = `20000000-0000-4000-8000-${String(nextStudent).padStart(12, "0")}`;
@@ -67,7 +67,7 @@ function createDependencies(capacity = 6): JoinDependencies & {
       };
     },
     async completeJoin(input) {
-      const key = `${input.tokenHash}:${input.requestKey}`;
+      const key = `${input.codeHash}:${input.requestKey}`;
       const existing = stored.get(key);
       if (existing) return existing.identity;
       if (remainingCapacity < 1) {
@@ -78,9 +78,9 @@ function createDependencies(capacity = 6): JoinDependencies & {
       const identity: StudentIdentity = {
         studentId: input.studentId,
         cohortId: "40000000-0000-4000-8000-000000000001",
-        groupId: "60000000-0000-4000-8000-000000000001",
+        groupId: "60000000-0000-4000-8000-000000000004",
         groupNumber: input.groupNumber,
-        nickname: input.nickname ?? "Explorer 1",
+        nickname: "Explorer 1",
         isGroupIdentityEditor: remainingCapacity === capacity - 1,
       };
       stored.set(key, { identity });
@@ -93,58 +93,113 @@ function createDependencies(capacity = 6): JoinDependencies & {
   };
 }
 
-it("opens a high-entropy join window for exactly 15 minutes", async () => {
-  const openedAt = new Date("2026-07-30T05:00:00.000Z");
+it("derives a stable unambiguous group code without exposing the secret", async () => {
+  const result = await deriveGroupJoinCode(
+    "50000000-0000-4000-8000-000000000001",
+    4,
+    "0123456789abcdef0123456789abcdef",
+  );
 
-  const result = await createJoinWindowToken(openedAt);
-
-  expect(result.rawToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
-  expect(result.tokenHash).toMatch(/^[a-f0-9]{64}$/);
-  expect(result.expiresAt).toBe("2026-07-30T05:15:00.000Z");
-  expect(result.tokenHash).not.toContain(result.rawToken);
+  expect(result).toBe("FJP5Z8YN");
+  expect(result).toMatch(/^[2-9A-HJ-NP-Z]{8}$/);
+  expect(result).not.toContain("0123456789abcdef");
 });
 
-it("normalizes names and returns no private profile fields", async () => {
+it("builds distinct teacher receipts and hash-only persistence rows", async () => {
+  const result = await createGroupJoinCodes(
+    [
+      { groupId: "60000000-0000-4000-8000-000000000001", groupNumber: 1 },
+      { groupId: "60000000-0000-4000-8000-000000000002", groupNumber: 2 },
+    ],
+    "50000000-0000-4000-8000-000000000001",
+    "0123456789abcdef0123456789abcdef",
+  );
+
+  expect(result.receipts).toEqual([
+    {
+      groupId: "60000000-0000-4000-8000-000000000001",
+      groupNumber: 1,
+      joinCode: "HSNY46S4",
+      enabled: true,
+    },
+    {
+      groupId: "60000000-0000-4000-8000-000000000002",
+      groupNumber: 2,
+      joinCode: "KZDLXW4Q",
+      enabled: true,
+    },
+  ]);
+  expect(result.persistence).toEqual([
+    {
+      groupId: "60000000-0000-4000-8000-000000000001",
+      codeHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    },
+    {
+      groupId: "60000000-0000-4000-8000-000000000002",
+      codeHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    },
+  ]);
+  expect(JSON.stringify(result.persistence)).not.toContain("HSNY46S4");
+  expect(result.persistence[0]?.codeHash).not.toBe(result.persistence[1]?.codeHash);
+});
+
+it("normalizes the display name and returns no private profile fields", async () => {
   const dependencies = createDependencies();
 
   const result = await joinStudent(baseInput, dependencies);
 
-  expect(result.identity.nickname).toBe("Bright Comet");
+  expect(result.identity.nickname).toBe("Explorer 1");
+  expect(result.identity).not.toHaveProperty("displayName");
   expect(result.identity).not.toHaveProperty("realName");
   expect(dependencies.createdUsers).toBe(1);
 });
 
-it("rejects an invalid group before creating an Auth user", async () => {
+it("rejects a malformed group code before creating an Auth user", async () => {
   const dependencies = createDependencies();
 
   await expect(
-    joinStudent({ ...baseInput, groupNumber: 0 }, dependencies),
+    joinStudent({ ...baseInput, joinCode: "10-IO" }, dependencies),
   ).rejects.toMatchObject({ code: "INVALID_REQUEST", status: 400 });
   expect(dependencies.createdUsers).toBe(0);
+});
+
+it("hashes the normalized code before the trusted preflight", async () => {
+  const dependencies = createDependencies();
+  let observedHash = "";
+  dependencies.preflightJoin = async (codeHash) => {
+    observedHash = codeHash;
+    return { groupNumber: 4 };
+  };
+
+  await joinStudent(baseInput, dependencies);
+
+  expect(observedHash).toMatch(/^[a-f0-9]{64}$/);
+  expect(observedHash).not.toContain("FJP5Z8YN");
 });
 
 it("runs the trusted join preflight before creating an Auth user", async () => {
   const dependencies = createDependencies();
   dependencies.preflightJoin = async () => {
-    throw new JoinBoundaryError("GROUP_FULL", 409);
+    throw new JoinBoundaryError("GROUP_JOIN_CLOSED", 410);
   };
 
   await expect(joinStudent(baseInput, dependencies)).rejects.toMatchObject({
-    code: "GROUP_FULL",
-    status: 409,
+    code: "GROUP_JOIN_CLOSED",
+    status: 410,
   });
   expect(dependencies.createdUsers).toBe(0);
 });
 
-it("returns the safe expired-window error from the trusted boundary", async () => {
+it("returns the safe invalid-code error from the trusted boundary", async () => {
   const dependencies = createDependencies();
-  dependencies.findCompletedJoin = async () => {
-    throw new JoinBoundaryError("JOIN_WINDOW_CLOSED", 410);
+  dependencies.findCompletedJoin = async () => null;
+  dependencies.preflightJoin = async () => {
+    throw new JoinBoundaryError("INVALID_JOIN_CODE", 404);
   };
 
   await expect(joinStudent(baseInput, dependencies)).rejects.toMatchObject({
-    code: "JOIN_WINDOW_CLOSED",
-    status: 410,
+    code: "INVALID_JOIN_CODE",
+    status: 404,
   });
 });
 
@@ -197,7 +252,7 @@ it("reconciles an ambiguous completion response before deleting the Auth user", 
 it("does not disclose internal join failures such as name collisions", async () => {
   const dependencies = createDependencies();
   dependencies.completeJoin = async () => {
-    throw new Error("duplicate real_name");
+    throw new Error("duplicate display_name");
   };
 
   await expect(joinStudent(baseInput, dependencies)).rejects.toMatchObject({

@@ -6,6 +6,7 @@ import {
   deriveEdgeToken,
   hashEdgeToken,
 } from "../_shared/edge-token.ts";
+import { createGroupJoinCodes } from "../_shared/join-core.ts";
 import {
   normalizeTeacherControl,
   TeacherControlBoundaryError,
@@ -94,11 +95,41 @@ Deno.serve(async (request) => {
         p_request_key: input.requestKey,
       });
       if (result.error) throw new Error("CONTROL_NOT_AVAILABLE");
+      const joinWindowId = typeof result.data?.id === "string"
+        ? result.data.id
+        : "";
+      const groups = await client
+        .from("groups")
+        .select("id,group_number")
+        .eq("cohort_id", input.cohortId)
+        .order("group_number");
+      if (!joinWindowId || groups.error || !groups.data) {
+        throw new Error("CONTROL_NOT_AVAILABLE");
+      }
+      const generated = await createGroupJoinCodes(
+        groups.data.map((group) => ({
+          groupId: String(group.id),
+          groupNumber: Number(group.group_number),
+        })),
+        input.requestKey,
+        secret,
+      );
+      const configured = await client.rpc("configure_cohort_group_join_codes", {
+        p_cohort_id: input.cohortId,
+        p_join_window_id: joinWindowId,
+        p_codes: generated.persistence,
+      });
+      if (configured.error || configured.data !== true) {
+        throw new Error("CONTROL_NOT_AVAILABLE");
+      }
+      const studentUrl = `${frontendAppUrl()}/#/join`;
       return jsonResponse({
         affected: 0,
         actionState: "open",
         expiresAt,
-        joinUrl: `${frontendAppUrl()}/#/join/${rawToken}`,
+        joinUrl: studentUrl,
+        studentUrl,
+        groups: generated.receipts,
       }, 200, headers);
     }
 

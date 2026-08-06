@@ -7,18 +7,19 @@ import type {
 } from "../../../src/shared/api/contracts.ts";
 
 const uuidSchema = z.uuid();
+const groupCodeAlphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 const joinInputSchema = z.object({
-  joinToken: z.string().min(20).max(512),
-  groupNumber: z.number().int().min(1).max(20),
-  realName: z.string().trim().min(1).max(100),
-  nickname: z.string().trim().max(40).optional(),
-  privacyConfirmed: z.literal(true),
+  joinCode: z.string().min(6).max(16),
+  displayName: z.string().trim().min(1).max(100),
   requestKey: uuidSchema,
 });
 
 export type JoinFailureCode =
   | "INVALID_REQUEST"
+  | "INVALID_JOIN_CODE"
+  | "GROUP_JOIN_CLOSED"
+  | "INACTIVE_COHORT"
   | "JOIN_WINDOW_CLOSED"
   | "INVALID_GROUP"
   | "GROUP_FULL"
@@ -45,20 +46,19 @@ export interface SyntheticUser {
 }
 
 export interface CompleteJoinInput {
-  tokenHash: string;
+  codeHash: string;
   requestKey: string;
   studentId: string;
   groupNumber: number;
-  realName: string;
-  nickname?: string;
+  displayName: string;
 }
 
 export interface JoinDependencies {
   findCompletedJoin(
-    tokenHash: string,
+    codeHash: string,
     requestKey: string,
   ): Promise<StoredJoin | null>;
-  preflightJoin(tokenHash: string, groupNumber: number): Promise<void>;
+  preflightJoin(codeHash: string): Promise<{ groupNumber: number }>;
   createSyntheticUser(): Promise<SyntheticUser>;
   signInNewUser(user: SyntheticUser): Promise<SessionTokens>;
   issueReplacementSession(studentId: string): Promise<SessionTokens>;
@@ -98,6 +98,72 @@ export async function hashJoinToken(rawToken: string): Promise<string> {
   return bytesToHex(new Uint8Array(digest));
 }
 
+function fiveBitValue(bytes: Uint8Array, offset: number): number {
+  let value = 0;
+  for (let index = 0; index < 5; index += 1) {
+    const bit = offset + index;
+    const byte = bytes[Math.floor(bit / 8)] ?? 0;
+    value = (value << 1) | ((byte >> (7 - (bit % 8))) & 1);
+  }
+  return value;
+}
+
+export async function deriveGroupJoinCode(
+  requestKey: string,
+  groupNumber: number,
+  signingSecret: string,
+): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(signingSecret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = new Uint8Array(
+    await crypto.subtle.sign(
+      "HMAC",
+      key,
+      new TextEncoder().encode(`${requestKey}:${groupNumber}`),
+    ),
+  );
+  return Array.from({ length: 8 }, (_, index) =>
+    groupCodeAlphabet[fiveBitValue(signature, index * 5)]
+  ).join("");
+}
+
+export interface GroupJoinCodeSource {
+  groupId: string;
+  groupNumber: number;
+}
+
+export async function createGroupJoinCodes(
+  groups: GroupJoinCodeSource[],
+  requestKey: string,
+  signingSecret: string,
+) {
+  const generated = await Promise.all(
+    groups.map(async (group) => {
+      const joinCode = await deriveGroupJoinCode(
+        requestKey,
+        group.groupNumber,
+        signingSecret,
+      );
+      return {
+        receipt: { ...group, joinCode, enabled: true as const },
+        persistence: {
+          groupId: group.groupId,
+          codeHash: await hashJoinToken(joinCode),
+        },
+      };
+    }),
+  );
+  return {
+    receipts: generated.map((entry) => entry.receipt),
+    persistence: generated.map((entry) => entry.persistence),
+  };
+}
+
 export async function deriveJoinToken(
   requestKey: string,
   signingSecret: string,
@@ -135,18 +201,18 @@ function parseInput(input: JoinCohortInput): JoinCohortInput {
     throw new JoinBoundaryError("INVALID_REQUEST", 400);
   }
 
-  const realName = normalizeWhitespace(result.data.realName);
-  const normalizedNickname = result.data.nickname
-    ? normalizeWhitespace(result.data.nickname)
-    : "";
+  const displayName = normalizeWhitespace(result.data.displayName);
+  const joinCode = result.data.joinCode
+    .replace(/[^a-z0-9]/gi, "")
+    .toUpperCase();
+  if (!new RegExp(`^[${groupCodeAlphabet}]{8}$`).test(joinCode)) {
+    throw new JoinBoundaryError("INVALID_REQUEST", 400);
+  }
 
   return {
-    joinToken: result.data.joinToken,
-    groupNumber: result.data.groupNumber,
-    realName,
-    privacyConfirmed: true,
+    joinCode,
+    displayName,
     requestKey: result.data.requestKey,
-    ...(normalizedNickname ? { nickname: normalizedNickname } : {}),
   };
 }
 
@@ -155,9 +221,9 @@ export async function joinStudent(
   dependencies: JoinDependencies,
 ): Promise<JoinCohortOutput> {
   const normalized = parseInput(input);
-  const tokenHash = await hashJoinToken(normalized.joinToken);
+  const codeHash = await hashJoinToken(normalized.joinCode);
   const completed = await dependencies.findCompletedJoin(
-    tokenHash,
+    codeHash,
     normalized.requestKey,
   );
 
@@ -168,7 +234,7 @@ export async function joinStudent(
     return { identity: completed.identity, ...session };
   }
 
-  await dependencies.preflightJoin(tokenHash, normalized.groupNumber);
+  const resolved = await dependencies.preflightJoin(codeHash);
 
   let syntheticUser: SyntheticUser | undefined;
   let initialSession: SessionTokens | undefined;
@@ -176,12 +242,11 @@ export async function joinStudent(
     syntheticUser = await dependencies.createSyntheticUser();
     initialSession = await dependencies.signInNewUser(syntheticUser);
     const identity = await dependencies.completeJoin({
-      tokenHash,
+      codeHash,
       requestKey: normalized.requestKey,
       studentId: syntheticUser.studentId,
-      groupNumber: normalized.groupNumber,
-      realName: normalized.realName,
-      ...(normalized.nickname ? { nickname: normalized.nickname } : {}),
+      groupNumber: resolved.groupNumber,
+      displayName: normalized.displayName,
     });
 
     if (identity.studentId !== syntheticUser.studentId) {
@@ -201,7 +266,7 @@ export async function joinStudent(
     ) {
       try {
         const reconciled = await dependencies.findCompletedJoin(
-          tokenHash,
+          codeHash,
           normalized.requestKey,
         );
         if (reconciled) {

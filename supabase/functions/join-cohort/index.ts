@@ -49,6 +49,15 @@ function sessionTokens(
 }
 
 function safeRpcError(error: { message: string }): never {
+  if (error.message.includes("INVALID_JOIN_CODE")) {
+    throw new JoinBoundaryError("INVALID_JOIN_CODE", 404);
+  }
+  if (error.message.includes("GROUP_JOIN_CLOSED")) {
+    throw new JoinBoundaryError("GROUP_JOIN_CLOSED", 410);
+  }
+  if (error.message.includes("INACTIVE_COHORT")) {
+    throw new JoinBoundaryError("INACTIVE_COHORT", 410);
+  }
   if (error.message.includes("JOIN_WINDOW_CLOSED")) {
     throw new JoinBoundaryError("JOIN_WINDOW_CLOSED", 410);
   }
@@ -67,22 +76,22 @@ function dependencies(
   rateKeyHash: string,
 ): JoinDependencies {
   return {
-    async findCompletedJoin(tokenHash, requestKey): Promise<StoredJoin | null> {
-      const result = await admin.rpc("find_completed_student_join", {
-        p_token_hash: tokenHash,
+    async findCompletedJoin(codeHash, requestKey): Promise<StoredJoin | null> {
+      const result = await admin.rpc("find_completed_student_code_join", {
+        p_code_hash: codeHash,
         p_request_key: requestKey,
       });
       if (result.error) safeRpcError(result.error);
       const row = result.data?.[0] as Record<string, unknown> | undefined;
       return row ? { identity: mapIdentity(row) } : null;
     },
-    async preflightJoin(tokenHash, groupNumber): Promise<void> {
-      const result = await admin.rpc("preflight_student_join", {
-        p_token_hash: tokenHash,
-        p_group_number: groupNumber,
+    async preflightJoin(codeHash) {
+      const result = await admin.rpc("preflight_student_code_join", {
+        p_code_hash: codeHash,
         p_rate_key_hash: rateKeyHash,
       });
       if (result.error) safeRpcError(result.error);
+      return { groupNumber: Number(result.data) };
     },
     async createSyntheticUser(): Promise<SyntheticUser> {
       const password = randomPassword();
@@ -112,13 +121,11 @@ function dependencies(
       return issueSessionForExistingUser(admin, publicClient, studentId);
     },
     async completeJoin(input: CompleteJoinInput): Promise<StudentIdentity> {
-      const result = await admin.rpc("complete_student_join", {
-        p_token_hash: input.tokenHash,
+      const result = await admin.rpc("complete_student_code_join", {
+        p_code_hash: input.codeHash,
         p_request_key: input.requestKey,
         p_student_id: input.studentId,
-        p_group_number: input.groupNumber,
-        p_real_name: input.realName,
-        p_nickname: input.nickname ?? null,
+        p_display_name: input.displayName,
       });
       if (result.error) safeRpcError(result.error);
       const row = result.data?.[0] as Record<string, unknown> | undefined;

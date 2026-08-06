@@ -7,6 +7,7 @@ tmp/
 .superpowers/
 protected-content/
 supabase/.temp/
+supabase/.branches/
 .worktrees/
 
 # Future application outputs and secrets.
