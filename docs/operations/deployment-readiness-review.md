@@ -1,18 +1,22 @@
-# Deployment Readiness Review — 2026-08-04
+# Deployment Readiness Review — 2026-08-06
 
 **Reviewed branch:** `codex/gate-d-teacher-readiness`
 **Original Gate D commit:** `4783565`
 **Remediated review baseline:** `568f282ba5338e42ffa008a26e956cfbb419ce79`
 **Recovery design commit:** `ce7a056`
 **Reviewed implementation-plan baseline:** `d7e26d260098620c89e297863aa2c4c09bf8c24a`
+**Student-ready review baseline:** `c0177dcdb9faa4ec6da94d719d5d8606446a9d6c`
 **Production project:** `ghohuwwjxgjqnbsauvzq`
 **Dedicated load-test project:** `vadyhuipwbtgbzpeisbn`
 **Decision: HOLD**
 
-This is an independent repository review, not evidence of remote configuration
-or operational execution. No GitHub or Supabase setting was inspected or
-changed, and no backup, restore rehearsal, deployment, or production command
-was performed. Repository completion does not authorize deployment.
+This is an independent repository and read-only remote-configuration review.
+At `2026-08-06T04:03:01Z`, GitHub repository metadata and Supabase project
+identity/function-secret inventories were inspected without changing them. No
+backup, restore rehearsal, deployment, production database connection, or
+production command was performed.
+
+Repository completion does not authorize deployment.
 
 ## Repository controls verified
 
@@ -40,9 +44,9 @@ uses the reviewed artifact rather than rebuilding it, reaches the distinct
 checklist retains artifact ID, approved commit, manifest SHA-256, reviewer,
 served-release metadata, smoke checks, and rollback evidence.
 
-This review does not establish that GitHub Pages uses Actions as its remote
-source, that either environment exists, that reviewer/self-review/branch rules
-are configured, or that a real artifact has been produced and verified.
+The remote Pages endpoint currently returns `404`: no Pages site is configured.
+No production environment exists, so no reviewer/self-review/branch rule is
+configured and no real Pages artifact has been produced or verified.
 
 ## GitHub variables and secrets inventory
 
@@ -53,11 +57,15 @@ secrets. The documented design excludes backups, connection strings, database
 passwords, Storage administration keys, encryption keys, plaintext exports,
 object paths, and protected manifests from every GitHub scope.
 
-No remote GitHub inventory was inspected. A repository administrator and a
-second reviewer must still compare every configured variable, secret,
-environment, required reviewer, self-review control, administrator-bypass
-setting, and `main` branch rule with the formal checklist without copying
-values into evidence.
+The remote repository inventory contains zero Actions variables, zero Actions
+secrets, and zero environments. The private repository has one collaborator,
+`qiujiel`, and the account currently cannot enable branch protection for this
+private repository. The draft pull request at the student-ready baseline is
+mergeable and its two verification runs and two secret scans passed. A
+repository administrator and a distinct reviewer must still configure and
+independently compare every variable, secret, environment, reviewer,
+self-review control, administrator-bypass setting, and `main` rule with the
+formal checklist without copying values into evidence.
 
 ## Supabase migration and function sequence
 
@@ -73,9 +81,13 @@ migration list, performs a dry-run before one forward migration push, deploys
 the reviewed function set, and runs backend preflight. Content import and Pages
 publication remain separate operations.
 
-This repository evidence does not prove that production has any migration,
-function, secret, Auth configuration, content version, cron row, retention
-setting, or healthy endpoint. No Supabase remote project was queried.
+The Supabase project inventory confirms production project
+`ghohuwwjxgjqnbsauvzq` is `ACTIVE_HEALTHY` in `ap-southeast-1` and the dedicated
+load project `vadyhuipwbtgbzpeisbn` is separately `ACTIVE_HEALTHY` in
+`ap-northeast-2`. Production currently reports zero deployed Edge Functions and
+zero custom Function secrets. No production database connection was made, so
+migration history, Auth configuration, content, cron, retention, and database
+objects remain unverified.
 
 ## Recovery and rollback
 
@@ -104,6 +116,11 @@ was created or verified by this review.
 Release remains on HOLD until authorized owners complete and independently
 verify all of the following outside this repository:
 
+- choose a GitHub hosting/visibility plan that supports Pages, protected
+  branches, environment secrets, and required deployment reviewers; the
+  current private GitHub Free repository does not;
+- add at least one trusted GitHub collaborator who is distinct from `qiujiel`
+  and can perform the required independent deployment reviews;
 - designate the encryption/recovery custodian and provision the `age` key with
   separate key custody;
 - approve and verify the two custody locations: institution-controlled cloud
