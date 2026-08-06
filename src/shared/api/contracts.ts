@@ -17,11 +17,8 @@ export type LearningPhase =
   | "reflection";
 
 export interface JoinCohortInput {
-  joinToken: string;
-  groupNumber: number;
-  realName: string;
-  nickname?: string;
-  privacyConfirmed: boolean;
+  joinCode: string;
+  displayName: string;
   requestKey: string;
 }
 

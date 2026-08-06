@@ -26,43 +26,36 @@ function joinGateway(
   };
 }
 
-function renderJoin(gateway: AuthGateway, token = "valid-class-token") {
+function renderJoin(gateway: AuthGateway) {
   const router = createMemoryRouter(
     [
-      { path: "/join/:token", element: <JoinPage gateway={gateway} /> },
+      { path: "/join", element: <JoinPage gateway={gateway} /> },
       { path: "/quest", element: <CurrentPath /> },
     ],
-    { initialEntries: [`/join/${token}`] },
+    { initialEntries: ["/join"] },
   );
   render(<RouterProvider router={router} />);
 }
 
 function completeJoinForm() {
-  fireEvent.change(
-    screen.getByRole("spinbutton", { name: /assigned group number/i }),
-    {
-      target: { value: "4" },
-    },
-  );
-  fireEvent.change(screen.getByLabelText(/^real name/i), {
+  fireEvent.change(screen.getByLabelText(/your name/i), {
     target: { value: "Synthetic Learner" },
   });
-  fireEvent.change(screen.getByLabelText(/^nickname/i), {
-    target: { value: "Bright Comet" },
+  fireEvent.change(screen.getByLabelText(/group code/i), {
+    target: { value: "CAMPUS42" },
   });
-  fireEvent.click(screen.getByLabelText(/class privacy notice/i));
 }
 
 describe("student join flow", () => {
-  it("presents the approved three-step journey and privacy boundaries", () => {
+  it("presents the approved name-and-code journey and privacy boundary", () => {
     renderJoin(
-      joinGateway(async (input) => ({
+      joinGateway(async () => ({
         identity: {
           studentId: "student-1",
           cohortId: "cohort-1",
           groupId: "group-1",
-          groupNumber: input.groupNumber,
-          nickname: input.nickname ?? "Explorer 1",
+          groupNumber: 4,
+          nickname: "Explorer 1",
           isGroupIdentityEditor: true,
         },
         accessToken: "access",
@@ -71,22 +64,23 @@ describe("student join flow", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: /choose your assigned group number/i }),
+      screen.getByRole("heading", { name: /tell your teacher who you are/i }),
     ).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: /create your explorer identity/i }),
+      screen.getByRole("heading", { name: /enter your group code/i }),
     ).toBeVisible();
-    expect(screen.getByText(/real name is visible only to your teacher/i)).toBeVisible();
-    expect(screen.getByText(/nickname is visible to your group/i)).toBeVisible();
+    expect(screen.getByText(/classmates see only a neutral explorer name/i)).toBeVisible();
+    expect(screen.getByText(/name is visible only to your teacher/i)).toBeVisible();
     expect(screen.queryByLabelText(/email|password|pin/i)).not.toBeInTheDocument();
   });
 
   it.each([
-    ["JOIN_WINDOW_EXPIRED", /teacher to reopen joining/i],
-    ["JOIN_WINDOW_CLOSED", /teacher to reopen joining/i],
-    ["GROUP_NOT_FOUND", /check the assigned group number/i],
-    ["INVALID_GROUP", /check the assigned group number/i],
-    ["GROUP_FULL", /assigned group is full/i],
+    ["JOIN_WINDOW_CLOSED", /joining is closed right now/i],
+    ["INACTIVE_COHORT", /joining is closed right now/i],
+    ["INVALID_JOIN_CODE", /group code was not recognized/i],
+    ["INVALID_GROUP", /group code was not recognized/i],
+    ["GROUP_JOIN_CLOSED", /joining is closed for this group/i],
+    ["GROUP_FULL", /this group is full/i],
   ])("explains the recoverable %s state", async (code, message) => {
     renderJoin(
       joinGateway(async () => {
@@ -94,12 +88,12 @@ describe("student join flow", () => {
       }),
     );
     completeJoinForm();
-    fireEvent.click(screen.getByRole("button", { name: /join the campus/i }));
+    fireEvent.click(screen.getByRole("button", { name: /join group/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(message);
   });
 
-  it("requires a real name and blocks duplicate submission while joining", async () => {
+  it("requires both fields and blocks duplicate submission while joining", async () => {
     let resolveJoin:
       | ((value: Awaited<ReturnType<AuthGateway["joinCohort"]>>) => void)
       | undefined;
@@ -111,11 +105,11 @@ describe("student join flow", () => {
     const joinCohort = vi.fn(() => promise);
     renderJoin(joinGateway(joinCohort));
 
-    fireEvent.click(screen.getByRole("button", { name: /join the campus/i }));
+    fireEvent.click(screen.getByRole("button", { name: /join group/i }));
     expect(joinCohort).not.toHaveBeenCalled();
 
     completeJoinForm();
-    fireEvent.click(screen.getByRole("button", { name: /join the campus/i }));
+    fireEvent.click(screen.getByRole("button", { name: /join group/i }));
 
     await waitFor(() => expect(joinCohort).toHaveBeenCalledTimes(1));
     const button = screen.getByRole("button", { name: /joining/i });
@@ -129,24 +123,12 @@ describe("student join flow", () => {
         cohortId: "cohort-1",
         groupId: "group-1",
         groupNumber: 4,
-        nickname: "Bright Comet",
+        nickname: "Explorer 1",
         isGroupIdentityEditor: true,
       },
       accessToken: "access",
       refreshToken: "refresh",
     });
     expect(await screen.findByLabelText("current path")).toHaveTextContent("/quest");
-  });
-
-  it("shows the QR recovery message when no live token is available", () => {
-    renderJoin(
-      joinGateway(async () => {
-        throw new Error("unused");
-      }),
-      "unavailable",
-    );
-    expect(
-      screen.getByRole("heading", { name: /use your class qr link/i }),
-    ).toBeVisible();
   });
 });

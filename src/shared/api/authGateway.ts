@@ -16,6 +16,8 @@ export interface CreateCohortRequest {
 
 export interface AuthGateway {
   signInTeacher(email: string, password: string): Promise<void>;
+  getCurrentRole?(): Promise<"teacher" | "student" | null>;
+  signOut?(): Promise<void>;
   createCohort(input: CreateCohortRequest): Promise<{ cohortId: string }>;
   openJoinWindow?(
     cohortId: string,
@@ -76,6 +78,16 @@ export const supabaseAuthGateway: AuthGateway = {
       await client.auth.signOut();
       throw new Error("Sign-in was not accepted.");
     }
+  },
+  async getCurrentRole() {
+    const result = await getSupabaseClient().auth.getUser();
+    if (result.error || !result.data.user) return null;
+    const role = result.data.user.app_metadata.role;
+    return role === "teacher" || role === "student" ? role : null;
+  },
+  async signOut() {
+    const result = await getSupabaseClient().auth.signOut();
+    if (result.error) throw new Error("The saved session could not be ended.");
   },
   async createCohort(input) {
     const data = await invokeJoinManager({

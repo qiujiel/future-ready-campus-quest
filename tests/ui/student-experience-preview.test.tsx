@@ -10,17 +10,13 @@ async function enterCampusMap() {
   );
 
   fireEvent.change(
-    screen.getByRole("spinbutton", { name: /assigned group number/i }),
-    { target: { value: "2" } },
+    screen.getByLabelText(/group code/i),
+    { target: { value: "PREVIEW2" } },
   );
-  fireEvent.change(screen.getByLabelText(/^real name/i), {
+  fireEvent.change(screen.getByLabelText(/your name/i), {
     target: { value: "Synthetic Learner" },
   });
-  fireEvent.change(screen.getByLabelText(/^nickname/i), {
-    target: { value: "Bright Comet" },
-  });
-  fireEvent.click(screen.getByLabelText(/class privacy notice/i));
-  fireEvent.click(screen.getByRole("button", { name: "Join the campus" }));
+  fireEvent.click(screen.getByRole("button", { name: "Join Group" }));
 
   fireEvent.click(
     await screen.findByRole("button", { name: "Continue to campus map" }),

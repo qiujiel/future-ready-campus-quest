@@ -2,20 +2,21 @@ export function GroupPicker() {
   return (
     <section className="join-step">
       <p className="join-step__number" aria-hidden="true">
-        1
+        2
       </p>
       <div>
-        <h2 id="join-group-title">Choose your assigned group number</h2>
-        <p>Use the number your teacher gave you. You can check it before joining.</p>
+        <h2 id="join-group-title">Enter your group code</h2>
+        <p>Use the short code your teacher gave your group.</p>
         <label>
-          Assigned group number
+          Group code
           <input
-            name="groupNumber"
-            type="number"
-            min={1}
-            max={20}
-            inputMode="numeric"
-            defaultValue={1}
+            name="joinCode"
+            type="text"
+            inputMode="text"
+            autoCapitalize="characters"
+            autoComplete="off"
+            minLength={6}
+            maxLength={16}
             required
           />
         </label>

@@ -37,8 +37,8 @@ const authGateway: AuthGateway = {
         studentId: "student-1",
         cohortId: "cohort-1",
         groupId: "group-1",
-        groupNumber: input.groupNumber,
-        nickname: input.nickname ?? "Explorer 1",
+        groupNumber: 1,
+        nickname: input.displayName,
         isGroupIdentityEditor: true,
       },
       accessToken: "access",
@@ -83,8 +83,8 @@ afterEach(() => cleanup());
 
 it("has no serious accessibility violations in join and Group Studio states", async () => {
   const router = createMemoryRouter(
-    [{ path: "/join/:token", element: <JoinPage gateway={authGateway} /> }],
-    { initialEntries: ["/join/synthetic-valid-token"] },
+    [{ path: "/join", element: <JoinPage gateway={authGateway} /> }],
+    { initialEntries: ["/join"] },
   );
   const join = render(<RouterProvider router={router} />);
   await expectNoSeriousViolations(join.container);

@@ -24,6 +24,7 @@ async function requireRole(role: "teacher" | "student") {
 
 export const router = createHashRouter([
   { path: "/", element: <App /> },
+  { path: "/join", element: <JoinPage /> },
   { path: "/join/:token", element: <JoinPage /> },
   { path: "/recover/:token", element: <RecoveryPage /> },
   {
