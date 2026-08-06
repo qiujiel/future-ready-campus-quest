@@ -21,6 +21,23 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("open-join"), ...base }),
   z.object({ action: z.literal("close-join"), ...base }),
   z.object({
+    action: z.literal("set-group-join"),
+    ...base,
+    groupId: z.uuid(),
+    enabled: z.boolean(),
+  }),
+  z.object({
+    action: z.literal("move-student"),
+    ...base,
+    studentId: z.uuid(),
+    groupId: z.uuid(),
+  }),
+  z.object({
+    action: z.enum(["remove-student", "reset-student"]),
+    ...base,
+    studentId: z.uuid(),
+  }),
+  z.object({
     action: z.literal("issue-recovery"),
     ...base,
     studentId: z.uuid(),
@@ -71,6 +88,23 @@ Deno.serve(async (request) => {
     const user = await client.auth.getUser();
     if (user.error || !user.data.user) {
       throw new TeacherControlBoundaryError("CONTROL_NOT_AVAILABLE", 404);
+    }
+    if (
+      input.action === "move-student" ||
+      input.action === "remove-student" ||
+      input.action === "reset-student"
+    ) {
+      const result = await client.rpc("manage_teacher_roster", {
+        p_cohort_id: input.cohortId,
+        p_action: input.action,
+        p_student_id: input.studentId,
+        p_target_group_id: input.action === "move-student"
+          ? input.groupId
+          : null,
+        p_request_key: input.requestKey,
+      });
+      if (result.error) throw new Error("CONTROL_NOT_AVAILABLE");
+      return jsonResponse(result.data, 200, headers);
     }
     const groupId = "groupId" in input ? input.groupId : null;
     const studentId = "studentId" in input ? input.studentId : null;
@@ -140,6 +174,22 @@ Deno.serve(async (request) => {
       });
       if (result.error) throw new Error("CONTROL_NOT_AVAILABLE");
       return jsonResponse({ affected: 0, actionState: "closed" }, 200, headers);
+    }
+
+    if (input.action === "set-group-join") {
+      const result = await client.rpc("set_group_join_code_enabled", {
+        p_cohort_id: input.cohortId,
+        p_group_id: input.groupId,
+        p_enabled: input.enabled,
+        p_request_key: input.requestKey,
+      });
+      if (result.error || result.data !== true) {
+        throw new Error("CONTROL_NOT_AVAILABLE");
+      }
+      return jsonResponse({
+        affected: 1,
+        actionState: input.enabled ? "enabled" : "disabled",
+      }, 200, headers);
     }
 
     if (input.action === "issue-recovery") {

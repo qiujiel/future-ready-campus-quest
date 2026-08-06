@@ -3,29 +3,13 @@ import type {
   TeacherControlCommand,
   TeacherControlReceipt,
 } from "../../shared/api/contracts";
-import { getSupabaseClient } from "../../shared/api/supabase";
+import { supabaseTeacherControlGateway } from "../../teacher/api/teacherControlGateway";
 import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
 
 export interface TeacherControlGateway {
   execute(command: TeacherControlCommand): Promise<TeacherControlReceipt>;
 }
-
-const supabaseTeacherControlGateway: TeacherControlGateway = {
-  async execute(command) {
-    const result = await getSupabaseClient().functions.invoke(
-      "teacher-controls",
-      {
-        body: {
-          ...command,
-          requestKey: crypto.randomUUID(),
-        },
-      },
-    );
-    if (result.error) throw new Error("CONTROL_NOT_AVAILABLE");
-    return result.data as TeacherControlReceipt;
-  },
-};
 
 export function SessionControls({
   cohortId,

@@ -85,8 +85,8 @@ it("completes a valid join against real Auth and database boundaries", async () 
       .insert({
         teacher_id: teacherId,
         title: "Synthetic integration cohort",
-        group_count: 1,
-        group_capacity: 1,
+        group_count: 2,
+        group_capacity: 2,
       })
       .select("id")
       .single();
@@ -118,6 +118,11 @@ it("completes a valid join against real Auth and database boundaries", async () 
           joinCode: expect.stringMatching(/^[2-9A-HJ-NP-Z]{8}$/),
           enabled: true,
         },
+        {
+          groupNumber: 2,
+          joinCode: expect.stringMatching(/^[2-9A-HJ-NP-Z]{8}$/),
+          enabled: true,
+        },
       ],
     });
     const joinCode = String(opened.data.groups[0].joinCode);
@@ -136,7 +141,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
       }),
     });
     const payload = await response.json();
-    expect(response.status).toBe(200);
+    expect(response.status, JSON.stringify(payload)).toBe(200);
     expect(payload.identity).toMatchObject({
       cohortId,
       groupNumber: 1,
@@ -151,24 +156,26 @@ it("completes a valid join against real Auth and database boundaries", async () 
     if (readiness.error) throw readiness.error;
     expect(readiness.data.readiness).toMatchObject({
       cohortId,
-      expected: 1,
+      expected: 4,
       joined: 1,
       joining: {
         open: true,
         studentUrl: "http://127.0.0.1:4173/#/join",
       },
-      groups: [
+    });
+    expect(
+      readiness.data.readiness.groups.find(
+        (group: { groupNumber: number }) => group.groupNumber === 1,
+      ),
+    ).toMatchObject({
+      groupNumber: 1,
+      joinCode,
+      joinEnabled: true,
+      students: [
         {
-          groupNumber: 1,
-          joinCode,
-          joinEnabled: true,
-          students: [
-            {
-              studentId,
-              displayName: "Synthetic Integration Learner",
-              activityStatus: "joined",
-            },
-          ],
+          studentId,
+          displayName: "Synthetic Integration Learner",
+          activityStatus: "joined",
         },
       ],
     });
@@ -197,6 +204,96 @@ it("completes a valid join against real Auth and database boundaries", async () 
       .single();
     if (stored.error) throw stored.error;
     expect(stored.data.real_name).toBe("Synthetic Integration Learner");
+
+    const targetGroupId = String(opened.data.groups[1].groupId);
+    const moved = await teacherClient.functions.invoke("teacher-controls", {
+      body: {
+        action: "move-student",
+        cohortId,
+        studentId,
+        groupId: targetGroupId,
+        requestKey: crypto.randomUUID(),
+      },
+    });
+    if (moved.error) throw moved.error;
+    expect(moved.data).toMatchObject({ affected: 1, actionState: "applied" });
+
+    const afterMove = await teacherClient.functions.invoke(
+      "teacher-dashboard",
+      { body: { cohortId, view: "readiness" } },
+    );
+    if (afterMove.error) throw afterMove.error;
+    expect(
+      afterMove.data.readiness.groups.find(
+        (group: { groupNumber: number }) => group.groupNumber === 2,
+      ).students[0],
+    ).toMatchObject({ studentId, displayName: "Synthetic Integration Learner" });
+
+    const disabled = await teacherClient.functions.invoke("teacher-controls", {
+      body: {
+        action: "set-group-join",
+        cohortId,
+        groupId: String(opened.data.groups[0].groupId),
+        enabled: false,
+        requestKey: crypto.randomUUID(),
+      },
+    });
+    if (disabled.error) throw disabled.error;
+    expect(disabled.data).toMatchObject({ affected: 1, actionState: "disabled" });
+    const usersBeforeDisabledJoin = await authUserCount();
+    const disabledJoin = await fetch(`${apiUrl}/functions/v1/join-cohort`, {
+      method: "POST",
+      headers: {
+        Origin: allowedOrigin,
+        apikey: anonKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        joinCode,
+        displayName: "Rejected Disabled Learner",
+        requestKey: crypto.randomUUID(),
+      }),
+    });
+    expect(disabledJoin.status).toBe(410);
+    expect(await disabledJoin.json()).toEqual({ error: "GROUP_JOIN_CLOSED" });
+    expect(await authUserCount()).toBe(usersBeforeDisabledJoin);
+
+    const recovery = await teacherClient.functions.invoke("teacher-controls", {
+      body: {
+        action: "issue-recovery",
+        cohortId,
+        studentId,
+        requestKey: crypto.randomUUID(),
+      },
+    });
+    if (recovery.error) throw recovery.error;
+    expect(recovery.data.recoveryUrl).toMatch(
+      /^http:\/\/127\.0\.0\.1:4173\/#\/recover\/[A-Za-z0-9_-]+$/,
+    );
+
+    const removed = await teacherClient.functions.invoke("teacher-controls", {
+      body: {
+        action: "remove-student",
+        cohortId,
+        studentId,
+        requestKey: crypto.randomUUID(),
+      },
+    });
+    if (removed.error) throw removed.error;
+    expect(removed.data).toMatchObject({ affected: 1, actionState: "applied" });
+
+    const afterRemoval = await teacherClient.functions.invoke(
+      "teacher-dashboard",
+      { body: { cohortId, view: "readiness" } },
+    );
+    if (afterRemoval.error) throw afterRemoval.error;
+    expect(afterRemoval.data.readiness.joined).toBe(0);
+    const removedStudentCohorts = await studentClient
+      .from("cohorts")
+      .select("id")
+      .eq("id", cohortId);
+    if (removedStudentCohorts.error) throw removedStudentCohorts.error;
+    expect(removedStudentCohorts.data).toEqual([]);
   } finally {
     if (studentId) await admin.auth.admin.deleteUser(studentId, false);
     if (cohortId) await admin.from("cohorts").delete().eq("id", cohortId);

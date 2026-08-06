@@ -305,6 +305,23 @@ export type TeacherControlCommand =
   | { action: "open-join"; cohortId: string }
   | { action: "close-join"; cohortId: string }
   | {
+      action: "set-group-join";
+      cohortId: string;
+      groupId: string;
+      enabled: boolean;
+    }
+  | {
+      action: "move-student";
+      cohortId: string;
+      studentId: string;
+      groupId: string;
+    }
+  | {
+      action: "remove-student" | "reset-student";
+      cohortId: string;
+      studentId: string;
+    }
+  | {
       action: "issue-recovery";
       cohortId: string;
       studentId: string;

@@ -158,7 +158,15 @@ export function TeacherShell({
         active={summary.active}
         completed={summary.completed}
       />
-      {readiness ? <ClassroomReadiness report={readiness} /> : null}
+      {readiness ? (
+        <ClassroomReadiness
+          report={readiness}
+          onChanged={async () => {
+            if (!gateway.getReadiness) return;
+            setReadiness(await gateway.getReadiness(cohortId));
+          }}
+        />
+      ) : null}
       <div className="teacher-dashboard-grid">
         <ConceptHeatmap
           concepts={summary.conceptAggregates}

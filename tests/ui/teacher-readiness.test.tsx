@@ -5,6 +5,8 @@ import {
   useLocation,
 } from "react-router-dom";
 import { TeacherSetupPage } from "../../src/features/teacher/TeacherSetupPage";
+import { ClassroomReadiness } from "../../src/features/teacher/ClassroomReadiness";
+import type { TeacherControlGateway } from "../../src/features/teacher/SessionControls";
 import { TeacherShell } from "../../src/features/teacher/TeacherShell";
 import type { AuthGateway } from "../../src/shared/api/authGateway";
 import type {
@@ -169,56 +171,67 @@ const summary: TeacherDashboardSummary = {
   generatedAt: "2026-08-06T01:05:00.000Z",
 };
 
+const readiness = {
+  cohortId,
+  title: "Thursday seminar",
+  expected: 6,
+  joined: 2,
+  active: 1,
+  started: 1,
+  submitted: 1,
+  incomplete: 1,
+  errors: 0,
+  joining: {
+    open: true,
+    expiresAt: "2026-08-06T01:15:00.000Z",
+    studentUrl: "https://example.invalid/future-ready-campus-quest/#/join",
+  },
+  groups: [
+    {
+      groupId: "60000000-0000-4000-8000-000000000001",
+      groupNumber: 1,
+      displayName: "Group 1",
+      capacity: 3,
+      joinCode: "HSNY46S4",
+      joinEnabled: true,
+      students: [
+        {
+          studentId: "20000000-0000-4000-8000-000000000001",
+          displayName: "Synthetic Learner One",
+          joinedAt: "2026-08-06T01:01:00.000Z",
+          lastActiveAt: null,
+          activityStatus: "joined" as const,
+          currentPhase: null,
+        },
+        {
+          studentId: "20000000-0000-4000-8000-000000000002",
+          displayName: "Synthetic Learner Two",
+          joinedAt: "2026-08-06T01:02:00.000Z",
+          lastActiveAt: "2026-08-06T01:04:00.000Z",
+          activityStatus: "incomplete" as const,
+          currentPhase: "diagnostic" as const,
+        },
+      ],
+    },
+    {
+      groupId: "60000000-0000-4000-8000-000000000002",
+      groupNumber: 2,
+      displayName: "Group 2",
+      capacity: 3,
+      joinCode: "KZDLXW4Q",
+      joinEnabled: true,
+      students: [],
+    },
+  ],
+};
+
 it("shows group assignments and student readiness details", async () => {
   const gateway = {
     async getSummary() {
       return summary;
     },
     async getReadiness() {
-      return {
-        cohortId,
-        title: "Thursday seminar",
-        expected: 6,
-        joined: 2,
-        active: 1,
-        started: 1,
-        submitted: 1,
-        incomplete: 1,
-        errors: 0,
-        joining: {
-          open: true,
-          expiresAt: "2026-08-06T01:15:00.000Z",
-          studentUrl: "https://example.invalid/future-ready-campus-quest/#/join",
-        },
-        groups: [
-          {
-            groupId: "60000000-0000-4000-8000-000000000001",
-            groupNumber: 1,
-            displayName: "Group 1",
-            capacity: 3,
-            joinCode: "HSNY46S4",
-            joinEnabled: true,
-            students: [
-              {
-                studentId: "20000000-0000-4000-8000-000000000001",
-                displayName: "Synthetic Learner One",
-                joinedAt: "2026-08-06T01:01:00.000Z",
-                lastActiveAt: "2026-08-06T01:04:00.000Z",
-                activityStatus: "submitted" as const,
-                currentPhase: "reflection" as const,
-              },
-              {
-                studentId: "20000000-0000-4000-8000-000000000002",
-                displayName: "Synthetic Learner Two",
-                joinedAt: "2026-08-06T01:02:00.000Z",
-                lastActiveAt: null,
-                activityStatus: "joined" as const,
-                currentPhase: null,
-              },
-            ],
-          },
-        ],
-      };
+      return readiness;
     },
   } as TeacherGateway & {
     getReadiness(): Promise<unknown>;
@@ -232,7 +245,112 @@ it("shows group assignments and student readiness details", async () => {
   expect(screen.getByText("Synthetic Learner One")).toBeVisible();
   expect(screen.getByText("Synthetic Learner Two")).toBeVisible();
   expect(screen.getByText(/2 of 6 students joined/i)).toBeVisible();
-  expect(screen.getAllByText(/submitted/i)).toHaveLength(2);
+  expect(screen.getAllByText(/incomplete/i)).toHaveLength(2);
   expect(screen.getByText(/not started/i)).toBeVisible();
   await waitFor(() => expect(screen.getAllByText("HSNY46S4")).toHaveLength(2));
+});
+
+it("confirms disabling one group code through the audited control boundary", async () => {
+  const execute = vi.fn(async () => ({ affected: 1, actionState: "applied" }));
+  const gateway: TeacherControlGateway = { execute };
+  const changed = vi.fn();
+  render(
+    <ClassroomReadiness
+      report={readiness}
+      controlGateway={gateway}
+      onChanged={changed}
+    />,
+  );
+
+  fireEvent.click(
+    screen.getByRole("button", { name: /disable joining for group 1/i }),
+  );
+  expect(execute).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole("button", { name: /^confirm disable group joining$/i }),
+  );
+
+  await waitFor(() =>
+    expect(execute).toHaveBeenCalledWith({
+      action: "set-group-join",
+      cohortId,
+      groupId: "60000000-0000-4000-8000-000000000001",
+      enabled: false,
+    }),
+  );
+  expect(changed).toHaveBeenCalled();
+});
+
+it("offers confirmed move, remove, reset, and recovery controls", async () => {
+  const execute = vi.fn(async (command) =>
+    command.action === "issue-recovery"
+      ? {
+          affected: 1,
+          recoveryUrl: "https://example.invalid/#/recover/opaque-token",
+        }
+      : { affected: 1, actionState: "applied" },
+  );
+  render(
+    <ClassroomReadiness report={readiness} controlGateway={{ execute }} />,
+  );
+
+  fireEvent.change(
+    screen.getByLabelText(/move synthetic learner one to/i),
+    { target: { value: "60000000-0000-4000-8000-000000000002" } },
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: /^move synthetic learner one$/i }),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: /^confirm move student$/i }),
+  );
+  await waitFor(() =>
+    expect(execute).toHaveBeenCalledWith({
+      action: "move-student",
+      cohortId,
+      studentId: "20000000-0000-4000-8000-000000000001",
+      groupId: "60000000-0000-4000-8000-000000000002",
+    }),
+  );
+
+  fireEvent.click(
+    screen.getByRole("button", { name: /reset synthetic learner two/i }),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: /^confirm reset student activity$/i }),
+  );
+  await waitFor(() =>
+    expect(execute).toHaveBeenCalledWith({
+      action: "reset-student",
+      cohortId,
+      studentId: "20000000-0000-4000-8000-000000000002",
+    }),
+  );
+
+  fireEvent.click(
+    screen.getByRole("button", { name: /issue recovery for synthetic learner two/i }),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: /^confirm issue recovery$/i }),
+  );
+  expect(
+    await screen.findByRole("link", { name: /student recovery link/i }),
+  ).toHaveAttribute(
+    "href",
+    "https://example.invalid/#/recover/opaque-token",
+  );
+
+  fireEvent.click(
+    screen.getByRole("button", { name: /^remove synthetic learner one$/i }),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: /^confirm remove student$/i }),
+  );
+  await waitFor(() =>
+    expect(execute).toHaveBeenCalledWith({
+      action: "remove-student",
+      cohortId,
+      studentId: "20000000-0000-4000-8000-000000000001",
+    }),
+  );
 });
