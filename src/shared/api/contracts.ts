@@ -304,6 +304,7 @@ export interface ClassroomReadinessReport {
 export type TeacherControlCommand =
   | { action: "open-join"; cohortId: string }
   | { action: "close-join"; cohortId: string }
+  | { action: "launch-quest"; cohortId: string }
   | {
       action: "set-group-join";
       cohortId: string;

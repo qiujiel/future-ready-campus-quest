@@ -32,6 +32,8 @@ export function SessionControls({
       : "Confirm pause new quest starts"
     : pending?.action === "extend-phase"
       ? "Confirm final phase extension"
+      : pending?.action === "launch-quest"
+        ? "Confirm launch quest"
       : pending?.action === "open-join"
         ? "Confirm open class joining"
         : pending?.action === "close-join"
@@ -62,6 +64,11 @@ export function SessionControls({
       <h2 id="session-controls">Session controls</h2>
       <p>{activeStudents} students are currently active.</p>
       <div className="hero-actions">
+        <Button
+          onClick={() => setPending({ action: "launch-quest", cohortId })}
+        >
+          Launch quest
+        </Button>
         <Button
           variant="secondary"
           onClick={() =>
@@ -134,12 +141,15 @@ export function SessionControls({
         onClose={() => setPending(null)}
       >
         <p>
-          This class-wide change applies only to <strong>{cohortTitle}</strong>
-          {" "}and will be recorded in the teacher audit.
+          {pending?.action === "launch-quest"
+            ? "This creates a real saved attempt for every joined student and uses the active 24-item question bank."
+            : <>This class-wide change applies only to <strong>{cohortTitle}</strong>{" "}and will be recorded in the teacher audit.</>}
         </p>
         <Button busy={busy} onClick={confirm}>
           {pending?.action === "extend-phase"
             ? `Confirm extension for ${cohortTitle}`
+            : pending?.action === "launch-quest"
+              ? `Confirm launch quest for ${cohortTitle}`
             : pending?.action === "set-quest-starts" && !pending.allowed
               ? `Confirm pause for ${cohortTitle}`
               : `Confirm ${title.toLowerCase().replace("confirm ", "")} for ${cohortTitle}`}

@@ -73,3 +73,34 @@ it("offers only a bounded five-minute phase extension", async () => {
   );
   expect(screen.queryByText(/token/i)).not.toBeInTheDocument();
 });
+
+it("requires named confirmation before launching real student attempts", async () => {
+  const execute = vi.fn(async () => ({ affected: 6, actionState: "launched" }));
+  render(
+    <SessionControls
+      cohortId="d3000000-0000-4000-8000-000000000001"
+      cohortTitle="ICT 2A"
+      activeStudents={0}
+      gateway={{ execute }}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: /launch quest/i }));
+  expect(execute).not.toHaveBeenCalled();
+  expect(
+    screen.getByText(/creates a real saved attempt for every joined student/i),
+  ).toBeVisible();
+  fireEvent.click(
+    screen.getByRole("button", { name: /^confirm launch quest for ICT 2A$/i }),
+  );
+
+  await waitFor(() =>
+    expect(execute).toHaveBeenCalledWith({
+      action: "launch-quest",
+      cohortId: "d3000000-0000-4000-8000-000000000001",
+    }),
+  );
+  expect(screen.getByRole("status")).toHaveTextContent(
+    /confirmed.*6 active students affected/i,
+  );
+});

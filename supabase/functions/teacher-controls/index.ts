@@ -20,6 +20,7 @@ const base = { cohortId: z.uuid(), requestKey: z.uuid() };
 const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("open-join"), ...base }),
   z.object({ action: z.literal("close-join"), ...base }),
+  z.object({ action: z.literal("launch-quest"), ...base }),
   z.object({
     action: z.literal("set-group-join"),
     ...base,
@@ -190,6 +191,15 @@ Deno.serve(async (request) => {
         affected: 1,
         actionState: input.enabled ? "enabled" : "disabled",
       }, 200, headers);
+    }
+
+    if (input.action === "launch-quest") {
+      const result = await client.rpc("launch_cohort_quest", {
+        p_cohort_id: input.cohortId,
+        p_request_key: input.requestKey,
+      });
+      if (result.error) throw new Error("CONTROL_NOT_AVAILABLE");
+      return jsonResponse(result.data, 200, headers);
     }
 
     if (input.action === "issue-recovery") {

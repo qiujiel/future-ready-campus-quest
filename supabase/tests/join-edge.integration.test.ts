@@ -11,6 +11,44 @@ const anonKey = required("TEST_SUPABASE_ANON_KEY");
 const serviceRoleKey = required("TEST_SUPABASE_SERVICE_ROLE_KEY");
 const allowedOrigin = "http://127.0.0.1:4173";
 
+function syntheticContentBank() {
+  return {
+    version: "public-synthetic-edge-integration-v1",
+    items: Array.from({ length: 8 }, (_, conceptIndex) =>
+      Array.from({ length: 3 }, (_, questionIndex) => {
+        const conceptNumber = conceptIndex + 1;
+        const questionNumber = questionIndex + 1;
+        return {
+          id: `C${conceptNumber}-Q${questionNumber}`,
+          conceptId: `C${conceptNumber}`,
+          form: questionNumber === 1
+            ? "diagnostic"
+            : questionNumber === 2
+              ? "practice"
+              : "final",
+          stem:
+            `Synthetic integration item ${conceptNumber}-${questionNumber} contains no protected course content.`,
+          interaction: {
+            kind: "single-choice",
+            options: [
+              { id: "A", text: "Synthetic option A" },
+              { id: "B", text: "Synthetic option B" },
+              { id: "C", text: "Synthetic option C" },
+            ],
+            correctOptionIds: ["A"],
+          },
+          rationale:
+            "Synthetic option A is marked correct only for integration testing.",
+          misconceptionTags: [`C${conceptNumber}-M1`],
+          sourceRefs: [
+            { document: "overview-ict", pageStart: conceptNumber },
+          ],
+        };
+      }),
+    ).flat(),
+  };
+}
+
 async function authUserCount(): Promise<number> {
   const admin = createClient(apiUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -76,6 +114,11 @@ it("completes a valid join against real Auth and database boundaries", async () 
   let studentId: string | undefined;
 
   try {
+    const content = await admin.rpc(
+      "import_learning_content",
+      { payload: syntheticContentBank() },
+    );
+    if (content.error) throw content.error;
     const role = await admin
       .from("user_roles")
       .insert({ user_id: teacherId, role: "teacher" });
@@ -228,6 +271,90 @@ it("completes a valid join against real Auth and database boundaries", async () 
         (group: { groupNumber: number }) => group.groupNumber === 2,
       ).students[0],
     ).toMatchObject({ studentId, displayName: "Synthetic Integration Learner" });
+
+    const launched = await teacherClient.functions.invoke("teacher-controls", {
+      body: {
+        action: "launch-quest",
+        cohortId,
+        requestKey: crypto.randomUUID(),
+      },
+    });
+    if (launched.error) throw launched.error;
+    expect(launched.data).toMatchObject({ affected: 1, actionState: "launched" });
+
+    const ensuredAttempt = await studentClient.rpc(
+      "ensure_student_quest_attempt",
+    );
+    if (ensuredAttempt.error || !ensuredAttempt.data) {
+      throw ensuredAttempt.error ?? new Error("attempt was not created");
+    }
+    const attemptId = String(ensuredAttempt.data);
+    let reachedReflection = false;
+    for (let step = 0; step < 32; step += 1) {
+      const state = await studentClient
+        .from("quest_attempts")
+        .select("status,current_phase,last_accepted_sequence")
+        .eq("id", attemptId)
+        .single();
+      if (state.error) throw state.error;
+      if (state.data.current_phase === "reflection") {
+        reachedReflection = true;
+        break;
+      }
+      const next = await studentClient.functions.invoke("get-next-item", {
+        body: { attemptId },
+      });
+      if (next.error) throw next.error;
+      const item = next.data.item as {
+        assignmentId: string;
+        interaction: { options: Array<{ id: string }> };
+      } | null;
+      if (!item) {
+        throw new Error(
+          `integration item was not available at step ${step} in ${state.data.current_phase}`,
+        );
+      }
+      expect(JSON.stringify(item)).not.toContain("correctOptionIds");
+      const submitted = await studentClient.functions.invoke(
+        "submit-response",
+        {
+          body: {
+            attemptId,
+            assignmentId: item.assignmentId,
+            idempotencyKey: crypto.randomUUID(),
+            selectedOptionIds: [String(item.interaction.options[0]?.id)],
+            clientSequence: Number(state.data.last_accepted_sequence) + 1,
+          },
+        },
+      );
+      if (submitted.error) throw submitted.error;
+      expect(submitted.data.result.correct).toBe(true);
+    }
+    expect(reachedReflection).toBe(true);
+
+    const prompt = await studentClient.functions.invoke("complete-quest", {
+      body: { action: "prompt", attemptId },
+    });
+    if (prompt.error) throw prompt.error;
+    expect(prompt.data.prompt.conceptId).toMatch(/^C[1-8]$/);
+    const completed = await studentClient.functions.invoke("complete-quest", {
+      body: {
+        action: "complete",
+        attemptId,
+        idempotencyKey: crypto.randomUUID(),
+        reflectionChoice: "apply",
+        reflectionNote: "Synthetic integration reflection.",
+      },
+    });
+    if (completed.error) throw completed.error;
+    expect(completed.data.result.attemptId).toBe(attemptId);
+
+    const teacherSummary = await teacherClient.functions.invoke(
+      "teacher-dashboard",
+      { body: { cohortId } },
+    );
+    if (teacherSummary.error) throw teacherSummary.error;
+    expect(teacherSummary.data.summary.completed).toBe(1);
 
     const disabled = await teacherClient.functions.invoke("teacher-controls", {
       body: {
