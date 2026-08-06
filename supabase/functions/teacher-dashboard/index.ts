@@ -19,7 +19,7 @@ import type {
 const requestSchema = z.object({
   cohortId: z.uuid(),
   studentId: z.uuid().optional(),
-  view: z.literal("readiness").optional(),
+  view: z.enum(["readiness", "question-bank"]).optional(),
 });
 
 Deno.serve(async (request) => {
@@ -62,6 +62,20 @@ Deno.serve(async (request) => {
         `${frontendAppUrl()}/#/join`,
       );
       return jsonResponse({ readiness }, 200, headers);
+    }
+
+    if (input.view === "question-bank") {
+      const result = await client.rpc(
+        "get_teacher_question_bank",
+        { p_cohort_id: input.cohortId },
+      );
+      if (result.error || !result.data) {
+        throw new TeacherDashboardBoundaryError(
+          "COHORT_NOT_AVAILABLE",
+          404,
+        );
+      }
+      return jsonResponse({ questionBank: result.data }, 200, headers);
     }
 
     const repository: TeacherDashboardRepository = {

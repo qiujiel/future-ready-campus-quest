@@ -221,3 +221,20 @@ it("shows Group Studio while waiting and resumes when a server attempt appears",
     ).toBeVisible(),
   );
 });
+
+it("explains an expired session without exposing technical details", async () => {
+  const gateway = journeyGateway();
+  gateway.loadContext = vi.fn(async () => {
+    throw new Error("STUDENT_SESSION_NOT_AVAILABLE");
+  });
+  render(<QuestEntryPage gateway={gateway} groupGateway={groupGateway()} />);
+
+  expect(
+    await screen.findByRole("heading", {
+      name: /your campus place needs attention/i,
+    }),
+  ).toBeVisible();
+  expect(screen.getByText(/student session has expired/i)).toBeVisible();
+  expect(screen.getByText(/ask your teacher for a recovery link/i)).toBeVisible();
+  expect(screen.queryByText(/STUDENT_SESSION/i)).not.toBeInTheDocument();
+});

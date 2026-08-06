@@ -65,6 +65,28 @@ it("loads the classroom-readiness view through the trusted boundary", async () =
   });
 });
 
+it("loads the complete question bank only through the teacher boundary", async () => {
+  const questionBank = {
+    versionKey: "teacher-reviewed-v1",
+    itemCount: 24,
+    conceptCount: 8,
+    items: [],
+  };
+  invoke.mockResolvedValueOnce({ data: { questionBank }, error: null });
+
+  await expect(
+    supabaseTeacherGateway.getQuestionBank?.(
+      "d3000000-0000-4000-8000-000000000001",
+    ),
+  ).resolves.toEqual(questionBank);
+  expect(invoke).toHaveBeenCalledWith("teacher-dashboard", {
+    body: {
+      cohortId: "d3000000-0000-4000-8000-000000000001",
+      view: "question-bank",
+    },
+  });
+});
+
 it("preserves the neutral cohort denial returned by the boundary", async () => {
   invoke.mockResolvedValueOnce({
     data: null,

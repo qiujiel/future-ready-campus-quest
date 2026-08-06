@@ -240,6 +240,28 @@ it("completes a valid join against real Auth and database boundaries", async () 
     );
     expect(deniedReadiness.error).not.toBeNull();
 
+    const questionBank = await teacherClient.functions.invoke(
+      "teacher-dashboard",
+      { body: { cohortId, view: "question-bank" } },
+    );
+    if (questionBank.error) throw questionBank.error;
+    expect(questionBank.data.questionBank).toMatchObject({
+      itemCount: 24,
+      conceptCount: 8,
+    });
+    expect(questionBank.data.questionBank.items).toHaveLength(24);
+    expect(questionBank.data.questionBank.items[0]).toHaveProperty(
+      "correctResponse",
+    );
+    expect(
+      JSON.stringify(questionBank.data.questionBank.items[0].interaction),
+    ).not.toContain("correctOptionIds");
+    const deniedQuestionBank = await studentClient.functions.invoke(
+      "teacher-dashboard",
+      { body: { cohortId, view: "question-bank" } },
+    );
+    expect(deniedQuestionBank.error).not.toBeNull();
+
     const stored = await teacherClient
       .from("student_private_profiles")
       .select("real_name,cohort_id,group_id")

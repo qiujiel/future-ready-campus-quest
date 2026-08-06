@@ -301,6 +301,24 @@ export interface ClassroomReadinessReport {
   groups: TeacherReadinessGroup[];
 }
 
+export interface TeacherQuestionBankEntry {
+  itemId: string;
+  conceptId: ConceptId;
+  form: "diagnostic" | "practice" | "final";
+  stem: string;
+  interaction: LearningInteractionPayload;
+  correctResponse: string[] | Record<string, string>;
+  rationale: string;
+  sourcePageLabels: string[];
+}
+
+export interface TeacherQuestionBank {
+  versionKey: string;
+  itemCount: 24;
+  conceptCount: 8;
+  items: TeacherQuestionBankEntry[];
+}
+
 export type TeacherControlCommand =
   | { action: "open-join"; cohortId: string }
   | { action: "close-join"; cohortId: string }

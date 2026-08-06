@@ -13,6 +13,7 @@ import { ClassroomReadiness } from "./ClassroomReadiness";
 import { ConceptHeatmap } from "./ConceptHeatmap";
 import { GroupDrilldown } from "./GroupDrilldown";
 import { MostMissedItems } from "./MostMissedItems";
+import { QuestionBank } from "./QuestionBank";
 import { SessionControls } from "./SessionControls";
 import { ExportPanel } from "./ExportPanel";
 import { StudentDrilldown } from "./StudentDrilldown";
@@ -184,6 +185,7 @@ export function TeacherShell({
         cohortTitle="Current cohort"
         activeStudents={summary.active}
       />
+      <QuestionBank cohortId={summary.cohortId} gateway={gateway} />
       <ExportPanel cohortId={summary.cohortId} />
     </main>
   );
