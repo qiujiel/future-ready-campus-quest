@@ -223,7 +223,7 @@ jobs:
         if: ${{ inputs.release_mode == 'bootstrap' }}
         env:
           BOOTSTRAP_AUTHORIZATION_ID: ${{ inputs.bootstrap_authorization_id }}
-          PRODUCTION_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY }}
+          PRODUCTION_SUPABASE_SECRET_KEY: ${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node scripts/production-bootstrap-preflight.mjs
 

@@ -458,7 +458,7 @@ const assertInitialBootstrapPolicy = ({ backend, runbook, github, rollback, revi
   ]);
 
   assertPhrases(github, [
-    "PRODUCTION_SUPABASE_SERVICE_ROLE_KEY",
+    "PRODUCTION_SUPABASE_SECRET_KEY",
     "production-backend only",
     "production-readiness",
     "github-pages",
@@ -468,7 +468,7 @@ const assertInitialBootstrapPolicy = ({ backend, runbook, github, rollback, revi
     "Rotate it after any unintended disclosure",
   ]);
   assertPatterns(github, [
-    /PRODUCTION_SUPABASE_SERVICE_ROLE_KEY[\s\S]*server-only[\s\S]*bootstrap emptiness preflight/is,
+    /PRODUCTION_SUPABASE_SECRET_KEY[\s\S]*server-only[\s\S]*bootstrap emptiness preflight/is,
     /never[\s\S]*repository variable[\s\S]*repository secret/is,
   ]);
 
