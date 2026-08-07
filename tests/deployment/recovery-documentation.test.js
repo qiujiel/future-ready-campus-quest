@@ -436,6 +436,64 @@ const assertReadinessReviewPolicy = (review) => {
   ]);
 };
 
+const assertInitialBootstrapPolicy = ({ backend, runbook, github, rollback, review }) => {
+  assertPhrases(backend, [
+    "release_mode",
+    "bootstrap_authorization_id",
+    "frcq-bootstrap-YYYYMMDDTHHMMSSZ-xxxxxxxx",
+    "zero application state",
+    "bootstrap is self-disabling",
+    "upgrade requires the four recovery values",
+    "no reset, deletion, or migration-history repair",
+  ]);
+  assertPatterns(backend, [
+    /bootstrap[\s\S]*protected emptiness preflight[\s\S]*before[\s\S]*migration/is,
+    /release_mode[\s\S]*upgrade[\s\S]*bootstrap/is,
+  ]);
+
+  assertPhrases(runbook, [
+    "after successful bootstrap, content import, and smoke-fixture setup",
+    "before the next backend release",
+    "must not be fabricated for an empty project",
+  ]);
+
+  assertPhrases(github, [
+    "PRODUCTION_SUPABASE_SERVICE_ROLE_KEY",
+    "production-backend only",
+    "production-readiness",
+    "github-pages",
+    "frontend values",
+    "logs",
+    "release records",
+    "Rotate it after any unintended disclosure",
+  ]);
+  assertPatterns(github, [
+    /PRODUCTION_SUPABASE_SERVICE_ROLE_KEY[\s\S]*server-only[\s\S]*bootstrap emptiness preflight/is,
+    /never[\s\S]*repository variable[\s\S]*repository secret/is,
+  ]);
+
+  assertPhrases(rollback, [
+    "Failed initial bootstrap",
+    "stays on HOLD",
+    "separately approved forward fix",
+    "empty-project recreation",
+    "no reset, deletion, or migration-history repair",
+    "bootstrap evidence cannot restore data",
+  ]);
+
+  assertPhrases(review, [
+    "Owner review exception — 2026-08-07",
+    "waived the second-person PR and environment review",
+    "This deployment is not independently reviewed",
+    "automated checks remain mandatory",
+    "project-identity gates remain mandatory",
+    "bootstrap preflight evidence",
+  ]);
+  rejectPatterns(review, [
+    /this deployment (?:is|was|has been) independently reviewed/i,
+  ]);
+};
+
 describe("Free-plan recovery operations", () => {
   it("documents complete encrypted backup custody and hosted rehearsal", async () => {
     const runbook = await read("free-plan-recovery.md");
@@ -499,6 +557,22 @@ describe("Free-plan recovery operations", () => {
   it("protects the complete checklist and explicit HOLD blockers", async () => {
     assertChecklistPolicy(await read("release-checklist.md"));
     assertReadinessReviewPolicy(await read("deployment-readiness-review.md"));
+  });
+
+  it("protects initial bootstrap, credential scope, and the owner review exception", async () => {
+    const documents = {
+      backend: await read("backend-release.md"),
+      runbook: await read("free-plan-recovery.md"),
+      github: await read("github-environments.md"),
+      rollback: await read("rollback.md"),
+      review: await read("deployment-readiness-review.md"),
+    };
+    assertInitialBootstrapPolicy(documents);
+
+    expect(() => assertInitialBootstrapPolicy({
+      ...documents,
+      review: `${documents.review}\nThis deployment was independently reviewed.`,
+    })).toThrow();
   });
 
   it("rejects removal or contradiction of each binding operational control", async () => {

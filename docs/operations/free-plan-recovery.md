@@ -16,6 +16,12 @@ project and not the load-test project. Never restore production data into
 Every remote phase below requires its named approval. A repository change,
 release record, or earlier approval does not grant a later approval.
 
+This recovery procedure begins only after successful bootstrap, content import, and smoke-fixture setup
+and must finish before the next backend release. It
+must not be fabricated for an empty project: before the initial bootstrap there
+is no application or classroom state to back up or restore. Bootstrap emptiness
+evidence is not a recovery package and cannot satisfy an upgrade release.
+
 ## Required tools and private custody
 
 Use the approved release commit, its pinned Supabase CLI version `2.110.0`, the

@@ -9,18 +9,30 @@ Reading this document or merging its workflow does not authorize a deployment.
 1. Complete the configuration inventory in `github-environments.md`.
 2. Confirm the release commit is on `main`, signed off by the release owner,
    and contains migrations through `20260806000700`.
-3. This project selected Supabase Free plan, so the only accepted recovery path
-   for this workflow is the verified Free-plan encrypted logical package in
-   `free-plan-recovery.md`, with both custody copies read back and matched to its
-   recorded digest. A provider-managed backup or PITR is not an alternative to
-   the four evidence inputs enforced by this workflow.
-4. Complete and independently review a restore rehearsal in a separate hosted
+3. For every normal upgrade, this project selected Supabase Free plan, so the
+   only accepted recovery path is the verified Free-plan encrypted logical
+   package in `free-plan-recovery.md`, with both custody copies read back and
+   matched to its recorded digest. A provider-managed backup or PITR is not an
+   alternative to the four evidence inputs enforced by this workflow.
+4. For every normal upgrade, complete and independently review a restore rehearsal in a separate hosted
    non-production project. For the Free-plan path, the target must be a
    temporary Singapore recovery project and the database, Auth, RLS, retention,
    and private `group-images` validation must pass. Never rehearse against
    production or `vadyhuipwbtgbzpeisbn`.
 5. Confirm joins are closed and quest starts are paused for the release window.
 6. Confirm the previous compatible Edge Function commit and the rollback owner.
+
+The sole exception to items 3 and 4 is the first production bootstrap, before
+any application data exists. It is permitted only when the protected emptiness
+preflight proves zero application state across migration history, application
+relations/functions, Auth, Storage, and Edge Functions. After the first
+successful migration, bootstrap is self-disabling: the same preflight detects
+the initialized project and fails closed. Every later `upgrade` requires the
+four recovery values and the normal recovery process. This exception never
+authorizes a reset, deletion, or migration-history repair.
+
+Operational shorthand: upgrade requires the four recovery values; bootstrap
+requires verified emptiness. There is no reset, deletion, or migration-history repair.
 
 Any later plan change requires a separately designed and validated evidence method,
 workflow discriminator, tests, and approval procedure before a
@@ -33,6 +45,11 @@ branch, and enter:
 
 - `expected_sha`: the approved full 40-character `main` commit SHA;
 - `production_project_ref`: the exact protected production project ref;
+- `release_mode`: choose `upgrade` for every release after initialization or
+  `bootstrap` only for the first empty-project release;
+- `bootstrap_authorization_id`: for bootstrap, the opaque
+  `frcq-bootstrap-YYYYMMDDTHHMMSSZ-xxxxxxxx` identifier; leave it empty for an
+  upgrade;
 - `backup_evidence_id`: the opaque `frcq-backup-YYYYMMDDTHHMMSSZ-xxxxxxxx`
   identifier;
 - `backup_created_at_utc`: the canonical UTC archive creation/completion time;
@@ -40,12 +57,15 @@ branch, and enter:
 - `restore_rehearsal_evidence_id`: the opaque
   `frcq-restore-YYYYMMDDTHHMMSSZ-xxxxxxxx` identifier.
 
-These four recovery values are non-secret evidence, not proof that an archive
+An `upgrade` requires the four recovery values; the
+`bootstrap_authorization_id` must be empty. A `bootstrap` requires the canonical
+bootstrap identifier and requires all four recovery fields to be empty. These
+values are non-secret evidence, not proof that an archive
 or rehearsal exists. Do not enter a password, token, URL, protected manifest,
 or secret as a workflow input. The job halts before protected work if an
 identity differs from the workflow event or environment configuration, or if
-the recovery values are malformed or stale. Before approving
-`production-backend`, the production owner compares all four inputs against the
+the selected mode's values are malformed or stale. Before approving
+`production-backend` for an upgrade, the production owner compares all four inputs against the
 separately held release record, independently verifies both custody copies and
 the rehearsal result, and attests that no write occurred after the recovery
 point. The quiesced recovery point is recorded separately in the release
@@ -58,18 +78,21 @@ The workflow performs one ordered sequence from the approved commit:
 1. run repository, workflow, lint, type, unit, Edge Function, Deno, database,
    pgTAP, black-box integration, build, and bundle-privacy gates locally;
 2. link the Supabase CLI to the confirmed production ref;
-3. record `supabase migration list`;
-4. run `supabase db push --dry-run` and review the pending timestamps;
-5. apply pending migrations once with `supabase db push`;
-6. set the five custom Edge Function secrets from a mode-restricted temporary
+3. for `bootstrap` only, run the protected emptiness preflight and record its
+   redaction-safe zero-count evidence before any migration or other production
+   write; `upgrade` skips only this step;
+4. record `supabase migration list`;
+5. run `supabase db push --dry-run` and review the pending timestamps;
+6. apply pending migrations once with `supabase db push`;
+7. set the five custom Edge Function secrets from a mode-restricted temporary
    file outside the checkout;
-7. deploy all eleven functions together from `supabase/config.toml`, including
+8. deploy all eleven functions together from `supabase/config.toml`, including
    the custom-secret-protected `production-readiness` endpoint;
-8. run `production-preflight.mjs --backend-only` to verify exact project
+9. run `production-preflight.mjs --backend-only` to verify exact project
    identity, migrations through `20260806000700`, required RPCs, the exact
    unique active cleanup schedule, Auth health, and all application-function
    method boundaries probed server-side with provider-managed credentials;
-9. delete temporary secret material in an always-run step.
+10. delete temporary secret material in an always-run step.
 
 Expected deploy set:
 
@@ -80,7 +103,8 @@ Expected deploy set:
 
 Do not run a second migration command manually after a partially failed
 workflow until the release owner has compared the remote migration list with
-the approved commit. Database migrations are forward-only.
+the approved commit. Database migrations are forward-only: no reset, deletion,
+or migration-history repair is authorized.
 
 ## Protected-content import
 
@@ -94,13 +118,16 @@ not content or credentials. The expected release dataset is 24 items covering
 
 ## Post-backend evidence
 
-Record the backend workflow run, approved SHA, production project ref, applied
+Record the backend workflow run, approved SHA, production project ref,
+`release_mode`, applied
 migration timestamps, function deploy result, backend-preflight output,
 `backup_evidence_id`, `backup_created_at_utc`, `backup_archive_sha256`,
 `restore_rehearsal_evidence_id`, approver, and completion time. Keep archive
 byte size, the separate quiesced recovery point, custody read-back flags,
 aggregate validation, temporary target, reviewer, teardown, and load-test
-reactivation results in the release record.
+reactivation results in the release record. For the first bootstrap, record only
+the redaction-safe `bootstrap_authorization_id` and bootstrap preflight counts
+in place of recovery evidence; this evidence proves emptiness, not recoverability.
 Then run the Pages workflow; do not approve publication until its separate
 production-readiness output passes.
 
