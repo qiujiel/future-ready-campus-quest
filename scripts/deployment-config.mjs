@@ -6,37 +6,51 @@ import { load } from "js-yaml";
 
 const PINNED_ACTION = /^[^@\s]+@[0-9a-f]{40}$/;
 const GITLEAKS_ACTION = "gitleaks/gitleaks-action@v2";
-const RECOVERY_INPUT_DEFINITIONS = {
+const RELEASE_INPUT_DEFINITIONS = {
+  release_mode: {
+    description: "Release authorization mode",
+    required: true,
+    type: "choice",
+    default: "upgrade",
+    options: ["upgrade", "bootstrap"],
+  },
+  bootstrap_authorization_id: {
+    description: "Redaction-safe bootstrap authorization identifier",
+    required: false,
+    type: "string",
+  },
   backup_evidence_id: {
     description: "Redaction-safe backup evidence identifier",
-    required: true,
+    required: false,
     type: "string",
   },
   backup_created_at_utc: {
     description: "Redaction-safe UTC backup completion timestamp",
-    required: true,
+    required: false,
     type: "string",
   },
   backup_archive_sha256: {
     description: "Redaction-safe SHA-256 for the backup archive",
-    required: true,
+    required: false,
     type: "string",
   },
   restore_rehearsal_evidence_id: {
     description: "Redaction-safe restore rehearsal evidence identifier",
-    required: true,
+    required: false,
     type: "string",
   },
 };
-const RECOVERY_INPUTS = Object.keys(RECOVERY_INPUT_DEFINITIONS);
-const RECOVERY_ENVIRONMENT = {
+const RELEASE_ENVIRONMENT = {
+  RELEASE_MODE: "release_mode",
+  BOOTSTRAP_AUTHORIZATION_ID: "bootstrap_authorization_id",
   BACKUP_EVIDENCE_ID: "backup_evidence_id",
   BACKUP_CREATED_AT_UTC: "backup_created_at_utc",
   BACKUP_ARCHIVE_SHA256: "backup_archive_sha256",
   RESTORE_REHEARSAL_EVIDENCE_ID: "restore_rehearsal_evidence_id",
 };
-const RECOVERY_VALIDATOR_COMMAND = "node scripts/recovery-evidence.mjs";
-const RECOVERY_VALIDATION_STEPS = [
+const RELEASE_AUTHORIZATION_COMMAND =
+  "node scripts/production-release-authorization.mjs";
+const RELEASE_AUTHORIZATION_STEPS = [
   {
     name: "Check out the approved source",
     uses: "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
@@ -52,23 +66,35 @@ const RECOVERY_VALIDATION_STEPS = [
     with: { "node-version": 24 },
   },
   {
-    name: "Validate redaction-safe recovery evidence",
+    name: "Validate redaction-safe release authorization",
     env: Object.fromEntries(
-      Object.entries(RECOVERY_ENVIRONMENT).map(([name, input]) => [
+      Object.entries(RELEASE_ENVIRONMENT).map(([name, input]) => [
         name,
         `\${{ inputs.${input} }}`,
       ]),
     ),
-    run: RECOVERY_VALIDATOR_COMMAND,
+    run: RELEASE_AUTHORIZATION_COMMAND,
   },
 ];
 const RELEASE_CONDITION = "github.ref == 'refs/heads/main'";
-const RECOVERY_VALIDATION_JOB = {
+const RELEASE_AUTHORIZATION_JOB = {
   if: RELEASE_CONDITION,
   "runs-on": "ubuntu-latest",
   "timeout-minutes": 5,
   permissions: { contents: "read" },
-  steps: RECOVERY_VALIDATION_STEPS,
+  steps: RELEASE_AUTHORIZATION_STEPS,
+};
+const BOOTSTRAP_PREFLIGHT_STEP = {
+  name: "Verify empty production bootstrap state",
+  if: "${{ inputs.release_mode == 'bootstrap' }}",
+  env: {
+    BOOTSTRAP_AUTHORIZATION_ID:
+      "${{ inputs.bootstrap_authorization_id }}",
+    PRODUCTION_SUPABASE_SERVICE_ROLE_KEY:
+      "${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY }}",
+    SUPABASE_ACCESS_TOKEN: "${{ secrets.SUPABASE_ACCESS_TOKEN }}",
+  },
+  run: "node scripts/production-bootstrap-preflight.mjs",
 };
 const PRODUCTION_PROJECT_REF = "ghohuwwjxgjqnbsauvzq";
 const LOAD_PROJECT_REF = "vadyhuipwbtgbzpeisbn";
@@ -191,13 +217,13 @@ function requireInputs(workflow, names) {
   }
 }
 
-function requireCanonicalRecoveryInputs(workflow) {
+function requireCanonicalReleaseInputs(workflow) {
   const inputs = workflowDispatchInputs(workflow);
   for (const [name, definition] of Object.entries(
-    RECOVERY_INPUT_DEFINITIONS,
+    RELEASE_INPUT_DEFINITIONS,
   )) {
     if (!isDeepStrictEqual(inputs[name], definition)) {
-      fail(`canonical recovery workflow input ${name}`);
+      fail(`canonical release workflow input ${name}`);
     }
   }
 }
@@ -244,17 +270,16 @@ function requireDirectRunLine(step, line, message) {
   if (!directRunLines(step).includes(line)) fail(message);
 }
 
-function requireRecoveryEvidenceGate(workflow, validationJob, releaseJob) {
-  requireInputs(workflow, RECOVERY_INPUTS);
-  requireCanonicalRecoveryInputs(workflow);
-  if (!needsJob(releaseJob, "validate_recovery_evidence")) {
-    fail("backend release requires the recovery evidence dependency");
+function requireReleaseAuthorizationGate(workflow, validationJob, releaseJob) {
+  requireCanonicalReleaseInputs(workflow);
+  if (!needsJob(releaseJob, "validate_release_authorization")) {
+    fail("backend release requires the release authorization dependency");
   }
   if (releaseJob?.if !== RELEASE_CONDITION) {
-    fail("backend release must require successful recovery evidence validation");
+    fail("backend release must require successful release authorization validation");
   }
   if (!validationJob || environmentName(validationJob)) {
-    fail("recovery evidence validation must be an unprotected job");
+    fail("release authorization validation must be an unprotected job");
   }
   if (
     Object.prototype.hasOwnProperty.call(
@@ -262,9 +287,9 @@ function requireRecoveryEvidenceGate(workflow, validationJob, releaseJob) {
       "continue-on-error",
     )
   ) {
-    fail("recovery evidence validation must be fail-closed");
+    fail("release authorization validation must be fail-closed");
   }
-  requireContentsReadOnly(validationJob, "recovery evidence validation");
+  requireContentsReadOnly(validationJob, "release authorization validation");
   const secretEligibleMaterial = [
     workflow?.env,
     validationJob?.env,
@@ -277,13 +302,13 @@ function requireRecoveryEvidenceGate(workflow, validationJob, releaseJob) {
     })),
   ];
   if (secretEligibleMaterial.some(containsSecretsContext)) {
-    fail("recovery evidence validation must not receive a secret");
+    fail("release authorization validation must not receive a secret");
   }
   const validatorSteps = (validationJob.steps ?? []).filter((step) =>
-    String(step?.run ?? "").trim() === RECOVERY_VALIDATOR_COMMAND
+    String(step?.run ?? "").trim() === RELEASE_AUTHORIZATION_COMMAND
   );
   if (validatorSteps.length !== 1) {
-    fail("recovery evidence validation must run the repository validator");
+    fail("release authorization validation must run the repository validator");
   }
   const validatorStep = validatorSteps[0];
   const hasShellOverride = [
@@ -292,7 +317,7 @@ function requireRecoveryEvidenceGate(workflow, validationJob, releaseJob) {
     validatorStep,
   ].some((scope) => Object.prototype.hasOwnProperty.call(scope ?? {}, "shell"));
   if (hasShellOverride) {
-    fail("recovery evidence validation must not use a shell override");
+    fail("release authorization validation must not use a shell override");
   }
   if (
     [
@@ -302,30 +327,93 @@ function requireRecoveryEvidenceGate(workflow, validationJob, releaseJob) {
       validationJob?.defaults,
     ].some((value) => value !== undefined)
   ) {
-    fail("recovery evidence validation must not inherit execution overrides");
+    fail("release authorization validation must not inherit execution overrides");
   }
   if (
     Object.prototype.hasOwnProperty.call(validatorStep, "continue-on-error")
   ) {
-    fail("recovery evidence validation must be fail-closed");
+    fail("release authorization validation must be fail-closed");
   }
   if (Object.prototype.hasOwnProperty.call(validatorStep, "if")) {
-    fail("recovery evidence validator must run unconditionally");
+    fail("release authorization validator must run unconditionally");
   }
   const environment = validatorStep.env ?? {};
-  for (const [name, input] of Object.entries(RECOVERY_ENVIRONMENT)) {
+  for (const [name, input] of Object.entries(RELEASE_ENVIRONMENT)) {
     if (environment[name] !== `\${{ inputs.${input} }}`) {
-      fail(`recovery evidence validation must map ${input}`);
+      fail(`release authorization validation must map ${input}`);
     }
   }
-  if (Object.keys(environment).length !== Object.keys(RECOVERY_ENVIRONMENT).length) {
-    fail("recovery evidence validation requires exactly four approved environment mappings");
+  if (Object.keys(environment).length !== Object.keys(RELEASE_ENVIRONMENT).length) {
+    fail("release authorization validation requires exactly six approved environment mappings");
   }
-  if (!isDeepStrictEqual(validationJob.steps, RECOVERY_VALIDATION_STEPS)) {
-    fail("recovery evidence validation requires canonical ordered evidence steps");
+  if (!isDeepStrictEqual(validationJob.steps, RELEASE_AUTHORIZATION_STEPS)) {
+    fail("release authorization validation requires canonical ordered evidence steps");
   }
-  if (!isDeepStrictEqual(validationJob, RECOVERY_VALIDATION_JOB)) {
-    fail("recovery evidence validation requires the canonical evidence job");
+  if (!isDeepStrictEqual(validationJob, RELEASE_AUTHORIZATION_JOB)) {
+    fail("release authorization validation requires the canonical evidence job");
+  }
+}
+
+function requireBootstrapPreflightOrder(job) {
+  const steps = job?.steps ?? [];
+  const preflightSteps = steps.filter((step) =>
+    step?.name === BOOTSTRAP_PREFLIGHT_STEP.name ||
+    String(step?.run ?? "").includes("production-bootstrap-preflight.mjs")
+  );
+  if (
+    preflightSteps.length !== 1 ||
+    !isDeepStrictEqual(preflightSteps[0], BOOTSTRAP_PREFLIGHT_STEP)
+  ) {
+    fail("backend release requires the canonical bootstrap preflight");
+  }
+
+  if (
+    job?.env?.RELEASE_MODE !== "${{ inputs.release_mode }}" ||
+    job?.env?.BOOTSTRAP_AUTHORIZATION_ID !==
+      "${{ inputs.bootstrap_authorization_id }}"
+  ) {
+    fail("backend release requires canonical bootstrap release mappings");
+  }
+
+  const indexOfRun = (predicate) =>
+    steps.findIndex((step) => predicate(String(step?.run ?? "")));
+  const linkIndex = steps.findIndex(
+    (step) => step?.name === "Link the confirmed production project",
+  );
+  const bootstrapIndex = steps.indexOf(preflightSteps[0]);
+  const migrationListIndex = indexOfRun((run) => run.includes("migration list"));
+  const dryRunIndex = indexOfRun(
+    (run) => run.includes("db push") && run.includes("--dry-run"),
+  );
+  const migrationApplyIndex = indexOfRun(
+    (run) => run.includes("db push") && !run.includes("--dry-run"),
+  );
+  const secretsIndex = indexOfRun((run) => run.includes("supabase secrets set"));
+  const functionsIndex = indexOfRun((run) =>
+    run.includes("supabase functions deploy")
+  );
+  const requiredIndices = [
+    linkIndex,
+    bootstrapIndex,
+    migrationListIndex,
+    dryRunIndex,
+    migrationApplyIndex,
+    secretsIndex,
+    functionsIndex,
+  ];
+  if (
+    requiredIndices.some((index) => index < 0) ||
+    !(linkIndex < bootstrapIndex) ||
+    !(bootstrapIndex < migrationListIndex) ||
+    !(bootstrapIndex < dryRunIndex) ||
+    !(migrationListIndex < migrationApplyIndex) ||
+    !(dryRunIndex < migrationApplyIndex) ||
+    !(migrationApplyIndex < secretsIndex) ||
+    !(secretsIndex < functionsIndex)
+  ) {
+    fail(
+      "bootstrap preflight must run after linking and before production mutations",
+    );
   }
 }
 
@@ -481,7 +569,7 @@ function requireCiSecretScan(ci) {
 
 export function validateDeploymentConfiguration({ ci, backend, pages, rollback }) {
   const backendJob = backend?.jobs?.release;
-  const evidenceJob = backend?.jobs?.validate_recovery_evidence;
+  const authorizationJob = backend?.jobs?.validate_release_authorization;
   const packageJob = pages?.jobs?.package;
   const preflightJob = pages?.jobs?.preflight;
   const deployJob = pages?.jobs?.deploy;
@@ -490,10 +578,11 @@ export function validateDeploymentConfiguration({ ci, backend, pages, rollback }
 
   requireCiSecretScan(ci);
   requireInputs(backend, ["expected_sha", "production_project_ref"]);
-  requireRecoveryEvidenceGate(backend, evidenceJob, backendJob);
+  requireReleaseAuthorizationGate(backend, authorizationJob, backendJob);
   requireEnvironment(backendJob, "production-backend");
   requireContentsReadOnly(backendJob, "backend release");
   requireBackendReleaseIdentity(backend, backendJob);
+  requireBootstrapPreflightOrder(backendJob);
   requireRun(backendJob, /migration list/, "backend migration list is missing");
   requireRun(
     backendJob,

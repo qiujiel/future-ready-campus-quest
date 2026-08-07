@@ -24,9 +24,14 @@ const identityScript = [
   "test \"$PRODUCTION_SUPABASE_PROJECT_REF\" != \"$LOAD_SUPABASE_PROJECT_REF\"",
 ].join("\n");
 
-const recoveryValidatorStep = (configuration) =>
-  configuration.backend.jobs.validate_recovery_evidence.steps.find((step) =>
-    step.run?.includes("recovery-evidence.mjs")
+const authorizationValidatorStep = (configuration) =>
+  configuration.backend.jobs.validate_release_authorization.steps.find((step) =>
+    step.run?.includes("production-release-authorization.mjs")
+  );
+
+const bootstrapPreflightStep = (configuration) =>
+  configuration.backend.jobs.release.steps.find((step) =>
+    step.name === "Verify empty production bootstrap state"
   );
 
 const identityStep = (configuration) =>
@@ -57,32 +62,44 @@ function validConfiguration() {
           inputs: {
             expected_sha: { required: true },
             production_project_ref: { required: true },
+            release_mode: {
+              description: "Release authorization mode",
+              required: true,
+              type: "choice",
+              default: "upgrade",
+              options: ["upgrade", "bootstrap"],
+            },
+            bootstrap_authorization_id: {
+              description: "Redaction-safe bootstrap authorization identifier",
+              required: false,
+              type: "string",
+            },
             backup_evidence_id: {
               description: "Redaction-safe backup evidence identifier",
-              required: true,
+              required: false,
               type: "string",
             },
             backup_created_at_utc: {
               description: "Redaction-safe UTC backup completion timestamp",
-              required: true,
+              required: false,
               type: "string",
             },
             backup_archive_sha256: {
               description: "Redaction-safe SHA-256 for the backup archive",
-              required: true,
+              required: false,
               type: "string",
             },
             restore_rehearsal_evidence_id: {
               description:
                 "Redaction-safe restore rehearsal evidence identifier",
-              required: true,
+              required: false,
               type: "string",
             },
           },
         },
       },
       jobs: {
-        validate_recovery_evidence: {
+        validate_release_authorization: {
           if: "github.ref == 'refs/heads/main'",
           "runs-on": "ubuntu-latest",
           "timeout-minutes": 5,
@@ -103,8 +120,11 @@ function validConfiguration() {
               with: { "node-version": 24 },
             },
             {
-              name: "Validate redaction-safe recovery evidence",
+              name: "Validate redaction-safe release authorization",
               env: {
+                RELEASE_MODE: "${{ inputs.release_mode }}",
+                BOOTSTRAP_AUTHORIZATION_ID:
+                  "${{ inputs.bootstrap_authorization_id }}",
                 BACKUP_EVIDENCE_ID: "${{ inputs.backup_evidence_id }}",
                 BACKUP_CREATED_AT_UTC: "${{ inputs.backup_created_at_utc }}",
                 BACKUP_ARCHIVE_SHA256:
@@ -112,13 +132,13 @@ function validConfiguration() {
                 RESTORE_REHEARSAL_EVIDENCE_ID:
                   "${{ inputs.restore_rehearsal_evidence_id }}",
               },
-              run: "node scripts/recovery-evidence.mjs",
+              run: "node scripts/production-release-authorization.mjs",
             },
           ],
         },
         release: {
           if: "github.ref == 'refs/heads/main'",
-          needs: "validate_recovery_evidence",
+          needs: "validate_release_authorization",
           environment: "production-backend",
           permissions: { contents: "read" },
           env: {
@@ -127,6 +147,9 @@ function validConfiguration() {
             PRODUCTION_SUPABASE_PROJECT_REF:
               "${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}",
             PRODUCTION_SUPABASE_URL: "${{ vars.VITE_SUPABASE_URL }}",
+            RELEASE_MODE: "${{ inputs.release_mode }}",
+            BOOTSTRAP_AUTHORIZATION_ID:
+              "${{ inputs.bootstrap_authorization_id }}",
           },
           steps: [
             { uses: pinnedCheckout },
@@ -137,6 +160,22 @@ function validConfiguration() {
                   "${{ inputs.production_project_ref }}",
               },
               run: identityScript,
+            },
+            {
+              name: "Link the confirmed production project",
+              run: "supabase link --project-ref \"$PRODUCTION_SUPABASE_PROJECT_REF\"",
+            },
+            {
+              name: "Verify empty production bootstrap state",
+              if: "${{ inputs.release_mode == 'bootstrap' }}",
+              env: {
+                BOOTSTRAP_AUTHORIZATION_ID:
+                  "${{ inputs.bootstrap_authorization_id }}",
+                PRODUCTION_SUPABASE_SERVICE_ROLE_KEY:
+                  "${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY }}",
+                SUPABASE_ACCESS_TOKEN: "${{ secrets.SUPABASE_ACCESS_TOKEN }}",
+              },
+              run: "node scripts/production-bootstrap-preflight.mjs",
             },
             { run: "supabase migration list --linked" },
             { run: "supabase db push --dry-run --linked" },
@@ -287,11 +326,39 @@ describe("deployment workflow boundaries", () => {
     );
   });
 
-  it("rejects a backend workflow missing recovery evidence inputs", () => {
+  it("rejects a backend workflow missing release authorization inputs", () => {
     const configuration = validConfiguration();
     delete configuration.backend.on.workflow_dispatch.inputs.backup_archive_sha256;
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
-      /required workflow input backup_archive_sha256/i,
+      /canonical release workflow input backup_archive_sha256/i,
+    );
+  });
+
+  it.each([
+    ["default", (input) => {
+      input.default = "bootstrap";
+    }],
+    ["choice options", (input) => {
+      input.options = ["upgrade"];
+    }],
+    ["option order", (input) => {
+      input.options.reverse();
+    }],
+    ["missing type", (input) => {
+      delete input.type;
+    }],
+    ["wrong type", (input) => {
+      input.type = "string";
+    }],
+    ["extra field", (input) => {
+      input.unexpected = true;
+    }],
+  ])("rejects a release mode input with %s", (_scope, mutate) => {
+    const configuration = validConfiguration();
+    mutate(configuration.backend.on.workflow_dispatch.inputs.release_mode);
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /canonical release workflow input release_mode/i,
     );
   });
 
@@ -312,54 +379,54 @@ describe("deployment workflow boundaries", () => {
     ["extra field", (input) => {
       input.unexpected = true;
     }],
-  ])("rejects a recovery workflow input with %s", (_scope, mutate) => {
+  ])("rejects a release workflow input with %s", (_scope, mutate) => {
     const configuration = validConfiguration();
     mutate(
       configuration.backend.on.workflow_dispatch.inputs.backup_evidence_id,
     );
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
-      /canonical recovery workflow input backup_evidence_id/i,
+      /canonical release workflow input backup_evidence_id/i,
     );
   });
 
-  it("rejects release without the recovery evidence dependency", () => {
+  it("rejects release without the release authorization dependency", () => {
     const configuration = validConfiguration();
     delete configuration.backend.jobs.release.needs;
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
-      /recovery evidence.*dependency/i,
+      /release authorization.*dependency/i,
     );
   });
 
-  it("rejects a release condition that can run after recovery validation fails", () => {
+  it("rejects a release condition that can run after release authorization validation fails", () => {
     const configuration = validConfiguration();
     configuration.backend.jobs.release.if =
       "${{ always() && github.ref == 'refs/heads/main' }}";
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
-      /release must require successful recovery evidence validation/i,
+      /release must require successful release authorization validation/i,
     );
   });
 
-  it("rejects a protected or secret-bearing evidence validation job", () => {
+  it("rejects a protected or secret-bearing release authorization job", () => {
     const protectedConfiguration = validConfiguration();
-    protectedConfiguration.backend.jobs.validate_recovery_evidence.environment =
+    protectedConfiguration.backend.jobs.validate_release_authorization.environment =
       "production-backend";
     expect(() => validateDeploymentConfiguration(protectedConfiguration)).toThrow(
-      /evidence validation.*unprotected/i,
+      /release authorization validation.*unprotected/i,
     );
 
     const secretConfiguration = validConfiguration();
-    recoveryValidatorStep(secretConfiguration).env.EXTRA =
+    authorizationValidatorStep(secretConfiguration).env.EXTRA =
       "${{ secrets.PRODUCTION_SUPABASE_DB_PASSWORD }}";
     expect(() => validateDeploymentConfiguration(secretConfiguration)).toThrow(
-      /evidence validation.*secret/i,
+      /release authorization validation.*secret/i,
     );
   });
 
-  it("rejects recovery validation with non-read-only permissions", () => {
+  it("rejects release authorization validation with non-read-only permissions", () => {
     const configuration = validConfiguration();
-    configuration.backend.jobs.validate_recovery_evidence.permissions.actions =
+    configuration.backend.jobs.validate_release_authorization.permissions.actions =
       "write";
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
@@ -369,41 +436,41 @@ describe("deployment workflow boundaries", () => {
 
   it.each([
     ["validation job", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence[
+      configuration.backend.jobs.validate_release_authorization[
         "continue-on-error"
       ] = true;
     }],
     ["validator step", (configuration) => {
-      recoveryValidatorStep(configuration)["continue-on-error"] = true;
+      authorizationValidatorStep(configuration)["continue-on-error"] = true;
     }],
-  ])("rejects continue-on-error on the recovery %s", (_scope, mutate) => {
+  ])("rejects continue-on-error on the release authorization %s", (_scope, mutate) => {
     const configuration = validConfiguration();
     mutate(configuration);
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
-      /recovery evidence validation must be fail-closed/i,
+      /release authorization validation must be fail-closed/i,
     );
   });
 
-  it("rejects a conditional validator step that can skip recovery validation", () => {
+  it("rejects a conditional validator step that can skip release authorization validation", () => {
     const configuration = validConfiguration();
-    recoveryValidatorStep(configuration).if = false;
+    authorizationValidatorStep(configuration).if = false;
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
-      /recovery evidence validator must run unconditionally/i,
+      /release authorization validator must run unconditionally/i,
     );
   });
 
   it("rejects a missing or echo-only validator invocation", () => {
     const missingConfiguration = validConfiguration();
-    recoveryValidatorStep(missingConfiguration).run = "true";
+    authorizationValidatorStep(missingConfiguration).run = "true";
     expect(() => validateDeploymentConfiguration(missingConfiguration)).toThrow(
       /run the repository validator/i,
     );
 
     const echoConfiguration = validConfiguration();
-    recoveryValidatorStep(echoConfiguration).run =
-      "echo node scripts/recovery-evidence.mjs";
+    authorizationValidatorStep(echoConfiguration).run =
+      "echo node scripts/production-release-authorization.mjs";
     expect(() => validateDeploymentConfiguration(echoConfiguration)).toThrow(
       /run the repository validator/i,
     );
@@ -411,8 +478,8 @@ describe("deployment workflow boundaries", () => {
 
   it("rejects a pre-validator step that can replace the repository validator", () => {
     const configuration = validConfiguration();
-    configuration.backend.jobs.validate_recovery_evidence.steps.splice(2, 0, {
-      run: "printf 'process.exit(0)\\n' > scripts/recovery-evidence.mjs",
+    configuration.backend.jobs.validate_release_authorization.steps.splice(2, 0, {
+      run: "printf 'process.exit(0)\\n' > scripts/production-release-authorization.mjs",
     });
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
@@ -422,58 +489,58 @@ describe("deployment workflow boundaries", () => {
 
   it.each([
     ["post-validator step", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.steps.push({
+      configuration.backend.jobs.validate_release_authorization.steps.push({
         run: "true",
       });
     }],
     ["checkout ref", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.steps[0].with.ref =
+      configuration.backend.jobs.validate_release_authorization.steps[0].with.ref =
         "${{ github.ref }}";
     }],
     ["checkout depth", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.steps[0].with[
+      configuration.backend.jobs.validate_release_authorization.steps[0].with[
         "fetch-depth"
       ] = 1;
     }],
     ["checkout credential persistence omission", (configuration) => {
-      delete configuration.backend.jobs.validate_recovery_evidence.steps[0]
+      delete configuration.backend.jobs.validate_release_authorization.steps[0]
         .with["persist-credentials"];
     }],
     ["checkout credential persistence", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.steps[0].with[
+      configuration.backend.jobs.validate_release_authorization.steps[0].with[
         "persist-credentials"
       ] = true;
     }],
     ["checkout redirected path", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.steps[0].with.path =
+      configuration.backend.jobs.validate_release_authorization.steps[0].with.path =
         "/tmp/redirected-checkout";
     }],
     ["checkout disabled cleanup", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.steps[0].with.clean =
+      configuration.backend.jobs.validate_release_authorization.steps[0].with.clean =
         false;
     }],
     ["checkout Git LFS", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.steps[0].with.lfs =
+      configuration.backend.jobs.validate_release_authorization.steps[0].with.lfs =
         true;
     }],
     ["checkout submodules", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.steps[0].with.submodules =
+      configuration.backend.jobs.validate_release_authorization.steps[0].with.submodules =
         true;
     }],
     ["checkout sparse selection", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.steps[0].with[
+      configuration.backend.jobs.validate_release_authorization.steps[0].with[
         "sparse-checkout"
       ] = "scripts";
     }],
     ["Node version", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.steps[1].with[
+      configuration.backend.jobs.validate_release_authorization.steps[1].with[
         "node-version"
       ] = 22;
     }],
     ["step order", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.steps.reverse();
+      configuration.backend.jobs.validate_release_authorization.steps.reverse();
     }],
-  ])("rejects a non-canonical recovery evidence %s", (_scope, mutate) => {
+  ])("rejects a non-canonical release authorization %s", (_scope, mutate) => {
     const configuration = validConfiguration();
     mutate(configuration);
 
@@ -489,7 +556,7 @@ describe("deployment workflow boundaries", () => {
       };
     }],
     ["validation-job NODE_OPTIONS", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.env = {
+      configuration.backend.jobs.validate_release_authorization.env = {
         NODE_OPTIONS: "--require ./bypass.cjs",
       };
     }],
@@ -499,11 +566,11 @@ describe("deployment workflow boundaries", () => {
       };
     }],
     ["validation-job working directory", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.defaults = {
+      configuration.backend.jobs.validate_release_authorization.defaults = {
         run: { "working-directory": "/tmp/redirected-checkout" },
       };
     }],
-  ])("rejects a %s inherited by recovery validation", (_scope, mutate) => {
+  ])("rejects a %s inherited by release authorization validation", (_scope, mutate) => {
     const configuration = validConfiguration();
     mutate(configuration);
 
@@ -514,15 +581,15 @@ describe("deployment workflow boundaries", () => {
 
   it.each([
     ["runner", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence["runs-on"] =
+      configuration.backend.jobs.validate_release_authorization["runs-on"] =
         "self-hosted";
     }],
     ["container", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.container = {
+      configuration.backend.jobs.validate_release_authorization.container = {
         image: "example.invalid/redirected-node:latest",
       };
     }],
-  ])("rejects a non-canonical recovery evidence job %s", (_scope, mutate) => {
+  ])("rejects a non-canonical release authorization job %s", (_scope, mutate) => {
     const configuration = validConfiguration();
     mutate(configuration);
 
@@ -539,47 +606,47 @@ describe("deployment workflow boundaries", () => {
       };
     }],
     ["validation-job env using bracket form", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.env = {
+      configuration.backend.jobs.validate_release_authorization.env = {
         INHERITED_SECRET:
           '${{ secrets["PRODUCTION_SUPABASE_DB_PASSWORD"] }}',
       };
     }],
     ["validation-job defaults using toJSON", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.defaults = {
+      configuration.backend.jobs.validate_release_authorization.defaults = {
         run: { "working-directory": "${{ toJSON(secrets) }}" },
       };
     }],
     ["validation-step env using toJSON", (configuration) => {
-      recoveryValidatorStep(configuration).env.EXTRA =
+      authorizationValidatorStep(configuration).env.EXTRA =
         "${{ toJSON(secrets) }}";
     }],
     ["validation-step run using toJSON", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.steps.unshift({
+      configuration.backend.jobs.validate_release_authorization.steps.unshift({
         run: "echo '${{ toJSON(secrets) }}'",
       });
     }],
     ["validation-step run with quoted closing braces before toJSON", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.steps.unshift({
+      configuration.backend.jobs.validate_release_authorization.steps.unshift({
         run: "echo \"${{ contains('}}', toJSON(secrets)) }}\"",
       });
     }],
     ["validation-step with using toJSON", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.steps[0].with = {
+      configuration.backend.jobs.validate_release_authorization.steps[0].with = {
         token: "${{ toJSON(secrets) }}",
       };
     }],
     ["validation-step shell using toJSON", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.steps.unshift({
+      configuration.backend.jobs.validate_release_authorization.steps.unshift({
         run: "echo safe",
         shell: "${{ toJSON(secrets) }}",
       });
     }],
-  ])("rejects a secrets context token in recovery %s", (_scope, mutate) => {
+  ])("rejects a secrets context token in release authorization %s", (_scope, mutate) => {
     const configuration = validConfiguration();
     mutate(configuration);
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
-      /evidence validation.*secret/i,
+      /release authorization validation.*secret/i,
     );
   });
 
@@ -588,44 +655,103 @@ describe("deployment workflow boundaries", () => {
       configuration.backend.defaults = { run: { shell: "bash {0}" } };
     }],
     ["validation-job default", (configuration) => {
-      configuration.backend.jobs.validate_recovery_evidence.defaults = {
+      configuration.backend.jobs.validate_release_authorization.defaults = {
         run: { shell: "bash {0}" },
       };
     }],
     ["validator-step", (configuration) => {
-      recoveryValidatorStep(configuration).shell = "bash {0}";
+      authorizationValidatorStep(configuration).shell = "bash {0}";
     }],
-  ])("rejects a %s shell override around recovery evidence validation", (_scope, mutate) => {
+  ])("rejects a %s shell override around release authorization validation", (_scope, mutate) => {
     const configuration = validConfiguration();
     mutate(configuration);
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
-      /recovery evidence validation.*shell override/i,
+      /release authorization validation.*shell override/i,
     );
   });
 
-  it("rejects recovery validation without every dispatch input mapping", () => {
+  it("rejects release authorization validation without every dispatch input mapping", () => {
     const configuration = validConfiguration();
-    delete recoveryValidatorStep(configuration).env
+    delete authorizationValidatorStep(configuration).env
       .RESTORE_REHEARSAL_EVIDENCE_ID;
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /restore_rehearsal_evidence_id/i,
     );
   });
 
-  it("rejects inexact or extra recovery input mappings", () => {
+  it("rejects inexact or extra release input mappings", () => {
     const wrongInputConfiguration = validConfiguration();
-    recoveryValidatorStep(wrongInputConfiguration).env.BACKUP_EVIDENCE_ID =
+    authorizationValidatorStep(wrongInputConfiguration).env.BACKUP_EVIDENCE_ID =
       "${{ inputs.restore_rehearsal_evidence_id }}";
     expect(() => validateDeploymentConfiguration(wrongInputConfiguration)).toThrow(
       /backup_evidence_id/i,
     );
 
     const extraMappingConfiguration = validConfiguration();
-    recoveryValidatorStep(extraMappingConfiguration).env.EXTRA =
+    authorizationValidatorStep(extraMappingConfiguration).env.EXTRA =
       "${{ inputs.backup_evidence_id }}";
     expect(() => validateDeploymentConfiguration(extraMappingConfiguration)).toThrow(
-      /exactly four approved environment mappings/i,
+      /exactly six approved environment mappings/i,
+    );
+  });
+
+  it("rejects release authorization validation without every release-mode mapping", () => {
+    const configuration = validConfiguration();
+    delete authorizationValidatorStep(configuration).env.RELEASE_MODE;
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /release_mode/i,
+    );
+  });
+
+  it.each([
+    ["condition", (step) => {
+      step.if = "${{ inputs.release_mode != 'upgrade' }}";
+    }],
+    ["command", (step) => {
+      step.run = "echo node scripts/production-bootstrap-preflight.mjs";
+    }],
+    ["missing authorization mapping", (step) => {
+      delete step.env.BOOTSTRAP_AUTHORIZATION_ID;
+    }],
+    ["wrong service-role mapping", (step) => {
+      step.env.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY =
+        "${{ secrets.PRODUCTION_SUPABASE_DB_PASSWORD }}";
+    }],
+    ["extra mapping", (step) => {
+      step.env.EXTRA = "${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}";
+    }],
+    ["continue on error", (step) => {
+      step["continue-on-error"] = true;
+    }],
+  ])("rejects a non-canonical bootstrap preflight %s", (_scope, mutate) => {
+    const configuration = validConfiguration();
+    mutate(bootstrapPreflightStep(configuration));
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /canonical bootstrap preflight/i,
+    );
+  });
+
+  it.each([
+    ["migration list", "migration list"],
+    ["migration dry-run", "db push --dry-run"],
+    ["migration apply", "db push --linked"],
+    ["Function secrets", "supabase secrets set"],
+    ["Function deployment", "supabase functions deploy"],
+  ])("rejects bootstrap preflight after %s", (_label, marker) => {
+    const configuration = validConfiguration();
+    const steps = configuration.backend.jobs.release.steps;
+    const bootstrapIndex = steps.indexOf(bootstrapPreflightStep(configuration));
+    const [bootstrap] = steps.splice(bootstrapIndex, 1);
+    const markerIndex = steps.findIndex((step) =>
+      String(step.run ?? "").includes(marker)
+    );
+    steps.splice(markerIndex + 1, 0, bootstrap);
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /bootstrap preflight must run after linking and before production mutations/i,
     );
   });
 
@@ -685,7 +811,7 @@ describe("deployment workflow boundaries", () => {
   it.each([
     ["workflow", (configuration) => {
       configuration.backend.defaults = { run: { shell: "bash {0}" } };
-    }, /recovery evidence validation.*shell override/i],
+    }, /release authorization validation.*shell override/i],
     ["release job", (configuration) => {
       configuration.backend.jobs.release.defaults = {
         run: { shell: "bash {0}" },
@@ -726,7 +852,10 @@ describe("deployment workflow boundaries", () => {
     const steps = configuration.backend.jobs.release.steps;
     const validationIndex = steps.indexOf(identityStep(configuration));
     const [validation] = steps.splice(validationIndex, 1);
-    steps.splice(4, 0, validation);
+    const mutationIndex = steps.findIndex((step) =>
+      String(step.run ?? "").includes("db push --linked")
+    );
+    steps.splice(mutationIndex + 1, 0, validation);
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /identity validation must precede production mutation/i,
