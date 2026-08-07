@@ -164,6 +164,25 @@ function requireProductionFunctionConfigurationValidation(job) {
   }
 }
 
+function requireModernProductionFunctionCredentials(job) {
+  const step = (job?.steps ?? []).find((candidate) =>
+    String(candidate?.run ?? "").includes("supabase secrets set")
+  );
+  const run = String(step?.run ?? "");
+  if (
+    job?.env?.PRODUCTION_SUPABASE_PUBLISHABLE_KEY !==
+      "${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}" ||
+    step?.env?.PRODUCTION_SUPABASE_SECRET_KEY !==
+      "${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}" ||
+    !run.includes(
+      "FRCQ_SUPABASE_PUBLISHABLE_KEY=$PRODUCTION_SUPABASE_PUBLISHABLE_KEY",
+    ) ||
+    !run.includes("FRCQ_SUPABASE_SECRET_KEY=$PRODUCTION_SUPABASE_SECRET_KEY")
+  ) {
+    fail("production deployment requires modern Function credentials");
+  }
+}
+
 function requireEdgeReadyWait(job, label) {
   const runs = combinedRuns(job);
   if (
@@ -596,6 +615,7 @@ export function validateDeploymentConfiguration({ ci, backend, pages, rollback }
     "backend migration dry-run is missing",
   );
   requireProductionFunctionConfigurationValidation(backendJob);
+  requireModernProductionFunctionCredentials(backendJob);
   requireRun(backendJob, /secrets set/, "Edge Function secret deployment is missing");
   requireRun(backendJob, /functions deploy/, "Edge Function deployment is missing");
   requireEdgeReadyWait(backendJob, "backend release");

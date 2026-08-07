@@ -2,6 +2,7 @@ import {
   createClient,
   type SupabaseClient,
 } from "npm:@supabase/supabase-js@2.111.0";
+import { selectSupabaseKeys } from "./auth-configuration.ts";
 
 function requiredEnvironment(name: string): string {
   const value = Deno.env.get(name);
@@ -10,9 +11,10 @@ function requiredEnvironment(name: string): string {
 }
 
 export function adminClient(): SupabaseClient {
+  const { secretKey } = supabaseKeys();
   return createClient(
     requiredEnvironment("SUPABASE_URL"),
-    requiredEnvironment("SUPABASE_SERVICE_ROLE_KEY"),
+    secretKey,
     {
       auth: {
         autoRefreshToken: false,
@@ -23,9 +25,10 @@ export function adminClient(): SupabaseClient {
 }
 
 export function publicAuthClient(): SupabaseClient {
+  const { publishableKey } = supabaseKeys();
   return createClient(
     requiredEnvironment("SUPABASE_URL"),
-    requiredEnvironment("SUPABASE_ANON_KEY"),
+    publishableKey,
     {
       auth: {
         autoRefreshToken: false,
@@ -41,9 +44,10 @@ export function callerClient(request: Request): SupabaseClient {
     throw new Error("AUTH_REQUIRED");
   }
 
+  const { publishableKey } = supabaseKeys();
   return createClient(
     requiredEnvironment("SUPABASE_URL"),
-    requiredEnvironment("SUPABASE_ANON_KEY"),
+    publishableKey,
     {
       global: { headers: { Authorization: authorization } },
       auth: {
@@ -52,6 +56,16 @@ export function callerClient(request: Request): SupabaseClient {
       },
     },
   );
+}
+
+export function supabaseKeys() {
+  return selectSupabaseKeys({
+    FRCQ_SUPABASE_PUBLISHABLE_KEY:
+      Deno.env.get("FRCQ_SUPABASE_PUBLISHABLE_KEY"),
+    FRCQ_SUPABASE_SECRET_KEY: Deno.env.get("FRCQ_SUPABASE_SECRET_KEY"),
+    SUPABASE_ANON_KEY: Deno.env.get("SUPABASE_ANON_KEY"),
+    SUPABASE_SERVICE_ROLE_KEY: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+  });
 }
 
 export function frontendAppUrl(): string {
