@@ -42,8 +42,8 @@ function createGateway(): AuthGateway & {
           studentId: "20000000-0000-4000-8000-000000000001",
           cohortId: "40000000-0000-4000-8000-000000000001",
           groupId: "60000000-0000-4000-8000-000000000001",
-          groupNumber: input.groupNumber,
-          nickname: input.nickname ?? "Explorer 1",
+          groupNumber: 3,
+          nickname: "Explorer 1",
           isGroupIdentityEditor: true,
         },
         accessToken: "student-access-token",
@@ -95,7 +95,20 @@ it("signs a teacher in and continues to cohort setup", async () => {
 
 it("creates a teacher-owned cohort with five groups of six by default", async () => {
   const gateway = createGateway();
-  render(<TeacherSetupPage gateway={gateway} />);
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/teacher/setup",
+        element: <TeacherSetupPage gateway={gateway} />,
+      },
+      {
+        path: "/teacher/cohorts/:cohortId",
+        element: <CurrentPath />,
+      },
+    ],
+    { initialEntries: ["/teacher/setup"] },
+  );
+  render(<RouterProvider router={router} />);
 
   fireEvent.change(screen.getByLabelText(/cohort title/i), {
     target: { value: "Thursday seminar" },
@@ -113,42 +126,35 @@ it("creates a teacher-owned cohort with five groups of six by default", async ()
   );
 });
 
-it("joins a student without asking for email, password, or PIN", async () => {
+it("joins a student from the shared route without email, password, or PIN", async () => {
   const gateway = createGateway();
   const router = createMemoryRouter(
     [
       {
-        path: "/join/:token",
+        path: "/join",
         element: <JoinPage gateway={gateway} />,
       },
       { path: "/quest", element: <CurrentPath /> },
     ],
-    { initialEntries: ["/join/shared-class-token-with-sufficient-entropy"] },
+    { initialEntries: ["/join"] },
   );
   render(<RouterProvider router={router} />);
 
   expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
   expect(screen.queryByLabelText(/password|pin/i)).not.toBeInTheDocument();
 
-  fireEvent.change(screen.getByLabelText(/assigned group number/i), {
-    target: { value: "3" },
-  });
-  fireEvent.change(screen.getByLabelText(/^real name/i), {
+  fireEvent.change(await screen.findByLabelText(/your name/i), {
     target: { value: "Synthetic Learner" },
   });
-  fireEvent.change(screen.getByLabelText(/^nickname/i), {
-    target: { value: "Silver Fern" },
+  fireEvent.change(screen.getByLabelText(/group code/i), {
+    target: { value: "CAMPUS73" },
   });
-  fireEvent.click(screen.getByLabelText(/class privacy notice/i));
-  fireEvent.click(screen.getByRole("button", { name: /join the campus/i }));
+  fireEvent.click(screen.getByRole("button", { name: /join group/i }));
 
   await waitFor(() => expect(gateway.joinCalls).toHaveLength(1));
   expect(gateway.joinCalls[0]).toMatchObject({
-    joinToken: "shared-class-token-with-sufficient-entropy",
-    groupNumber: 3,
-    realName: "Synthetic Learner",
-    nickname: "Silver Fern",
-    privacyConfirmed: true,
+    joinCode: "CAMPUS73",
+    displayName: "Synthetic Learner",
   });
   expect(await screen.findByLabelText("current path")).toHaveTextContent(
     "/quest",

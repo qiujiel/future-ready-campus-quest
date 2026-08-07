@@ -6,6 +6,7 @@ import {
   deriveEdgeToken,
   hashEdgeToken,
 } from "../_shared/edge-token.ts";
+import { createGroupJoinCodes } from "../_shared/join-core.ts";
 import {
   normalizeTeacherControl,
   TeacherControlBoundaryError,
@@ -19,6 +20,24 @@ const base = { cohortId: z.uuid(), requestKey: z.uuid() };
 const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("open-join"), ...base }),
   z.object({ action: z.literal("close-join"), ...base }),
+  z.object({ action: z.literal("launch-quest"), ...base }),
+  z.object({
+    action: z.literal("set-group-join"),
+    ...base,
+    groupId: z.uuid(),
+    enabled: z.boolean(),
+  }),
+  z.object({
+    action: z.literal("move-student"),
+    ...base,
+    studentId: z.uuid(),
+    groupId: z.uuid(),
+  }),
+  z.object({
+    action: z.enum(["remove-student", "reset-student"]),
+    ...base,
+    studentId: z.uuid(),
+  }),
   z.object({
     action: z.literal("issue-recovery"),
     ...base,
@@ -71,6 +90,23 @@ Deno.serve(async (request) => {
     if (user.error || !user.data.user) {
       throw new TeacherControlBoundaryError("CONTROL_NOT_AVAILABLE", 404);
     }
+    if (
+      input.action === "move-student" ||
+      input.action === "remove-student" ||
+      input.action === "reset-student"
+    ) {
+      const result = await client.rpc("manage_teacher_roster", {
+        p_cohort_id: input.cohortId,
+        p_action: input.action,
+        p_student_id: input.studentId,
+        p_target_group_id: input.action === "move-student"
+          ? input.groupId
+          : null,
+        p_request_key: input.requestKey,
+      });
+      if (result.error) throw new Error("CONTROL_NOT_AVAILABLE");
+      return jsonResponse(result.data, 200, headers);
+    }
     const groupId = "groupId" in input ? input.groupId : null;
     const studentId = "studentId" in input ? input.studentId : null;
     const scope = await client.rpc("assert_teacher_control_scope", {
@@ -94,11 +130,41 @@ Deno.serve(async (request) => {
         p_request_key: input.requestKey,
       });
       if (result.error) throw new Error("CONTROL_NOT_AVAILABLE");
+      const joinWindowId = typeof result.data?.id === "string"
+        ? result.data.id
+        : "";
+      const groups = await client
+        .from("groups")
+        .select("id,group_number")
+        .eq("cohort_id", input.cohortId)
+        .order("group_number");
+      if (!joinWindowId || groups.error || !groups.data) {
+        throw new Error("CONTROL_NOT_AVAILABLE");
+      }
+      const generated = await createGroupJoinCodes(
+        groups.data.map((group) => ({
+          groupId: String(group.id),
+          groupNumber: Number(group.group_number),
+        })),
+        input.requestKey,
+        secret,
+      );
+      const configured = await client.rpc("configure_cohort_group_join_codes", {
+        p_cohort_id: input.cohortId,
+        p_join_window_id: joinWindowId,
+        p_codes: generated.persistence,
+      });
+      if (configured.error || configured.data !== true) {
+        throw new Error("CONTROL_NOT_AVAILABLE");
+      }
+      const studentUrl = `${frontendAppUrl()}/#/join`;
       return jsonResponse({
         affected: 0,
         actionState: "open",
         expiresAt,
-        joinUrl: `${frontendAppUrl()}/#/join/${rawToken}`,
+        joinUrl: studentUrl,
+        studentUrl,
+        groups: generated.receipts,
       }, 200, headers);
     }
 
@@ -109,6 +175,31 @@ Deno.serve(async (request) => {
       });
       if (result.error) throw new Error("CONTROL_NOT_AVAILABLE");
       return jsonResponse({ affected: 0, actionState: "closed" }, 200, headers);
+    }
+
+    if (input.action === "set-group-join") {
+      const result = await client.rpc("set_group_join_code_enabled", {
+        p_cohort_id: input.cohortId,
+        p_group_id: input.groupId,
+        p_enabled: input.enabled,
+        p_request_key: input.requestKey,
+      });
+      if (result.error || result.data !== true) {
+        throw new Error("CONTROL_NOT_AVAILABLE");
+      }
+      return jsonResponse({
+        affected: 1,
+        actionState: input.enabled ? "enabled" : "disabled",
+      }, 200, headers);
+    }
+
+    if (input.action === "launch-quest") {
+      const result = await client.rpc("launch_cohort_quest", {
+        p_cohort_id: input.cohortId,
+        p_request_key: input.requestKey,
+      });
+      if (result.error) throw new Error("CONTROL_NOT_AVAILABLE");
+      return jsonResponse(result.data, 200, headers);
     }
 
     if (input.action === "issue-recovery") {

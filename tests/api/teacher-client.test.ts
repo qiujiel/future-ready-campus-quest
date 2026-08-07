@@ -37,6 +37,56 @@ it("loads an owned cohort through the teacher dashboard boundary", async () => {
   });
 });
 
+it("loads the classroom-readiness view through the trusted boundary", async () => {
+  const readiness = {
+    cohortId: "d3000000-0000-4000-8000-000000000001",
+    title: "8A Future Ready",
+    expected: 8,
+    joined: 1,
+    active: 0,
+    started: 0,
+    submitted: 0,
+    incomplete: 0,
+    errors: 0,
+    joining: {
+      open: true,
+      expiresAt: "2030-01-01T09:15:00.000Z",
+      studentUrl: "https://example.test/#/join",
+    },
+    groups: [],
+  };
+  invoke.mockResolvedValueOnce({ data: { readiness }, error: null });
+
+  await expect(
+    supabaseTeacherGateway.getReadiness?.(readiness.cohortId),
+  ).resolves.toEqual(readiness);
+  expect(invoke).toHaveBeenCalledWith("teacher-dashboard", {
+    body: { cohortId: readiness.cohortId, view: "readiness" },
+  });
+});
+
+it("loads the complete question bank only through the teacher boundary", async () => {
+  const questionBank = {
+    versionKey: "teacher-reviewed-v1",
+    itemCount: 24,
+    conceptCount: 8,
+    items: [],
+  };
+  invoke.mockResolvedValueOnce({ data: { questionBank }, error: null });
+
+  await expect(
+    supabaseTeacherGateway.getQuestionBank?.(
+      "d3000000-0000-4000-8000-000000000001",
+    ),
+  ).resolves.toEqual(questionBank);
+  expect(invoke).toHaveBeenCalledWith("teacher-dashboard", {
+    body: {
+      cohortId: "d3000000-0000-4000-8000-000000000001",
+      view: "question-bank",
+    },
+  });
+});
+
 it("preserves the neutral cohort denial returned by the boundary", async () => {
   invoke.mockResolvedValueOnce({
     data: null,

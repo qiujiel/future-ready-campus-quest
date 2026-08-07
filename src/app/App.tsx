@@ -9,8 +9,8 @@ export function App() {
           assigned group.
         </p>
         <div className="hero-actions">
-          <a className="primary-action" href="#/join/unavailable">
-            Join your class
+          <a className="primary-action" href="#/join">
+            Student
           </a>
           <a className="secondary-action" href="#/teacher/sign-in">
             Teacher sign in

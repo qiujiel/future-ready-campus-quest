@@ -1,11 +1,15 @@
 import { getSupabaseClient } from "../../shared/api/supabase";
 import type {
+  ClassroomReadinessReport,
   TeacherDashboardSummary,
+  TeacherQuestionBank,
   TeacherStudentDetail,
 } from "../../shared/api/contracts";
 
 export interface TeacherGateway {
   getSummary(cohortId: string): Promise<TeacherDashboardSummary>;
+  getReadiness?(cohortId: string): Promise<ClassroomReadinessReport>;
+  getQuestionBank?(cohortId: string): Promise<TeacherQuestionBank>;
   getStudent?(
     cohortId: string,
     studentId: string,
@@ -22,11 +26,13 @@ export class TeacherGatewayError extends Error {
 async function throwTeacherGatewayError(
   context: unknown,
 ): Promise<never> {
-  const response = (
-    context as {
-      response?: Response;
-    } | null
-  )?.response;
+  const response = context instanceof Response
+    ? context
+    : (
+      context as {
+        response?: Response;
+      } | null
+    )?.response;
   if (response) {
     try {
       const body = (await response.clone().json()) as { error?: unknown };
@@ -51,6 +57,22 @@ export const supabaseTeacherGateway: TeacherGateway = {
     }
     const data = response.data as { summary: TeacherDashboardSummary };
     return data.summary;
+  },
+  async getReadiness(cohortId) {
+    const response = await getSupabaseClient().functions.invoke(
+      "teacher-dashboard",
+      { body: { cohortId, view: "readiness" } },
+    );
+    if (response.error) await throwTeacherGatewayError(response.error.context);
+    return (response.data as { readiness: ClassroomReadinessReport }).readiness;
+  },
+  async getQuestionBank(cohortId) {
+    const response = await getSupabaseClient().functions.invoke(
+      "teacher-dashboard",
+      { body: { cohortId, view: "question-bank" } },
+    );
+    if (response.error) await throwTeacherGatewayError(response.error.context);
+    return (response.data as { questionBank: TeacherQuestionBank }).questionBank;
   },
   async getStudent(cohortId, studentId) {
     const response = await getSupabaseClient().functions.invoke(

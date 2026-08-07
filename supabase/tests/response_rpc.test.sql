@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(8);
+select plan(10);
 
 insert into auth.users (
   id,
@@ -332,6 +332,141 @@ select throws_ok(
   'P0001',
   'ASSIGNMENT_NOT_AVAILABLE',
   'another student cannot submit an assigned item'
+);
+
+reset role;
+
+insert into public.quest_attempts (
+  id,
+  student_id,
+  cohort_id,
+  content_version_id,
+  current_phase,
+  phase_deadline_at,
+  last_accepted_sequence
+)
+values (
+  '96000000-0000-0000-0000-000000000002',
+  '92000000-0000-0000-0000-000000000002',
+  '93000000-0000-0000-0000-000000000001',
+  '94000000-0000-0000-0000-000000000001',
+  'final',
+  now() + interval '6 minutes',
+  7
+);
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '92000000-0000-0000-0000-000000000002',
+  true
+);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+
+select public.get_next_learning_item(
+  '96000000-0000-0000-0000-000000000002'
+);
+
+reset role;
+
+update public.attempt_items
+set delivered_at = now(), submitted_at = now()
+where attempt_id = '96000000-0000-0000-0000-000000000002'
+  and phase = 'final'
+  and sequence <= 7;
+
+insert into public.student_responses (
+  attempt_id,
+  student_id,
+  item_id,
+  assignment_id,
+  phase,
+  selected_option_ids,
+  correct,
+  confidence,
+  idempotency_key,
+  client_sequence,
+  result_payload
+)
+select
+  attempt_id,
+  '92000000-0000-0000-0000-000000000002',
+  item_id,
+  id,
+  phase,
+  array['A'],
+  true,
+  'very_sure',
+  gen_random_uuid(),
+  sequence,
+  '{}'::jsonb
+from public.attempt_items
+where attempt_id = '96000000-0000-0000-0000-000000000002'
+  and phase = 'final'
+  and sequence <= 7;
+
+insert into public.concept_evidence (
+  attempt_id,
+  concept_id,
+  phase,
+  correct_count,
+  total_count,
+  support_state
+)
+select
+  '96000000-0000-0000-0000-000000000002',
+  learning_items.concept_id,
+  'final',
+  1,
+  1,
+  'secure'
+from public.attempt_items
+join content.learning_items
+  on learning_items.id = attempt_items.item_id
+where attempt_items.attempt_id = '96000000-0000-0000-0000-000000000002'
+  and attempt_items.phase = 'final'
+  and attempt_items.sequence <= 7;
+
+update public.phase_progress
+set completed_item_count = 7
+where attempt_id = '96000000-0000-0000-0000-000000000002'
+  and phase = 'final';
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '92000000-0000-0000-0000-000000000002',
+  true
+);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+
+select is(
+  public.submit_learning_response(
+    '96000000-0000-0000-0000-000000000002',
+    (
+      select id
+      from public.attempt_items
+      where attempt_id = '96000000-0000-0000-0000-000000000002'
+        and phase = 'final'
+        and sequence = 8
+    ),
+    '97000000-0000-4000-8000-000000000008',
+    array['A'],
+    8,
+    'very_sure'
+  )->>'nextPhase',
+  'reflection',
+  'an all-correct final skips the empty retry phase'
+);
+
+select is(
+  (
+    select current_phase
+    from public.quest_attempts
+    where id = '96000000-0000-0000-0000-000000000002'
+  ),
+  'reflection',
+  'the all-correct attempt is ready for reflection immediately'
 );
 
 select * from finish();

@@ -33,6 +33,24 @@ operator review.
 These values must identify the load project, never production. Rotate the load
 fixture credentials after unintended disclosure or a shared rehearsal.
 
+## Recovery workflow inputs
+
+`backup_evidence_id`, `backup_created_at_utc`, `backup_archive_sha256`, and
+`restore_rehearsal_evidence_id` are non-secret dispatch inputs to the protected
+backend workflow. They are entered for one approved release and compared with
+the separately held recovery record. They are not repository or environment
+variables and are not repository or environment secrets.
+`backup_created_at_utc` is the archive creation/completion time; the quiesced
+recovery point remains a separate release-record field.
+
+GitHub stores no backup archive, database connection string, database password,
+Storage administration key, encryption recipient or private key, plaintext
+export, object path, or protected manifest. Do not add any of those to Actions
+inputs, variables, secrets, artifacts, caches, summaries, issues, or release
+records. Input format and freshness validation does not establish that an
+external archive or rehearsal exists; the `production-backend` reviewer must
+verify that evidence independently.
+
 ## `production-backend` environment
 
 Required protection:
@@ -46,7 +64,7 @@ Variables:
 
 | Name | Validation |
 | --- | --- |
-| `PRODUCTION_SUPABASE_PROJECT_REF` | exact project ref, different from `LOAD_SUPABASE_PROJECT_REF` and `vadyhuipwbtgbzpeisbn` |
+| `PRODUCTION_SUPABASE_PROJECT_REF` | exactly `ghohuwwjxgjqnbsauvzq` |
 | `PRODUCTION_FRONTEND_ORIGIN` | deployed HTTPS origin, with no path |
 
 Secrets:
@@ -56,13 +74,27 @@ Secrets:
 | `SUPABASE_ACCESS_TOKEN` | CLI authorization for the production organization |
 | `PRODUCTION_SUPABASE_DB_PASSWORD` | linked migration access |
 | `PRODUCTION_READINESS_SECRET` | custom authorization for the least-privilege readiness endpoint |
-| `ALLOWED_FRONTEND_ORIGINS` | Edge Function CORS allow-list |
-| `FRONTEND_APP_URL` | recovery-link frontend origin |
+| `ALLOWED_FRONTEND_ORIGINS` | exact browser origin only; no path or trailing slash |
+| `FRONTEND_APP_URL` | full hosted application base URL, including the Pages base path |
 | `JOIN_TOKEN_SIGNING_SECRET` | join-token signing secret |
 | `RECOVERY_TOKEN_SIGNING_SECRET` | recovery-token signing secret |
 
-`ALLOWED_FRONTEND_ORIGINS` and `FRONTEND_APP_URL` must agree with
-`PRODUCTION_FRONTEND_ORIGIN`. Signing and readiness secrets must be
+`ALLOWED_FRONTEND_ORIGINS` must exactly equal `PRODUCTION_FRONTEND_ORIGIN`.
+`FRONTEND_APP_URL` must combine that origin with `VITE_BASE_PATH`, without a
+hash route; one trailing slash is accepted and normalized. For the intended
+GitHub Pages site, configure the public values as follows:
+
+```text
+PRODUCTION_FRONTEND_ORIGIN=https://qiujiel.github.io
+VITE_BASE_PATH=/future-ready-campus-quest/
+ALLOWED_FRONTEND_ORIGINS=https://qiujiel.github.io
+FRONTEND_APP_URL=https://qiujiel.github.io/future-ready-campus-quest
+```
+
+This distinction is required because browser CORS sends only an origin, while
+join and recovery links must retain the repository Pages path. The backend
+workflow validates the relationship before writing any Function secret.
+Signing and readiness secrets must be
 independently generated, at least 32 bytes, and never reused from local, CI, or
 the load project. The backend workflow also installs
 `PRODUCTION_READINESS_SECRET` as an Edge Function secret.
@@ -108,10 +140,15 @@ Before release, a repository administrator and a second reviewer verify:
 - all names above exist at the specified scope;
 - no production credential exists as a repository secret when an environment
   secret is specified;
-- the production project URL contains the exact protected project ref;
+- the production project URL equals
+  `https://ghohuwwjxgjqnbsauvzq.supabase.co` exactly;
 - the load URL contains `vadyhuipwbtgbzpeisbn` and the production URL does not;
 - each environment has the required reviewer and branch rule;
 - `github-pages` contains no Supabase credential;
+- the four recovery values are supplied only as per-run non-secret workflow
+  inputs and match the separately held release record;
+- no backup, connection string, Storage administration key, encryption key, or
+  protected manifest exists in any GitHub scope;
 - workflow Actions are allowed to run and GitHub Pages uses GitHub Actions as
   its source.
 

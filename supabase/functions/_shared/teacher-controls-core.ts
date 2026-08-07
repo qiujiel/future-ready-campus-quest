@@ -31,6 +31,26 @@ export function normalizeTeacherControl(
   if (!command.cohortId) {
     throw new TeacherControlBoundaryError("CONTROL_NOT_AVAILABLE", 404);
   }
+  if (
+    (
+      command.action === "move-student" ||
+      command.action === "remove-student" ||
+      command.action === "reset-student" ||
+      command.action === "issue-recovery"
+    ) && !command.studentId
+  ) {
+    throw new TeacherControlBoundaryError("CONTROL_NOT_AVAILABLE", 404);
+  }
+  if (
+    (
+      command.action === "move-student" ||
+      command.action === "set-group-join" ||
+      command.action === "transfer-editor" ||
+      command.action === "set-group-lock"
+    ) && !command.groupId
+  ) {
+    throw new TeacherControlBoundaryError("CONTROL_NOT_AVAILABLE", 404);
+  }
   return command;
 }
 
@@ -56,6 +76,20 @@ export function controlConfirmation(
     return {
       title: `Confirm ${command.phase} phase extension`,
       consequence: `Every active ${command.phase} deadline will move by ${command.seconds} seconds.`,
+    };
+  }
+  if (command.action === "remove-student") {
+    return {
+      title: "Confirm remove student",
+      consequence:
+        "The student will lose cohort access immediately; their learning history remains available to the teacher.",
+    };
+  }
+  if (command.action === "reset-student") {
+    return {
+      title: "Confirm reset student activity",
+      consequence:
+        "The active attempt will close and the student can start again; previous evidence is retained.",
     };
   }
   return {

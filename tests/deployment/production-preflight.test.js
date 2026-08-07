@@ -1,9 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
+import * as productionPreflight from "../../scripts/production-preflight-core.mjs";
 import {
   evaluateReadinessReport,
   fetchReadinessReport,
   readPreflightConfiguration,
 } from "../../scripts/production-preflight-core.mjs";
+
+function functionEnvironment(overrides = {}) {
+  return {
+    PRODUCTION_FRONTEND_ORIGIN: "https://qiujiel.github.io",
+    VITE_BASE_PATH: "/future-ready-campus-quest/",
+    ALLOWED_FRONTEND_ORIGINS: "https://qiujiel.github.io",
+    FRONTEND_APP_URL:
+      "https://qiujiel.github.io/future-ready-campus-quest",
+    JOIN_TOKEN_SIGNING_SECRET: "j".repeat(32),
+    RECOVERY_TOKEN_SIGNING_SECRET: "r".repeat(32),
+    PRODUCTION_READINESS_SECRET: "p".repeat(32),
+    ...overrides,
+  };
+}
 
 function environment(overrides = {}) {
   return {
@@ -28,7 +43,7 @@ function environment(overrides = {}) {
 function readinessReport(overrides = {}) {
   return {
     requiredMigrationsPresent: true,
-    latestGateDMigration: "20260730021100",
+    latestGateDMigration: "20260806000700",
     requiredFunctionsPresent: true,
     cleanupScheduleReady: true,
     edgeFunctionsReady: 10,
@@ -93,12 +108,89 @@ describe("production preflight configuration", () => {
   });
 });
 
+describe("production Edge Function configuration", () => {
+  const readFunctionConfiguration = (environment) =>
+    productionPreflight.readProductionFunctionConfiguration(environment);
+
+  it("derives the hosted application URL from the origin and Pages base path", () => {
+    expect(readFunctionConfiguration(functionEnvironment())).toEqual({
+      frontendOrigin: "https://qiujiel.github.io",
+      basePath: "/future-ready-campus-quest/",
+      frontendAppUrl:
+        "https://qiujiel.github.io/future-ready-campus-quest",
+      allowedOriginCount: 1,
+      secretCount: 3,
+    });
+  });
+
+  it("rejects a frontend application URL that omits the Pages base path", () => {
+    expect(() =>
+      readFunctionConfiguration(
+        functionEnvironment({
+          FRONTEND_APP_URL: "https://qiujiel.github.io",
+        }),
+      )
+    ).toThrow(/FRONTEND_APP_URL.*VITE_BASE_PATH/i);
+  });
+
+  it("allows one trailing slash on the frontend application URL", () => {
+    const configuration = readFunctionConfiguration(
+      functionEnvironment({
+        FRONTEND_APP_URL:
+          "https://qiujiel.github.io/future-ready-campus-quest/",
+      }),
+    );
+
+    expect(configuration.frontendAppUrl).toBe(
+      "https://qiujiel.github.io/future-ready-campus-quest",
+    );
+  });
+
+  it.each([
+    "https://qiujiel.github.io/future-ready-campus-quest",
+    "https://qiujiel.github.io,https://school.example",
+  ])("rejects a production CORS allow-list that is not the exact origin: %s", (value) => {
+    expect(() =>
+      readFunctionConfiguration(
+        functionEnvironment({ ALLOWED_FRONTEND_ORIGINS: value }),
+      )
+    ).toThrow(/ALLOWED_FRONTEND_ORIGINS.*origin/i);
+  });
+
+  it("rejects short or reused protected secrets", () => {
+    expect(() =>
+      readFunctionConfiguration(
+        functionEnvironment({ JOIN_TOKEN_SIGNING_SECRET: "too-short" }),
+      )
+    ).toThrow(/JOIN_TOKEN_SIGNING_SECRET.*32 bytes/i);
+
+    const reused = "reused-secret-1234567890123456789012";
+    expect(() =>
+      readFunctionConfiguration(
+        functionEnvironment({
+          JOIN_TOKEN_SIGNING_SECRET: reused,
+          RECOVERY_TOKEN_SIGNING_SECRET: reused,
+        }),
+      )
+    ).toThrow(/must not be reused/i);
+  });
+
+  it("does not return protected secret values", () => {
+    const environment = functionEnvironment();
+    const result = JSON.stringify(readFunctionConfiguration(environment));
+
+    expect(result).not.toContain(environment.JOIN_TOKEN_SIGNING_SECRET);
+    expect(result).not.toContain(environment.RECOVERY_TOKEN_SIGNING_SECRET);
+    expect(result).not.toContain(environment.PRODUCTION_READINESS_SECRET);
+  });
+});
+
 describe("production readiness report", () => {
   it("accepts authoritative Gate D evidence", () => {
     const configuration = readPreflightConfiguration(environment());
 
     expect(evaluateReadinessReport(readinessReport(), configuration)).toEqual({
-      latestGateDMigration: "20260730021100",
+      latestGateDMigration: "20260806000700",
       cleanupScheduleReady: true,
       edgeFunctionsReady: 10,
       contentVersion: {
@@ -134,7 +226,7 @@ describe("production readiness report", () => {
     });
 
     expect(evaluateReadinessReport(readinessReport(), configuration)).toEqual({
-      latestGateDMigration: "20260730021100",
+      latestGateDMigration: "20260806000700",
       cleanupScheduleReady: true,
       edgeFunctionsReady: 10,
       basePath: "/campus-quest/",

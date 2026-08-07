@@ -1,9 +1,11 @@
 import type {
   JoinCohortInput,
   JoinCohortOutput,
+  JoinWindowReceipt,
   ManageJoinWindowInput,
   RecoverStudentInput,
   RecoverStudentOutput,
+  TeacherCohortListItem,
 } from "./contracts";
 import { getSupabaseClient } from "./supabase";
 
@@ -16,11 +18,14 @@ export interface CreateCohortRequest {
 
 export interface AuthGateway {
   signInTeacher(email: string, password: string): Promise<void>;
+  getCurrentRole?(): Promise<"teacher" | "student" | null>;
+  signOut?(): Promise<void>;
+  listCohorts?(): Promise<TeacherCohortListItem[]>;
   createCohort(input: CreateCohortRequest): Promise<{ cohortId: string }>;
   openJoinWindow?(
     cohortId: string,
     requestKey: string,
-  ): Promise<{ joinUrl: string; expiresAt: string }>;
+  ): Promise<JoinWindowReceipt>;
   closeJoinWindow?(cohortId: string, requestKey: string): Promise<void>;
   joinCohort(input: JoinCohortInput): Promise<JoinCohortOutput>;
   recoverStudent(input: RecoverStudentInput): Promise<RecoverStudentOutput>;
@@ -36,11 +41,13 @@ export async function throwAuthGatewayError(
   context: unknown,
   fallback: string,
 ): Promise<never> {
-  const response = (
-    context as {
-      response?: Response;
-    } | null
-  )?.response;
+  const response = context instanceof Response
+    ? context
+    : (
+      context as {
+        response?: Response;
+      } | null
+    )?.response;
   if (response) {
     try {
       const body = (await response.clone().json()) as { error?: unknown };
@@ -77,6 +84,30 @@ export const supabaseAuthGateway: AuthGateway = {
       throw new Error("Sign-in was not accepted.");
     }
   },
+  async getCurrentRole() {
+    const result = await getSupabaseClient().auth.getUser();
+    if (result.error || !result.data.user) return null;
+    const role = result.data.user.app_metadata.role;
+    return role === "teacher" || role === "student" ? role : null;
+  },
+  async signOut() {
+    const result = await getSupabaseClient().auth.signOut();
+    if (result.error) throw new Error("The saved session could not be ended.");
+  },
+  async listCohorts() {
+    const result = await getSupabaseClient()
+      .from("cohorts")
+      .select("id,title,group_count,group_capacity,created_at")
+      .order("created_at", { ascending: false });
+    if (result.error) throw new Error("Cohorts could not be loaded.");
+    return (result.data ?? []).map((cohort) => ({
+      cohortId: String(cohort.id),
+      title: String(cohort.title),
+      groupCount: Number(cohort.group_count),
+      groupCapacity: Number(cohort.group_capacity),
+      createdAt: String(cohort.created_at),
+    }));
+  },
   async createCohort(input) {
     const data = await invokeJoinManager({
       action: "create-cohort",
@@ -100,11 +131,18 @@ export const supabaseAuthGateway: AuthGateway = {
     });
     if (
       typeof data.joinUrl !== "string" ||
-      typeof data.expiresAt !== "string"
+      typeof data.studentUrl !== "string" ||
+      typeof data.expiresAt !== "string" ||
+      !Array.isArray(data.groups)
     ) {
       throw new Error("Join window did not return a receipt.");
     }
-    return { joinUrl: data.joinUrl, expiresAt: data.expiresAt };
+    return {
+      joinUrl: data.joinUrl,
+      studentUrl: data.studentUrl,
+      expiresAt: data.expiresAt,
+      groups: data.groups as JoinWindowReceipt["groups"],
+    };
   },
   async closeJoinWindow(cohortId, requestKey) {
     await invokeJoinManager({

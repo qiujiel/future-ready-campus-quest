@@ -159,7 +159,10 @@ export const supabaseStudentQuestGateway: StudentQuestGateway = {
   },
 
   async findLatestAttempt() {
-    const result = await getSupabaseClient()
+    const client = getSupabaseClient();
+    const ensured = await client.rpc("ensure_student_quest_attempt");
+    if (ensured.error) throw new Error("ATTEMPT_NOT_AVAILABLE");
+    const result = await client
       .from("quest_attempts")
       .select(
         "id,cohort_id,status,current_phase,last_accepted_sequence,phase_deadline_at,started_at",

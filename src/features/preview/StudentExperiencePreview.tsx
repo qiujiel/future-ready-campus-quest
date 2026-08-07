@@ -36,8 +36,8 @@ const previewAuthGateway: AuthGateway = {
         studentId: "preview-student",
         cohortId: "preview-cohort",
         groupId: syntheticGroup.groupId,
-        groupNumber: input.groupNumber,
-        nickname: input.nickname ?? "Explorer 1",
+        groupNumber: 2,
+        nickname: input.displayName,
         isGroupIdentityEditor: true,
       },
       accessToken: "preview-only",
@@ -113,7 +113,14 @@ const conceptResults = Array.from({ length: 8 }, (_, index) => ({
   retryStatus: index === 7 ? ("ready" as const) : ("not-needed" as const),
 }));
 
-type PreviewStep = "join" | "studio" | "map" | "mission" | "results";
+type PreviewStep =
+  | "join"
+  | "studio"
+  | "briefing"
+  | "diagnostic"
+  | "map"
+  | "mission"
+  | "results";
 const previewNow = new Date("2030-01-01T09:00:00.000Z");
 const previewDeadline = "2030-01-01T09:05:00.000Z";
 
@@ -162,9 +169,60 @@ export function StudentExperiencePreview() {
           gateway={previewGroupGateway}
         />
         <nav className="preview-nav quest-content" aria-label="Review journey">
-          <Button onClick={() => setStep("map")}>Continue to campus map</Button>
+          <Button onClick={() => setStep("briefing")}>
+            Continue to campus map
+          </Button>
         </nav>
       </div>
+    );
+  }
+
+  if (step === "briefing") {
+    return (
+      <QuestShell
+        phase="briefing"
+        completedPhases={[]}
+        visitedConcepts={[]}
+        deadline={previewDeadline}
+        now={previewNow}
+      >
+        <section className="preview-callout">
+          <p className="eyebrow">Meet your crew</p>
+          <h2>Welcome, Future Makers</h2>
+          <p>
+            Your teacher guides the class through each destination. Discuss
+            ideas with your crew, then make your own thoughtful choices.
+          </p>
+          <Button onClick={() => setStep("diagnostic")}>
+            Enter Diagnostic Gate
+          </Button>
+        </section>
+      </QuestShell>
+    );
+  }
+
+  if (step === "diagnostic") {
+    return (
+      <QuestShell
+        phase="diagnostic"
+        completedPhases={["briefing"]}
+        visitedConcepts={[]}
+        deadline={previewDeadline}
+        now={previewNow}
+      >
+        <section className="preview-callout">
+          <p className="eyebrow">Route check</p>
+          <h2>Find your best starting path</h2>
+          <p>
+            The live quest uses a short baseline check to choose useful
+            support. It guides your route and never ranks you against
+            classmates.
+          </p>
+          <Button onClick={() => setStep("map")}>
+            Continue to Learning Labs
+          </Button>
+        </section>
+      </QuestShell>
     );
   }
 

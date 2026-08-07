@@ -123,8 +123,14 @@ export function QuestEntryPage({
         if (!active) return;
         setContext(nextContext);
         await loadAttempt();
-      } catch {
-        if (active) setError("Your campus session could not be restored.");
+      } catch (caught) {
+        if (!active) return;
+        setError(
+          caught instanceof Error &&
+              caught.message === "STUDENT_SESSION_NOT_AVAILABLE"
+            ? "This student session has expired. Ask your teacher for a recovery link, or return to student entry to start a new session."
+            : "Your campus session could not be restored. Ask your teacher for help and try again.",
+        );
       } finally {
         if (active) setLoading(false);
       }
@@ -136,12 +142,12 @@ export function QuestEntryPage({
   }, [gateway, loadAttempt]);
 
   useEffect(() => {
-    if (!pollIntervalMs || attempt?.status === "completed") return;
+    if (!pollIntervalMs || attempt) return;
     const timer = window.setInterval(() => {
       void loadAttempt().catch(() => undefined);
     }, pollIntervalMs);
     return () => window.clearInterval(timer);
-  }, [attempt?.status, loadAttempt, pollIntervalMs]);
+  }, [attempt, loadAttempt, pollIntervalMs]);
 
   useEffect(() => {
     if (!attemptId || !queue) return;

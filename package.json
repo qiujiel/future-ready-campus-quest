@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "tsc -b && vite build",
+    "bootstrap:local": "node scripts/bootstrap-local-classroom.ts",
     "check:bundle": "node scripts/check-bundle.mjs dist",
     "check:deployment": "node scripts/deployment-config.mjs",
     "check:repo": "node scripts/check-repository.mjs",

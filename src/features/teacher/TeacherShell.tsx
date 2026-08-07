@@ -9,9 +9,11 @@ import {
   type TeacherGateway,
 } from "../../teacher/api/teacherClient";
 import { CohortOverview } from "./CohortOverview";
+import { ClassroomReadiness } from "./ClassroomReadiness";
 import { ConceptHeatmap } from "./ConceptHeatmap";
 import { GroupDrilldown } from "./GroupDrilldown";
 import { MostMissedItems } from "./MostMissedItems";
+import { QuestionBank } from "./QuestionBank";
 import { SessionControls } from "./SessionControls";
 import { ExportPanel } from "./ExportPanel";
 import { StudentDrilldown } from "./StudentDrilldown";
@@ -60,6 +62,9 @@ export function TeacherShell({
   const params = useParams();
   const cohortId = providedCohortId ?? params.cohortId ?? "";
   const [summary, setSummary] = useState<TeacherDashboardSummary | null>(null);
+  const [readiness, setReadiness] = useState<
+    Awaited<ReturnType<NonNullable<TeacherGateway["getReadiness"]>>> | null
+  >(null);
   const [error, setError] = useState(false);
   const [selectedConcept, setSelectedConcept] = useState<ConceptId | null>(
     (params.conceptId as ConceptId | undefined) ?? null,
@@ -80,8 +85,29 @@ export function TeacherShell({
     };
   }, [cohortId, gateway]);
 
+  useEffect(() => {
+    let active = true;
+    if (!gateway.getReadiness) return;
+    void gateway.getReadiness(cohortId).then(
+      (value) => {
+        if (active) setReadiness(value);
+      },
+      () => {
+        if (active) setError(true);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [cohortId, gateway]);
+
   function selectConcept(conceptId: ConceptId) {
     setSelectedConcept(conceptId);
+  }
+
+  async function refreshReadiness() {
+    if (!gateway.getReadiness) return;
+    setReadiness(await gateway.getReadiness(cohortId));
   }
 
   if (error) {
@@ -138,6 +164,12 @@ export function TeacherShell({
         active={summary.active}
         completed={summary.completed}
       />
+      {readiness ? (
+        <ClassroomReadiness
+          report={readiness}
+          onChanged={refreshReadiness}
+        />
+      ) : null}
       <div className="teacher-dashboard-grid">
         <ConceptHeatmap
           concepts={summary.conceptAggregates}
@@ -154,7 +186,9 @@ export function TeacherShell({
         cohortId={summary.cohortId}
         cohortTitle="Current cohort"
         activeStudents={summary.active}
+        onChanged={refreshReadiness}
       />
+      <QuestionBank cohortId={summary.cohortId} gateway={gateway} />
       <ExportPanel cohortId={summary.cohortId} />
     </main>
   );

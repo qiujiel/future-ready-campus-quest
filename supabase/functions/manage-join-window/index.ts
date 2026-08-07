@@ -2,6 +2,7 @@ import { z } from "npm:zod@4.4.3";
 import { callerClient, frontendAppUrl } from "../_shared/auth.ts";
 import { corsHeaders, RequestOriginError } from "../_shared/cors.ts";
 import {
+  createGroupJoinCodes,
   deriveJoinToken,
   hashJoinToken,
   JoinBoundaryError,
@@ -83,9 +84,39 @@ Deno.serve(async (request) => {
       typeof result.data?.expires_at === "string"
         ? result.data.expires_at
         : expiresAt;
+    const joinWindowId = typeof result.data?.id === "string"
+      ? result.data.id
+      : "";
+    const groups = await client
+      .from("groups")
+      .select("id,group_number")
+      .eq("cohort_id", input.cohortId)
+      .order("group_number");
+    if (!joinWindowId || groups.error || !groups.data) {
+      throw new Error("GROUP_CODES_NOT_AVAILABLE");
+    }
+    const generated = await createGroupJoinCodes(
+      groups.data.map((group) => ({
+        groupId: String(group.id),
+        groupNumber: Number(group.group_number),
+      })),
+      input.requestKey,
+      signingSecret,
+    );
+    const configured = await client.rpc("configure_cohort_group_join_codes", {
+      p_cohort_id: input.cohortId,
+      p_join_window_id: joinWindowId,
+      p_codes: generated.persistence,
+    });
+    if (configured.error || configured.data !== true) {
+      throw new Error("GROUP_CODES_NOT_AVAILABLE");
+    }
+    const studentUrl = `${frontendAppUrl()}/#/join`;
     return jsonResponse(
       {
-        joinUrl: `${frontendAppUrl()}/#/join/${rawToken}`,
+        joinUrl: studentUrl,
+        studentUrl,
+        groups: generated.receipts,
         expiresAt: persistedExpiry,
       },
       200,

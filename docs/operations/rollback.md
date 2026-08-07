@@ -102,16 +102,47 @@ separate data-owner decision and evidence review.
 
 ## Backup restoration
 
-Use only the backup/PITR identifier recorded before the release. Restoration is
-an incident decision by the database owner and privacy contact, not an automatic
-rollback step. Restore into a new non-production project first, verify the exact
-timestamp, ownership/RLS, opaque evidence counts, private Storage access, and
-that expired join/recovery material is not reopened. Only then may the owner
-authorize the provider's production recovery procedure.
+Restoration is a separately approved incident decision by the database owner,
+privacy contact, and incident owner. It is never an automatic rollback step,
+never reverses migration history, and never inherits authority from a release
+or rehearsal approval. Keep joining closed and preserve the current system and
+opaque incident evidence until those owners select one path.
 
-After recovery, rotate affected credentials, reconcile group images by opaque
-path, run the complete readiness suite, and keep joining closed until teacher
-acceptance.
+### Provider-managed backup or PITR path
+
+Use only the provider backup/PITR identifier and recovery point in the signed
+pre-release record. Rehearse the exact point in a new non-production project,
+then verify migrations, ownership/RLS, Auth and aggregate evidence counts,
+retention/cleanup state, and expired join/recovery behavior. Provider database
+recovery does not by itself restore underlying Storage objects: reconcile the
+private `group-images` inventory, bytes, and per-object digests against the
+separately retained Storage evidence before production recovery is accepted.
+Only then may the owners separately authorize the provider's production
+recovery procedure.
+
+### Free-plan encrypted logical-package path
+
+Use only the opaque backup evidence ID, encrypted archive SHA-256, creation
+time, and successful hosted rehearsal evidence recorded before the release.
+Follow `free-plan-recovery.md` under fresh approvals and with separate key
+custody. Verify both retained encrypted copies before decrypting into controlled
+staging. Restore database roles, schema, data, and migration history in the
+supported order, then reconcile all `group-images` objects with the encrypted
+internal manifest. Never use `vadyhuipwbtgbzpeisbn` as the target or place a
+credential, connection string, path, manifest, SQL, or row in incident evidence.
+
+Before any production cutover, repeat the full database, Auth, ownership/RLS,
+retention, immutable-evidence, function-boundary, and Storage aggregate/digest
+validation. A logical package older than the incident's approved recovery point,
+a missing object, or any digest mismatch stops recovery. Production migrations
+remain forward-only; restoration does not authorize history repair, database
+reset, destructive migration, or an unreviewed second migration command.
+
+After either path, rotate affected credentials, reconcile database Storage
+metadata with every underlying `group-images` object, run the complete readiness
+suite, and keep joining closed until teacher acceptance. Record separate
+incident approval, recovery result, reviewer, and UTC time using opaque evidence
+only.
 
 ## Exit criteria
 

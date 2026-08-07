@@ -221,3 +221,43 @@ it("shows Group Studio while waiting and resumes when a server attempt appears",
     ).toBeVisible(),
   );
 });
+
+it("explains an expired session without exposing technical details", async () => {
+  const gateway = journeyGateway();
+  gateway.loadContext = vi.fn(async () => {
+    throw new Error("STUDENT_SESSION_NOT_AVAILABLE");
+  });
+  render(<QuestEntryPage gateway={gateway} groupGateway={groupGateway()} />);
+
+  expect(
+    await screen.findByRole("heading", {
+      name: /your campus place needs attention/i,
+    }),
+  ).toBeVisible();
+  expect(screen.getByText(/student session has expired/i)).toBeVisible();
+  expect(screen.getByText(/ask your teacher for a recovery link/i)).toBeVisible();
+  expect(screen.queryByText(/STUDENT_SESSION/i)).not.toBeInTheDocument();
+});
+
+it("keeps confirmed feedback visible until the student chooses to continue", async () => {
+  render(
+    <QuestEntryPage
+      gateway={journeyGateway()}
+      groupGateway={groupGateway()}
+      pollIntervalMs={10}
+    />,
+  );
+  await screen.findByRole("heading", { name: "Diagnostic Gate" });
+  fireEvent.click(
+    screen.getByRole("radio", { name: "Name the learner goal first" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: /confirm response/i }));
+  expect(await screen.findByText("Correct")).toBeVisible();
+
+  await new Promise((resolve) => window.setTimeout(resolve, 40));
+
+  expect(screen.getByText("Correct")).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: /continue campus route/i }),
+  ).toBeVisible();
+});

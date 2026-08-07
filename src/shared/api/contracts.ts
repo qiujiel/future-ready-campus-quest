@@ -17,11 +17,8 @@ export type LearningPhase =
   | "reflection";
 
 export interface JoinCohortInput {
-  joinToken: string;
-  groupNumber: number;
-  realName: string;
-  nickname?: string;
-  privacyConfirmed: boolean;
+  joinCode: string;
+  displayName: string;
   requestKey: string;
 }
 
@@ -63,6 +60,28 @@ export interface OpenJoinWindowInput {
   action: "open";
   cohortId: string;
   requestKey: string;
+}
+
+export interface TeacherCohortListItem {
+  cohortId: string;
+  title: string;
+  groupCount: number;
+  groupCapacity: number;
+  createdAt: string;
+}
+
+export interface TeacherGroupJoinCode {
+  groupId: string;
+  groupNumber: number;
+  joinCode: string;
+  enabled: boolean;
+}
+
+export interface JoinWindowReceipt {
+  joinUrl: string;
+  studentUrl: string;
+  expiresAt: string;
+  groups: TeacherGroupJoinCode[];
 }
 
 export interface CloseJoinWindowInput {
@@ -239,9 +258,88 @@ export interface TeacherDashboardSummary {
   generatedAt: string;
 }
 
+export type TeacherStudentActivityStatus =
+  | "joined"
+  | "started"
+  | "incomplete"
+  | "submitted";
+
+export interface TeacherRosterStudent {
+  studentId: string;
+  displayName: string;
+  joinedAt: string;
+  lastActiveAt: string | null;
+  activityStatus: TeacherStudentActivityStatus;
+  currentPhase: LearningPhase | null;
+}
+
+export interface TeacherReadinessGroup {
+  groupId: string;
+  groupNumber: number;
+  displayName: string;
+  capacity: number;
+  joinCode: string | null;
+  joinEnabled: boolean;
+  students: TeacherRosterStudent[];
+}
+
+export interface ClassroomReadinessReport {
+  cohortId: string;
+  title: string;
+  expected: number;
+  joined: number;
+  active: number;
+  started: number;
+  submitted: number;
+  incomplete: number;
+  errors: number;
+  joining: {
+    open: boolean;
+    expiresAt: string | null;
+    studentUrl: string;
+  };
+  groups: TeacherReadinessGroup[];
+}
+
+export interface TeacherQuestionBankEntry {
+  itemId: string;
+  conceptId: ConceptId;
+  form: "diagnostic" | "practice" | "final";
+  stem: string;
+  interaction: LearningInteractionPayload;
+  correctResponse: string[] | Record<string, string>;
+  rationale: string;
+  sourcePageLabels: string[];
+}
+
+export interface TeacherQuestionBank {
+  versionKey: string;
+  itemCount: 24;
+  conceptCount: 8;
+  items: TeacherQuestionBankEntry[];
+}
+
 export type TeacherControlCommand =
   | { action: "open-join"; cohortId: string }
   | { action: "close-join"; cohortId: string }
+  | { action: "launch-quest"; cohortId: string }
+  | {
+      action: "set-group-join";
+      cohortId: string;
+      groupId: string;
+      enabled: boolean;
+    }
+  | {
+      action: "move-student";
+      cohortId: string;
+      studentId: string;
+      groupId: string;
+    }
+  | {
+      action: "remove-student" | "reset-student";
+      cohortId: string;
+      studentId: string;
+    }
   | {
       action: "issue-recovery";
       cohortId: string;

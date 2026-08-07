@@ -187,7 +187,13 @@ select
     when '20000000-0000-0000-0000-000000000003' then 'Explorer Three'
     else 'Other Explorer'
   end
-from public.student_private_profiles;
+from public.student_private_profiles
+where student_id in (
+  '20000000-0000-0000-0000-000000000001',
+  '20000000-0000-0000-0000-000000000002',
+  '20000000-0000-0000-0000-000000000003',
+  '30000000-0000-0000-0000-000000000001'
+);
 
 set local role authenticated;
 select set_config(

@@ -1,5 +1,5 @@
 const DEDICATED_LOAD_PROJECT_REF = "vadyhuipwbtgbzpeisbn";
-const REQUIRED_GATE_D_MIGRATION = "20260730021100";
+const REQUIRED_GATE_D_MIGRATION = "20260806000700";
 
 function required(environment, name) {
   const value = environment[name]?.trim();
@@ -40,6 +40,67 @@ function readFrontendOrigin(value) {
     throw new Error("PRODUCTION_FRONTEND_ORIGIN must be an HTTPS origin.");
   }
   return url.origin;
+}
+
+export function readProductionFunctionConfiguration(environment) {
+  const frontendOrigin = readFrontendOrigin(
+    required(environment, "PRODUCTION_FRONTEND_ORIGIN"),
+  );
+  const basePath = required(environment, "VITE_BASE_PATH");
+  if (!basePath.startsWith("/") || !basePath.endsWith("/")) {
+    throw new Error("VITE_BASE_PATH must start and end with a slash.");
+  }
+
+  const expectedFrontendAppUrl = `${frontendOrigin}${basePath}`.replace(
+    /\/$/,
+    "",
+  );
+  const frontendAppUrl = required(environment, "FRONTEND_APP_URL").replace(
+    /\/$/,
+    "",
+  );
+  if (frontendAppUrl !== expectedFrontendAppUrl) {
+    throw new Error(
+      "FRONTEND_APP_URL must combine PRODUCTION_FRONTEND_ORIGIN with VITE_BASE_PATH.",
+    );
+  }
+
+  const allowedOrigins = required(
+    environment,
+    "ALLOWED_FRONTEND_ORIGINS",
+  )
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (allowedOrigins.length !== 1 || allowedOrigins[0] !== frontendOrigin) {
+    throw new Error(
+      "ALLOWED_FRONTEND_ORIGINS must contain exactly the production frontend origin.",
+    );
+  }
+
+  const secretNames = [
+    "JOIN_TOKEN_SIGNING_SECRET",
+    "RECOVERY_TOKEN_SIGNING_SECRET",
+    "PRODUCTION_READINESS_SECRET",
+  ];
+  const protectedSecrets = secretNames.map((name) => {
+    const value = required(environment, name);
+    if (new TextEncoder().encode(value).length < 32) {
+      throw new Error(`${name} must contain at least 32 bytes.`);
+    }
+    return value;
+  });
+  if (new Set(protectedSecrets).size !== protectedSecrets.length) {
+    throw new Error("Production protected secrets must not be reused.");
+  }
+
+  return {
+    frontendOrigin,
+    basePath,
+    frontendAppUrl,
+    allowedOriginCount: allowedOrigins.length,
+    secretCount: protectedSecrets.length,
+  };
 }
 
 export function readPreflightConfiguration(
