@@ -53,12 +53,18 @@ verify that evidence independently.
 
 ## `production-backend` environment
 
-Required protection:
+Normal protection target:
 
 - named production owner as required reviewer;
 - prevent self-review;
 - deployment branch limited to `main`;
 - administrator bypass disabled where the repository plan exposes the control.
+
+For the initial release only, the repository owner recorded the 2026-08-07
+exception that waives the second-person PR and environment review. The
+environment remains limited to `main`; automated checks, exact project identity,
+and the protected workflow are still mandatory. The exception does not expose
+or relocate any credential.
 
 Variables:
 
@@ -73,6 +79,7 @@ Secrets:
 | --- | --- |
 | `SUPABASE_ACCESS_TOKEN` | CLI authorization for the production organization |
 | `PRODUCTION_SUPABASE_DB_PASSWORD` | linked migration access |
+| `PRODUCTION_SUPABASE_SERVICE_ROLE_KEY` | server-only Auth and Storage cross-checks during the one-time bootstrap emptiness preflight |
 | `PRODUCTION_READINESS_SECRET` | custom authorization for the least-privilege readiness endpoint |
 | `ALLOWED_FRONTEND_ORIGINS` | exact browser origin only; no path or trailing slash |
 | `FRONTEND_APP_URL` | full hosted application base URL, including the Pages base path |
@@ -99,10 +106,19 @@ independently generated, at least 32 bytes, and never reused from local, CI, or
 the load project. The backend workflow also installs
 `PRODUCTION_READINESS_SECRET` as an Edge Function secret.
 
+`PRODUCTION_SUPABASE_SERVICE_ROLE_KEY` belongs in `production-backend only`.
+Never put it in a repository variable or a repository secret. It is forbidden
+from `production-readiness`, `github-pages`, frontend values or bundles, logs,
+job summaries, artifacts, caches, issues, and release records. The bootstrap
+step receives it only as an environment secret and never prints it. Rotate it after any unintended disclosure,
+then treat the event as a credential incident.
+
 ## `production-readiness` environment
 
-This is a separate read-only review gate. It requires a named reviewer,
-prevents self-review, and is limited to `main`.
+This is a separate read-only review gate limited to `main`. Its normal policy is
+a named reviewer with self-review prevention; the recorded 2026-08-07 owner
+exception waives that second person for the initial release without weakening
+the automated readiness checks.
 
 Variables:
 
@@ -122,20 +138,23 @@ Secret:
 
 The preflight prints only project identity, counts,
 migration/function/schedule status, and endpoint status. It must not print this
-key or protected record contents. No production service-role credential is
-stored in GitHub; the endpoint uses its provider-injected credential internally
-for the one readiness RPC.
+key or protected record contents. The production service-role credential is not
+available to this environment; the endpoint uses its provider-injected
+credential internally for the one readiness RPC.
 
 ## `github-pages` environment
 
-Require a named publication reviewer, prevent self-review, restrict to `main`,
-and disable administrator bypass where supported. Store no Supabase variable or
-secret in this environment. The job receives only the Pages write and OIDC
-permissions required by `actions/deploy-pages`.
+The normal policy uses a named publication reviewer and prevents self-review.
+For the recorded 2026-08-07 owner exception, keep the environment restricted to
+`main` with no Supabase variable or secret even though the second person is
+waived. The job receives only the Pages write and OIDC permissions required by
+`actions/deploy-pages`.
 
 ## Configuration verification
 
-Before release, a repository administrator and a second reviewer verify:
+Before release, the repository administrator verifies the inventory below. A
+second reviewer normally repeats it; for the recorded 2026-08-07 exception the
+owner performs and records the comparison once:
 
 - all names above exist at the specified scope;
 - no production credential exists as a repository secret when an environment
@@ -143,7 +162,8 @@ Before release, a repository administrator and a second reviewer verify:
 - the production project URL equals
   `https://ghohuwwjxgjqnbsauvzq.supabase.co` exactly;
 - the load URL contains `vadyhuipwbtgbzpeisbn` and the production URL does not;
-- each environment has the required reviewer and branch rule;
+- each environment has the `main` branch rule and either its normal required
+  reviewer or the recorded initial-release owner exception;
 - `github-pages` contains no Supabase credential;
 - the four recovery values are supplied only as per-run non-secret workflow
   inputs and match the separately held release record;
@@ -152,5 +172,5 @@ Before release, a repository administrator and a second reviewer verify:
 - workflow Actions are allowed to run and GitHub Pages uses GitHub Actions as
   its source.
 
-Record verification time and reviewer names in the release checklist, not the
-values that were inspected.
+Record verification time and the reviewer or exception owner in the release
+checklist, not the values that were inspected.

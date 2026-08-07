@@ -1,4 +1,4 @@
-# Deployment Readiness Review — 2026-08-06
+# Deployment Readiness Review — 2026-08-07
 
 **Reviewed branch:** `codex/gate-d-teacher-readiness`
 **Original Gate D commit:** `4783565`
@@ -10,7 +10,30 @@
 **Dedicated load-test project:** `vadyhuipwbtgbzpeisbn`
 **Decision: HOLD**
 
-This is an independent repository and read-only remote-configuration review.
+## Owner review exception — 2026-08-07
+
+The repository owner waived the second-person PR and environment review for
+this initial release and authorized proceeding without an independent reviewer.
+This deployment is not independently reviewed. The exception changes only the
+human-review requirement: automated checks remain mandatory, project-identity gates remain mandatory,
+protected environment scoping remains mandatory, and
+no failing or skipped technical gate may be waived.
+
+The first backend release additionally requires bootstrap preflight evidence
+from the protected workflow. That evidence must show the exact production
+project, the distinct load-test project, the canonical bootstrap authorization
+ID, and zero counts for migration history, application relations/functions,
+Auth users, Storage buckets/objects, and Edge Functions. HOLD remains in effect
+until that fail-closed step succeeds before the first production write.
+
+The material below incorporates the independent 2026-08-06 repository and
+read-only remote-configuration review as a historical baseline and reconciles
+it with the 2026-08-07 state. Its second-person requirements are superseded only
+by the owner exception above; its automated, credential-scope, recovery,
+rollback, and project-separation controls remain in force unless this current
+review explicitly distinguishes bootstrap.
+
+At the historical baseline, this was an independent repository and read-only remote-configuration review.
 At `2026-08-06T04:03:01Z`, GitHub repository metadata and Supabase project
 identity/function-secret inventories were inspected without changing them. No
 backup, restore rehearsal, deployment, production database connection, or
@@ -44,9 +67,11 @@ uses the reviewed artifact rather than rebuilding it, reaches the distinct
 checklist retains artifact ID, approved commit, manifest SHA-256, reviewer,
 served-release metadata, smoke checks, and rollback evidence.
 
-The remote Pages endpoint currently returns `404`: no Pages site is configured.
-No production environment exists, so no reviewer/self-review/branch rule is
-configured and no real Pages artifact has been produced or verified.
+GitHub Pages is configured to publish from Actions at
+`https://qiujiel.github.io/future-ready-campus-quest/`, but no production Pages
+artifact has yet completed deployment or hosted verification. The three
+environments exist and are limited to `main`; the second-person reviewer control
+is intentionally absent under the owner exception.
 
 ## GitHub variables and secrets inventory
 
@@ -57,15 +82,15 @@ secrets. The documented design excludes backups, connection strings, database
 passwords, Storage administration keys, encryption keys, plaintext exports,
 object paths, and protected manifests from every GitHub scope.
 
-The remote repository inventory contains zero Actions variables, zero Actions
-secrets, and zero environments. The private repository has one collaborator,
-`qiujiel`, and the account currently cannot enable branch protection for this
-private repository. The draft pull request at the student-ready baseline is
-mergeable and its two verification runs and two secret scans passed. A
-repository administrator and a distinct reviewer must still configure and
-independently compare every variable, secret, environment, reviewer,
-self-review control, administrator-bypass setting, and `main` rule with the
-formal checklist without copying values into evidence.
+The repository is public. The four approved non-sensitive Actions variables are
+configured, and environment-scoped production variables and secrets exist by
+name without values appearing in this review. Branch protection requires the
+verification and secret-scan checks and disallows force pushes/deletion; the
+latest-push and second-person approvals are disabled under the explicit owner
+exception. A repository administrator must still compare every GitHub
+repository/environment variable and secret name, protected environment, branch
+rule, and reviewer-exception record with the formal checklist without copying
+values into evidence.
 
 ## Supabase migration and function sequence
 
@@ -84,10 +109,12 @@ publication remain separate operations.
 The Supabase project inventory confirms production project
 `ghohuwwjxgjqnbsauvzq` is `ACTIVE_HEALTHY` in `ap-southeast-1` and the dedicated
 load project `vadyhuipwbtgbzpeisbn` is separately `ACTIVE_HEALTHY` in
-`ap-northeast-2`. Production currently reports zero deployed Edge Functions and
-zero custom Function secrets. No production database connection was made, so
-migration history, Auth configuration, content, cron, retention, and database
-objects remain unverified.
+`ap-northeast-2`. Production currently reports zero deployed Edge Functions. A
+read-only management aggregate and independent Auth/Storage control-plane
+queries found no migration tracking table, application relation/function, Auth
+user, Storage bucket/object, or Edge Function. Auth site/redirect URLs and
+anonymous sign-in are configured. The protected workflow must repeat these
+empty-state checks; only its successful preflight is release evidence.
 
 ## Recovery and rollback
 
@@ -113,45 +140,45 @@ was created or verified by this review.
 
 ## Remaining external blockers
 
-Release remains on HOLD until authorized owners complete and independently
-verify all of the following outside this repository:
+The initial release remains on HOLD until all of the following finish:
 
-- choose a GitHub hosting/visibility plan that supports Pages, protected
-  branches, environment secrets, and required deployment reviewers; the
-  current private GitHub Free repository does not;
-- add at least one trusted GitHub collaborator who is distinct from `qiujiel`
-  and can perform the required independent deployment reviews;
-- designate the encryption/recovery custodian and provision the `age` key with
-  separate key custody;
-- approve and verify the two custody locations: institution-controlled cloud
-  storage and encrypted offline/local storage;
-- create, copy, read back, and independently review a real production recovery
-  package less than 24 hours old with no later production write;
-- pause/reactivate the load-test project under approval and complete the hosted
-  Singapore restore rehearsal, aggregate validation, evidence review, and
-  temporary-project teardown;
-- configure and independently verify all GitHub repository/environment
-  variables and secrets, protected environments, distinct required reviewers,
-  self-review prevention, administrator bypass controls, and `main` branch
-  rules;
-- obtain course-owner production retention approval and record the approved
-  value, approver, and time in the production database;
-- provision and validate the opaque production smoke teacher/cohort fixtures
-  without retaining live joins or recovery tokens;
-- obtain data-owner acceptance of the Supabase Free-plan pause/availability
-  limitation and schedule an early class health/reactivation check;
-- complete every item and signature in `release-checklist.md`, including source,
-  load, content, backend, readiness, Pages artifact, publication, smoke,
-  observation, rollback, and privacy gates.
+- merge the bootstrap workflow changes to `main` after all automated checks;
+- store `PRODUCTION_SUPABASE_SERVICE_ROLE_KEY` only in `production-backend` and
+  compare every GitHub repository/environment variable and secret name with the
+  inventory;
+- dispatch bootstrap with the exact main SHA, exact production ref, canonical
+  authorization ID, and empty recovery fields; require zero-count preflight
+  evidence before migrations;
+- complete backend migrations, Function secrets/deployment, and backend
+  readiness from that single protected run;
+- import approved content, configure production retention approval, and create
+  the opaque smoke teacher/cohort fixtures without an open join window;
+- package the immutable Pages artifact, pass production readiness, publish it,
+  and complete clean teacher/student permission-boundary and classroom-flow
+  smoke tests;
+- complete every applicable item and signature in `release-checklist.md`. The
+  owner-exception record replaces only the independent reviewer signature for
+  this release.
+
+Before GO, complete every item and signature that applies to the initial
+bootstrap; mark the superseded reviewer field with the dated owner exception.
+
+After successful bootstrap, content, and fixtures—but before the next backend
+upgrade—the owner must designate the encryption/recovery custodian, provision
+separate key custody, verify two custody locations, create a real production
+recovery package (the real production recovery record), complete the hosted restore rehearsal and temporary-project teardown,
+and address Supabase Free-plan pause/availability. Normal upgrades
+then restore required reviewers unless a new explicit exception is recorded.
 
 ## Conditions for GO
 
-GO is possible only when every formal checklist item is checked, every distinct
-reviewer approves the corresponding protected environment, the real recovery
-record matches all four backend workflow inputs, both encrypted copies and the
-hosted restore rehearsal are independently verified, retention and smoke
-fixtures pass, the immutable Pages artifact and served metadata match, and the
-release owner plus independent reviewer sign the GO outcome.
+For this first release, GO is possible only when every applicable formal
+checklist item is checked, the owner-exception record is present, bootstrap
+preflight proves emptiness, retention and smoke fixtures pass, the immutable
+Pages artifact and served metadata match, and the release owner signs the GO
+outcome. Required reviewers, a real recovery record, both encrypted copies, and
+the independently verified hosted restore rehearsal become mandatory before
+the next backend upgrade as stated above.
 
 Until that evidence exists, the decision remains **HOLD**. A repository commit,
 green local test, workflow dispatch, or document signature cannot replace an

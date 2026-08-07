@@ -19,6 +19,21 @@ If controls are unavailable, the production owner may temporarily disable the
 affected Edge Function from the provider console while preserving evidence.
 That exceptional action and restoration must be recorded.
 
+## Failed initial bootstrap
+
+A failed initial bootstrap stays on HOLD. Keep Pages unpublished, do not import
+protected content or create classroom fixtures, and close every join path. The
+redaction-safe authorization ID and zero-count output describe a pre-release
+condition only: bootstrap evidence cannot restore data.
+
+Inspect the workflow run and remote migration list without changing production.
+The only permitted next path is a separately approved forward fix through a new
+reviewed workflow run, or empty-project recreation under a separate explicit
+owner decision after proving that no student, teacher, content, Auth, Storage,
+or audit state exists. Neither path is automatic. The bootstrap approval grants
+no reset, deletion, or migration-history repair, and it grants no authority to
+repeat a partially completed migration command manually.
+
 ## Pages rollback within 90 days
 
 Use the retained artifact; never rebuild an old commit with current tooling.
