@@ -111,6 +111,21 @@ workflow until the release owner has compared the remote migration list with
 the approved commit. Database migrations are forward-only: no reset, deletion,
 or migration-history repair is authorized.
 
+## One-time failed-bootstrap Function repair
+
+Workflow run `31188390434` applied the approved migrations and Function secrets
+but failed its final readiness check after all Functions deployed. The bounded
+`bootstrap-function-repair.yml` workflow exists only to forward-fix that run.
+It is tied to the failed run ID and production identity, proves
+`supabase/migrations` is unchanged from commit
+`f6bb71f61b9f28341542876135bc6cd6b4e19302`, permits no database or content
+mutation, and may only reinstall encrypted Function secrets and redeploy the
+complete Function set before backend readiness.
+
+After the repair succeeds, remove this workflow and its validator in the next
+protected pull request. Do not repurpose it for a later release, content import,
+database compensation, or normal Function upgrade.
+
 ## Protected-content import
 
 The backend workflow deliberately does not import course content. After the
