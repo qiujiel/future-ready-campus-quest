@@ -143,7 +143,7 @@ was created or verified by this review.
 The initial release remains on HOLD until all of the following finish:
 
 - merge the bootstrap workflow changes to `main` after all automated checks;
-- store `PRODUCTION_SUPABASE_SERVICE_ROLE_KEY` only in `production-backend` and
+- store `PRODUCTION_SUPABASE_SECRET_KEY` only in `production-backend` and
   compare every GitHub repository/environment variable and secret name with the
   inventory;
 - dispatch bootstrap with the exact main SHA, exact production ref, canonical

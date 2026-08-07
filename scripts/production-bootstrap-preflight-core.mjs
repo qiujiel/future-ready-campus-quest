@@ -1,3 +1,5 @@
+import { createClient } from "@supabase/supabase-js";
+
 const PRODUCTION_PROJECT_REF = "ghohuwwjxgjqnbsauvzq";
 const LOAD_PROJECT_REF = "vadyhuipwbtgbzpeisbn";
 const PRODUCTION_URL = `https://${PRODUCTION_PROJECT_REF}.supabase.co`;
@@ -54,9 +56,9 @@ export function readBootstrapConfiguration(environment) {
     ),
     url: requiredString(environment.PRODUCTION_SUPABASE_URL, "PRODUCTION_SUPABASE_URL"),
     accessToken: requiredString(environment.SUPABASE_ACCESS_TOKEN, "SUPABASE_ACCESS_TOKEN"),
-    serviceRoleKey: requiredString(
-      environment.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY,
-      "PRODUCTION_SUPABASE_SERVICE_ROLE_KEY",
+    secretKey: requiredString(
+      environment.PRODUCTION_SUPABASE_SECRET_KEY,
+      "PRODUCTION_SUPABASE_SECRET_KEY",
     ),
   };
 
@@ -74,6 +76,9 @@ export function readBootstrapConfiguration(environment) {
   }
   if (configuration.url !== PRODUCTION_URL) {
     configurationFailure("production URL identity");
+  }
+  if (!/^sb_secret_[A-Za-z0-9_-]{16,}$/.test(configuration.secretKey)) {
+    configurationFailure("PRODUCTION_SUPABASE_SECRET_KEY must be a modern secret key");
   }
 
   return Object.freeze(configuration);
@@ -178,15 +183,15 @@ function databaseSnapshot(body) {
 export async function fetchBootstrapSnapshot(
   configuration,
   fetchImpl = globalThis.fetch,
+  createClientImpl = createClient,
 ) {
   if (typeof fetchImpl !== "function") preflightFailure("fetch implementation unavailable");
+  if (typeof createClientImpl !== "function") {
+    preflightFailure("Supabase client implementation unavailable");
+  }
   const managementHeaders = {
     authorization: `Bearer ${configuration.accessToken}`,
     "content-type": "application/json",
-  };
-  const serviceHeaders = {
-    apikey: configuration.serviceRoleKey,
-    authorization: `Bearer ${configuration.serviceRoleKey}`,
   };
   const managementBase =
     `https://api.supabase.com/v1/projects/${configuration.projectRef}`;
@@ -207,41 +212,49 @@ export async function fetchBootstrapSnapshot(
     { headers: { authorization: `Bearer ${configuration.accessToken}` } },
     fetchImpl,
   );
-  const authBody = await requestJson(
-    "Auth",
-    `${configuration.url}/auth/v1/admin/users?page=1&per_page=1`,
-    { headers: serviceHeaders },
-    fetchImpl,
-  );
-  const storageBody = await requestJson(
-    "Storage",
-    `${configuration.url}/storage/v1/bucket`,
-    { headers: serviceHeaders },
-    fetchImpl,
-  );
+  let authResult;
+  let storageResult;
+  try {
+    const adminClient = createClientImpl(
+      configuration.url,
+      configuration.secretKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+          persistSession: false,
+        },
+      },
+    );
+    authResult = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1 });
+    storageResult = await adminClient.storage.listBuckets();
+  } catch {
+    preflightFailure("Auth or Storage admin request failed");
+  }
 
   if (!Array.isArray(functionsBody)) {
     preflightFailure("Edge Function response invalid");
   }
   if (
-    !authBody ||
-    typeof authBody !== "object" ||
-    Array.isArray(authBody) ||
-    !Array.isArray(authBody.users) ||
-    authBody.users.length !== 0 ||
-    authBody.total !== 0 ||
-    (authBody.next_page !== null && authBody.next_page !== undefined)
+    authResult?.error ||
+    !authResult?.data ||
+    typeof authResult.data !== "object" ||
+    Array.isArray(authResult.data) ||
+    !Array.isArray(authResult.data.users) ||
+    authResult.data.users.length !== 0 ||
+    authResult.data.total !== 0 ||
+    (authResult.data.nextPage !== null && authResult.data.nextPage !== undefined)
   ) {
     preflightFailure("Auth response invalid");
   }
-  if (!Array.isArray(storageBody)) {
+  if (storageResult?.error || !Array.isArray(storageResult?.data)) {
     preflightFailure("Storage response invalid");
   }
 
   return Object.freeze({
     database: databaseSnapshot(databaseBody),
-    authAdminUserCount: authBody.total,
-    storageAdminBucketCount: storageBody.length,
+    authAdminUserCount: authResult.data.total,
+    storageAdminBucketCount: storageResult.data.length,
     edgeFunctionCount: functionsBody.length,
   });
 }

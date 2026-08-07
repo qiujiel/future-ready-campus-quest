@@ -171,8 +171,8 @@ function validConfiguration() {
               env: {
                 BOOTSTRAP_AUTHORIZATION_ID:
                   "${{ inputs.bootstrap_authorization_id }}",
-                PRODUCTION_SUPABASE_SERVICE_ROLE_KEY:
-                  "${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY }}",
+                PRODUCTION_SUPABASE_SECRET_KEY:
+                  "${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}",
                 SUPABASE_ACCESS_TOKEN: "${{ secrets.SUPABASE_ACCESS_TOKEN }}",
               },
               run: "node scripts/production-bootstrap-preflight.mjs",
@@ -715,8 +715,8 @@ describe("deployment workflow boundaries", () => {
     ["missing authorization mapping", (step) => {
       delete step.env.BOOTSTRAP_AUTHORIZATION_ID;
     }],
-    ["wrong service-role mapping", (step) => {
-      step.env.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY =
+    ["wrong secret-key mapping", (step) => {
+      step.env.PRODUCTION_SUPABASE_SECRET_KEY =
         "${{ secrets.PRODUCTION_SUPABASE_DB_PASSWORD }}";
     }],
     ["extra mapping", (step) => {
@@ -971,14 +971,14 @@ describe("deployment workflow boundaries", () => {
     );
   });
 
-  it("rejects service-role credentials in the readiness job", () => {
+  it("rejects privileged Supabase credentials in the readiness job", () => {
     const configuration = validConfiguration();
     configuration.pages.jobs.preflight.env
-      .PRODUCTION_SUPABASE_SERVICE_ROLE_KEY =
-        "${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY }}";
+      .PRODUCTION_SUPABASE_SECRET_KEY =
+        "${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}";
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
-      /readiness.*service-role/i,
+      /readiness.*privileged Supabase/i,
     );
   });
 });
