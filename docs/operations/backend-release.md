@@ -133,11 +133,16 @@ database compensation, or normal Function upgrade.
 
 The backend workflow deliberately does not import course content. After the
 backend preflight succeeds, the authorized course owner may run the protected
-content importer from the same approved commit. Every non-local invocation must
-include `--confirm-project-ref=<exact-production-ref>` and must first display a
-URL whose project ref matches that confirmation. Record version key and counts,
-not content or credentials. The expected release dataset is 24 items covering
-8 concepts.
+content importer from the same approved commit. Store the ignored JSON only as
+the encrypted `PROTECTED_CONTENT_BANK_JSON` secret in the protected
+`production-backend` GitHub environment, then dispatch
+`production-content-import.yml` from the exact approved `main` SHA. The
+workflow requires the exact project ref and content version, uses the modern
+`PRODUCTION_SUPABASE_SECRET_KEY`, never uploads the source as an artifact, and
+always removes its temporary file. Every non-local invocation also requires
+`--confirm-project-ref=<exact-production-ref>` and
+`--expected-content-version=<approved-version>`. Record only the version key and
+the 24-item/8-concept receipt, never content or credentials.
 
 ## Post-backend evidence
 

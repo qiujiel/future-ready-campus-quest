@@ -56,7 +56,7 @@ export async function bootstrapLocalClassroom(
   const bank = validateContentBank(configuration.bank, { production: true });
   const content = await importProtectedContent(bank, {
     supabaseUrl: configuration.supabaseUrl,
-    serviceRoleKey: configuration.serviceRoleKey,
+    secretKey: configuration.serviceRoleKey,
   });
   const admin = createClient(
     configuration.supabaseUrl,
