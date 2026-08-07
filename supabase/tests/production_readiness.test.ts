@@ -51,6 +51,17 @@ describe("production readiness authorization", () => {
     )).toBe(false);
   });
 
+  it("accepts handler-level method rejection on authenticated routes", async () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 405 }));
+
+    await expect(probeFunctionBoundaries({
+      supabaseUrl: "https://abcdefghijklmnopqrst.supabase.co",
+      publishableKey: "modern-publishable-key",
+      frontendOrigin: "https://school.example",
+      fetcher,
+    })).resolves.toEqual({ edgeFunctionsReady: 10 });
+  });
+
   it("rejects a missing or incorrectly configured function boundary", async () => {
     const fetcher = vi.fn(async (url: string | URL | Request) =>
       new Response(null, {

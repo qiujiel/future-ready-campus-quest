@@ -61,8 +61,10 @@ export async function probeFunctionBoundaries({
           },
         },
       );
-      const expectedStatus = PUBLIC_FUNCTION_NAMES.has(name) ? 405 : 401;
-      if (response.status !== expectedStatus) {
+      const publicFunction = PUBLIC_FUNCTION_NAMES.has(name);
+      const boundaryReady = response.status === 405 ||
+        (!publicFunction && response.status === 401);
+      if (!boundaryReady) {
         failures.push(`${name} returned ${response.status}`);
       }
     } catch {

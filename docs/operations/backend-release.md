@@ -92,6 +92,9 @@ The workflow performs one ordered sequence from the approved commit:
    identity, migrations through `20260806000700`, required RPCs, the exact
    unique active cleanup schedule, Auth health, and all application-function
    method boundaries probed server-side with the modern publishable key;
+   public join/recovery routes must reach their handlers and return `405`, while
+   authenticated routes may reject at the gateway with `401` or at their
+   method guard with `405`;
 10. delete temporary secret material in an always-run step.
 
 The Function secret step installs `FRCQ_SUPABASE_PUBLISHABLE_KEY` and
