@@ -90,8 +90,8 @@ const BOOTSTRAP_PREFLIGHT_STEP = {
   env: {
     BOOTSTRAP_AUTHORIZATION_ID:
       "${{ inputs.bootstrap_authorization_id }}",
-    PRODUCTION_SUPABASE_SERVICE_ROLE_KEY:
-      "${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY }}",
+    PRODUCTION_SUPABASE_SECRET_KEY:
+      "${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}",
     SUPABASE_ACCESS_TOKEN: "${{ secrets.SUPABASE_ACCESS_TOKEN }}",
   },
   run: "node scripts/production-bootstrap-preflight.mjs",
@@ -198,8 +198,11 @@ function requireDedicatedLiveLoad(job) {
 
 function requireLeastPrivilegeReadiness(job) {
   const serialized = JSON.stringify(job ?? {});
-  if (serialized.includes("PRODUCTION_SUPABASE_SERVICE_ROLE_KEY")) {
-    fail("production-readiness must not receive a service-role credential");
+  if (
+    serialized.includes("PRODUCTION_SUPABASE_SECRET_KEY") ||
+    serialized.includes("PRODUCTION_SUPABASE_SERVICE_ROLE_KEY")
+  ) {
+    fail("production-readiness must not receive a privileged Supabase credential");
   }
   if (!serialized.includes("PRODUCTION_READINESS_SECRET")) {
     fail("production-readiness requires its dedicated readiness secret");

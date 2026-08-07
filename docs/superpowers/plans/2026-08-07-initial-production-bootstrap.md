@@ -15,7 +15,7 @@
 - `bootstrap` is valid only when migrations, Auth users, application relations/functions, Storage buckets/objects, and Edge Functions are all absent.
 - `upgrade` continues to require all four canonical recovery inputs and their existing freshness checks.
 - No credential, API response body, database content, Auth record, Storage path, or protected content may be printed or committed.
-- `PRODUCTION_SUPABASE_SERVICE_ROLE_KEY` is an encrypted `production-backend` environment secret only; it is never a repository variable or frontend value.
+- `PRODUCTION_SUPABASE_SECRET_KEY` is an encrypted `production-backend` environment secret only; it is never a repository variable or frontend value.
 - Bootstrap preflight must run after protected identity validation and before migration dry-run, migration apply, secret writes, or Function deployment.
 - Any failed or ambiguous preflight stops the release without retry, reset, deletion, or migration-history repair.
 - Node remains `>=24 <25`; pnpm remains `>=11 <12`; no new dependency is added.
@@ -140,7 +140,7 @@ git commit -m "feat: validate production release modes"
 - Create: `tests/deployment/production-bootstrap-preflight.test.js`
 
 **Interfaces:**
-- Consumes: exact production/load refs, production URL, bootstrap authorization ID, `SUPABASE_ACCESS_TOKEN`, and `PRODUCTION_SUPABASE_SERVICE_ROLE_KEY`.
+- Consumes: exact production/load refs, production URL, bootstrap authorization ID, `SUPABASE_ACCESS_TOKEN`, and `PRODUCTION_SUPABASE_SECRET_KEY`.
 - Produces: `readBootstrapConfiguration(environment)`, `evaluateBootstrapSnapshot(snapshot, configuration)`, `fetchBootstrapSnapshot(configuration, fetchImpl)`, and a CLI that prints only zero-count aggregate evidence.
 
 - [ ] **Step 1: Write failing configuration and aggregate tests**
@@ -324,7 +324,7 @@ Pass `RELEASE_MODE` and `BOOTSTRAP_AUTHORIZATION_ID` to the protected release jo
   if: ${{ inputs.release_mode == 'bootstrap' }}
   env:
     BOOTSTRAP_AUTHORIZATION_ID: ${{ inputs.bootstrap_authorization_id }}
-    PRODUCTION_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY }}
+    PRODUCTION_SUPABASE_SECRET_KEY: ${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}
     SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
   run: node scripts/production-bootstrap-preflight.mjs
 ```
@@ -384,7 +384,7 @@ Extend `recovery-documentation.test.js` to require these exact terms across the 
 release_mode
 bootstrap_authorization_id
 frcq-bootstrap-YYYYMMDDTHHMMSSZ-xxxxxxxx
-PRODUCTION_SUPABASE_SERVICE_ROLE_KEY
+PRODUCTION_SUPABASE_SECRET_KEY
 zero application state
 bootstrap is self-disabling
 upgrade requires the four recovery values

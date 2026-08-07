@@ -79,7 +79,7 @@ returns only the project ref, release mode, authorization ID, and zero/nonzero
 aggregate results. Secrets and response bodies never appear in logs.
 
 The protected environment inventory adds
-`PRODUCTION_SUPABASE_SERVICE_ROLE_KEY`. It is used only by the bootstrap
+`PRODUCTION_SUPABASE_SECRET_KEY`. It is used only by the bootstrap
 preflight and later approved administrative setup; it is never a repository or
 frontend variable and never enters the public bundle.
 

@@ -19,7 +19,8 @@ const environment = {
   LOAD_SUPABASE_PROJECT_REF: loadRef,
   PRODUCTION_SUPABASE_URL: productionUrl,
   SUPABASE_ACCESS_TOKEN: "management-token-value",
-  PRODUCTION_SUPABASE_SERVICE_ROLE_KEY: "service-role-value",
+  PRODUCTION_SUPABASE_SECRET_KEY:
+    "sb_secret_synthetic_bootstrap_preflight_key",
 };
 
 const configuration = {
@@ -29,7 +30,7 @@ const configuration = {
   loadProjectRef: loadRef,
   url: productionUrl,
   accessToken: environment.SUPABASE_ACCESS_TOKEN,
-  serviceRoleKey: environment.PRODUCTION_SUPABASE_SERVICE_ROLE_KEY,
+  secretKey: environment.PRODUCTION_SUPABASE_SECRET_KEY,
 };
 
 const empty = {
@@ -80,17 +81,38 @@ function successfulFetch(requests) {
       }]);
     }
     if (String(url).endsWith("/functions")) return response([]);
-    if (String(url).includes("/auth/v1/admin/users")) {
-      return response({
-        aud: "authenticated",
-        users: [],
-        next_page: null,
-        last_page: 0,
-        total: 0,
-      });
-    }
-    if (String(url).endsWith("/storage/v1/bucket")) return response([]);
     return response({ message: "unexpected request" }, { status: 404 });
+  };
+}
+
+function successfulClient(calls = []) {
+  return (url, key, options) => {
+    calls.push({ url, key, options });
+    return {
+      auth: {
+        admin: {
+          listUsers: async (parameters) => {
+            calls.push({ operation: "listUsers", parameters });
+            return {
+              data: {
+                aud: "authenticated",
+                users: [],
+                nextPage: null,
+                lastPage: 0,
+                total: 0,
+              },
+              error: null,
+            };
+          },
+        },
+      },
+      storage: {
+        listBuckets: async () => {
+          calls.push({ operation: "listBuckets" });
+          return { data: [], error: null };
+        },
+      },
+    };
   };
 }
 
@@ -105,12 +127,20 @@ describe("production bootstrap preflight", () => {
     ["LOAD_SUPABASE_PROJECT_REF", productionRef],
     ["PRODUCTION_SUPABASE_URL", `https://${loadRef}.supabase.co`],
     ["SUPABASE_ACCESS_TOKEN", ""],
-    ["PRODUCTION_SUPABASE_SERVICE_ROLE_KEY", ""],
+    ["PRODUCTION_SUPABASE_SECRET_KEY", ""],
   ])("rejects unsafe configuration field %s", (name, value) => {
     expect(() => readBootstrapConfiguration({
       ...environment,
       [name]: value,
     })).toThrow(/bootstrap configuration invalid/i);
+  });
+
+  it("rejects a legacy JWT-style production credential", () => {
+    expect(() => readBootstrapConfiguration({
+      ...environment,
+      PRODUCTION_SUPABASE_SECRET_KEY: "eyJhbGciOiJIUzI1NiJ9.synthetic.jwt",
+      PRODUCTION_SUPABASE_SERVICE_ROLE_KEY: "legacy-value",
+    })).toThrow(/secret key/i);
   });
 
   it("accepts only the exact empty production project", () => {
@@ -163,14 +193,17 @@ describe("production bootstrap preflight", () => {
 
   it("fetches every authoritative surface with server-only credentials", async () => {
     const requests = [];
-    await expect(fetchBootstrapSnapshot(configuration, successfulFetch(requests)))
+    const clientCalls = [];
+    await expect(fetchBootstrapSnapshot(
+      configuration,
+      successfulFetch(requests),
+      successfulClient(clientCalls),
+    ))
       .resolves.toEqual(empty);
 
     expect(requests.map(({ url }) => url)).toEqual([
       `https://api.supabase.com/v1/projects/${productionRef}/database/query`,
       `https://api.supabase.com/v1/projects/${productionRef}/functions`,
-      `${productionUrl}/auth/v1/admin/users?page=1&per_page=1`,
-      `${productionUrl}/storage/v1/bucket`,
     ]);
     expect(requests[0].options).toMatchObject({
       method: "POST",
@@ -182,14 +215,25 @@ describe("production bootstrap preflight", () => {
     expect(JSON.parse(requests[0].options.body)).toMatchObject({
       read_only: true,
     });
-    expect(requests[2].options.headers).toEqual({
-      apikey: configuration.serviceRoleKey,
-      authorization: `Bearer ${configuration.serviceRoleKey}`,
-    });
-    expect(requests[3].options.headers).toEqual({
-      apikey: configuration.serviceRoleKey,
-      authorization: `Bearer ${configuration.serviceRoleKey}`,
-    });
+    expect(clientCalls).toEqual([
+      {
+        url: productionUrl,
+        key: configuration.secretKey,
+        options: {
+          auth: {
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+            persistSession: false,
+          },
+        },
+      },
+      { operation: "listUsers", parameters: { page: 1, perPage: 1 } },
+      { operation: "listBuckets" },
+    ]);
+    expect(JSON.stringify(requests)).not.toContain(configuration.secretKey);
+    expect(requests.every(({ options }) =>
+      !JSON.stringify(options.headers ?? {}).includes("sb_secret_"),
+    )).toBe(true);
   });
 
   it("rejects non-success API responses without exposing bodies or credentials", async () => {
@@ -197,7 +241,11 @@ describe("production bootstrap preflight", () => {
     const fetchImpl = async () => response({ message: leak }, { status: 503 });
     let error;
     try {
-      await fetchBootstrapSnapshot(configuration, fetchImpl);
+      await fetchBootstrapSnapshot(
+        configuration,
+        fetchImpl,
+        successfulClient(),
+      );
     } catch (caught) {
       error = caught;
     }
@@ -205,57 +253,56 @@ describe("production bootstrap preflight", () => {
     expect(error.message).toMatch(/database aggregate request failed: 503/i);
     expect(error.message).not.toContain(leak);
     expect(error.message).not.toContain(configuration.accessToken);
-    expect(error.message).not.toContain(configuration.serviceRoleKey);
+    expect(error.message).not.toContain(configuration.secretKey);
   });
 
-  it("rejects malformed database, Function, Auth, and Storage responses", async () => {
-    const malformedBodies = [
-      { database: {}, functions: [], auth: { users: [], total: 0 }, storage: [] },
-      { database: [empty.database], functions: {}, auth: { users: [], total: 0 }, storage: [] },
-      { database: [empty.database], functions: [], auth: [], storage: [] },
-      { database: [empty.database], functions: [], auth: { users: [], total: 0 }, storage: {} },
-    ];
-
-    for (const bodies of malformedBodies) {
-      let requestIndex = 0;
-      const ordered = [bodies.database, bodies.functions, bodies.auth, bodies.storage];
-      await expect(fetchBootstrapSnapshot(
-        configuration,
-        async () => response(ordered[requestIndex++]),
-      )).rejects.toThrow(/response invalid/i);
-    }
-  });
-
-  it("rejects an Auth result that is not conclusively empty", async () => {
-    let requestIndex = 0;
-    const ordered = [
-      [{
-        migration_table_count: 0,
-        auth_user_count: 0,
-        storage_bucket_count: 0,
-        storage_object_count: 0,
-        app_relation_count: 0,
-        app_function_count: 0,
-      }],
-      [],
-      {
-        aud: "authenticated",
-        users: [],
-        next_page: 2,
-        last_page: 2,
-        total: 1,
-      },
-      [],
-    ];
+  it("rejects malformed database and Function responses", async () => {
     await expect(fetchBootstrapSnapshot(
       configuration,
-      async () => response(ordered[requestIndex++]),
-    )).rejects.toThrow(/auth response invalid/i);
+      async () => response({}),
+      successfulClient(),
+    )).rejects.toThrow(/response invalid/i);
+
+    let requestIndex = 0;
+    await expect(fetchBootstrapSnapshot(
+      configuration,
+      async () => response(requestIndex++ === 0 ? [empty.database] : {}),
+      successfulClient(),
+    )).rejects.toThrow(/response invalid/i);
+  });
+
+  it("rejects inconclusive or failed Auth and Storage admin results", async () => {
+    const clients = [
+      () => ({
+        auth: { admin: { listUsers: async () => ({
+          data: { users: [], nextPage: 2, total: 1 }, error: null,
+        }) } },
+        storage: { listBuckets: async () => ({ data: [], error: null }) },
+      }),
+      () => ({
+        auth: { admin: { listUsers: async () => ({ data: null, error: new Error("provider detail") }) } },
+        storage: { listBuckets: async () => ({ data: [], error: null }) },
+      }),
+      () => ({
+        auth: { admin: { listUsers: async () => ({
+          data: { users: [], nextPage: null, total: 0 }, error: null,
+        }) } },
+        storage: { listBuckets: async () => ({ data: {}, error: null }) },
+      }),
+    ];
+
+    for (const createClientImpl of clients) {
+      await expect(fetchBootstrapSnapshot(
+        configuration,
+        successfulFetch([]),
+        createClientImpl,
+      )).rejects.toThrow(/Auth response invalid|Storage response invalid/i);
+    }
   });
 
   it("keeps credentials out of aggregate evidence", () => {
     const serialized = JSON.stringify(evaluateBootstrapSnapshot(empty, configuration));
     expect(serialized).not.toContain(configuration.accessToken);
-    expect(serialized).not.toContain(configuration.serviceRoleKey);
+    expect(serialized).not.toContain(configuration.secretKey);
   });
 });

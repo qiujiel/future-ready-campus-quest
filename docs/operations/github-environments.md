@@ -79,7 +79,7 @@ Secrets:
 | --- | --- |
 | `SUPABASE_ACCESS_TOKEN` | CLI authorization for the production organization |
 | `PRODUCTION_SUPABASE_DB_PASSWORD` | linked migration access |
-| `PRODUCTION_SUPABASE_SERVICE_ROLE_KEY` | server-only Auth and Storage cross-checks during the one-time bootstrap emptiness preflight |
+| `PRODUCTION_SUPABASE_SECRET_KEY` | modern `sb_secret_` server-only key for Auth and Storage cross-checks during the one-time bootstrap emptiness preflight |
 | `PRODUCTION_READINESS_SECRET` | custom authorization for the least-privilege readiness endpoint |
 | `ALLOWED_FRONTEND_ORIGINS` | exact browser origin only; no path or trailing slash |
 | `FRONTEND_APP_URL` | full hosted application base URL, including the Pages base path |
@@ -106,7 +106,7 @@ independently generated, at least 32 bytes, and never reused from local, CI, or
 the load project. The backend workflow also installs
 `PRODUCTION_READINESS_SECRET` as an Edge Function secret.
 
-`PRODUCTION_SUPABASE_SERVICE_ROLE_KEY` belongs in `production-backend only`.
+`PRODUCTION_SUPABASE_SECRET_KEY` belongs in `production-backend only`.
 Never put it in a repository variable or a repository secret. It is forbidden
 from `production-readiness`, `github-pages`, frontend values or bundles, logs,
 job summaries, artifacts, caches, issues, and release records. The bootstrap
@@ -138,7 +138,7 @@ Secret:
 
 The preflight prints only project identity, counts,
 migration/function/schedule status, and endpoint status. It must not print this
-key or protected record contents. The production service-role credential is not
+key or protected record contents. The production privileged secret key is not
 available to this environment; the endpoint uses its provider-injected
 credential internally for the one readiness RPC.
 
