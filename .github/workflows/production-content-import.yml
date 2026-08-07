@@ -1,0 +1,106 @@
+name: Import Production Protected Content
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full approved main-branch commit SHA
+        required: true
+        type: string
+      production_project_ref:
+        description: Confirmed production Supabase project reference
+        required: true
+        type: string
+      expected_content_version:
+        description: Approved protected content version key
+        required: true
+        type: string
+
+concurrency:
+  group: campus-quest-production-backend
+  cancel-in-progress: false
+
+jobs:
+  import:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production-backend
+    permissions:
+      contents: read
+    env:
+      PRODUCTION_SUPABASE_PROJECT_REF: ${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}
+      PRODUCTION_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      LOAD_SUPABASE_PROJECT_REF: ${{ vars.LOAD_SUPABASE_PROJECT_REF }}
+
+    steps:
+      - name: Validate protected import identity
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMED_PROJECT_REF: ${{ inputs.production_project_ref }}
+          EXPECTED_CONTENT_VERSION: ${{ inputs.expected_content_version }}
+        run: |
+          if ! printf '%s' "$EXPECTED_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "expected_sha must be a full lowercase commit SHA" >&2
+            exit 1
+          fi
+          test "$EXPECTED_SHA" = "$GITHUB_SHA"
+          test "$CONFIRMED_PROJECT_REF" = "$PRODUCTION_SUPABASE_PROJECT_REF"
+          test "$CONFIRMED_PROJECT_REF" = "ghohuwwjxgjqnbsauvzq"
+          test "$PRODUCTION_SUPABASE_PROJECT_REF" = "ghohuwwjxgjqnbsauvzq"
+          test "$LOAD_SUPABASE_PROJECT_REF" = "vadyhuipwbtgbzpeisbn"
+          test "$PRODUCTION_SUPABASE_URL" = "https://ghohuwwjxgjqnbsauvzq.supabase.co"
+          test "$PRODUCTION_SUPABASE_PROJECT_REF" != "$LOAD_SUPABASE_PROJECT_REF"
+          test "$EXPECTED_CONTENT_VERSION" = "2026-07-30-approved-blueprint-v1"
+
+      - name: Check out the approved source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 11.9.0
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Reverify protected import source
+        run: |
+          pnpm check:repo
+          pnpm check:deployment
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+
+      - name: Materialize encrypted protected content
+        env:
+          PROTECTED_CONTENT_BANK_JSON: ${{ secrets.PROTECTED_CONTENT_BANK_JSON }}
+        run: |
+          umask 077
+          test -n "$PROTECTED_CONTENT_BANK_JSON"
+          printf '%s' "$PROTECTED_CONTENT_BANK_JSON" > /tmp/campus-quest-protected-content.json
+
+      - name: Import the approved content version
+        env:
+          SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}
+          EXPECTED_CONTENT_VERSION: ${{ inputs.expected_content_version }}
+        run: >-
+          pnpm import:protected-content -- /tmp/campus-quest-protected-content.json
+          --confirm-project-ref="$PRODUCTION_SUPABASE_PROJECT_REF"
+          --expected-content-version="$EXPECTED_CONTENT_VERSION"
+
+      - name: Remove temporary protected content
+        if: always()
+        run: rm -f /tmp/campus-quest-protected-content.json

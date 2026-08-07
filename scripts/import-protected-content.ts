@@ -9,8 +9,9 @@ import {
 
 export interface ImportConfiguration {
   supabaseUrl: string;
-  serviceRoleKey: string;
+  secretKey: string;
   confirmedProjectRef?: string;
+  expectedContentVersion?: string;
 }
 
 function projectRefFromUrl(url: string): string {
@@ -40,8 +41,8 @@ function projectRefFromUrl(url: string): string {
 export function assertImportConfiguration(
   configuration: ImportConfiguration,
 ): string {
-  if (!configuration.serviceRoleKey.trim()) {
-    throw new Error("A service-role key is required for protected import.");
+  if (!configuration.secretKey.trim()) {
+    throw new Error("A privileged Supabase secret key is required for protected import.");
   }
 
   const projectRef = projectRefFromUrl(configuration.supabaseUrl);
@@ -59,9 +60,15 @@ export async function importProtectedContent(
 ): Promise<{ itemCount: number; conceptCount: number; version: string }> {
   assertImportConfiguration(configuration);
   const validated = validateContentBank(bank, { production: true });
+  if (
+    configuration.expectedContentVersion &&
+    configuration.expectedContentVersion !== validated.version
+  ) {
+    throw new Error("Protected content version does not match the approved version.");
+  }
   const client = createClient(
     configuration.supabaseUrl,
-    configuration.serviceRoleKey,
+    configuration.secretKey,
     { auth: { persistSession: false, autoRefreshToken: false } },
   );
   const result = await client.rpc("import_learning_content", {
@@ -93,14 +100,21 @@ async function main(): Promise<void> {
   const confirmedProjectRef = process.argv
     .find((argument) => argument.startsWith("--confirm-project-ref="))
     ?.split("=", 2)[1];
+  const expectedContentVersion = process.argv
+    .find((argument) => argument.startsWith("--expected-content-version="))
+    ?.split("=", 2)[1];
   const bankPath = resolve(
     process.argv.find((argument) => argument.endsWith(".json")) ??
       "protected-content/generated/question-bank.json",
   );
   const configuration: ImportConfiguration = {
     supabaseUrl: process.env.SUPABASE_URL ?? "",
-    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+    secretKey:
+      process.env.SUPABASE_SECRET_KEY ??
+      process.env.SUPABASE_SERVICE_ROLE_KEY ??
+      "",
     ...(confirmedProjectRef ? { confirmedProjectRef } : {}),
+    ...(expectedContentVersion ? { expectedContentVersion } : {}),
   };
   const bank = JSON.parse(await readFile(bankPath, "utf8")) as unknown;
   const receipt = await importProtectedContent(

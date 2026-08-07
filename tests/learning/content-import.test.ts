@@ -172,18 +172,54 @@ describe("protected import safeguards", () => {
     expect(
       assertImportConfiguration({
         supabaseUrl: "http://127.0.0.1:54321",
-        serviceRoleKey: "synthetic-local-service-role-key",
+        secretKey: "synthetic-local-service-role-key",
       }),
     ).toBe("local");
   });
 
-  it("requires a service-role key", () => {
+  it("requires a privileged Supabase secret key", () => {
     expect(() =>
       assertImportConfiguration({
         supabaseUrl: "https://test-project.supabase.co",
-        serviceRoleKey: "",
+        secretKey: "",
       }),
-    ).toThrow(/service-role key/i);
+    ).toThrow(/privileged Supabase secret key/i);
+  });
+
+  it("accepts a modern Supabase secret key for a hosted import", () => {
+    const projectRef = "abcdefghijklmnopqrst";
+    expect(() =>
+      assertImportConfiguration({
+        supabaseUrl: `https://${projectRef}.supabase.co`,
+        secretKey: "synthetic-modern-supabase-secret-key",
+        confirmedProjectRef: projectRef,
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejects content that does not match the approved version", async () => {
+    const { importProtectedContent } = await import(
+      "../../scripts/import-protected-content"
+    );
+    const productionBank = {
+      ...syntheticBank,
+      items: syntheticBank.items.map((item) => ({
+        ...item,
+        sourceRefs: item.sourceRefs.map((sourceRef) => ({
+          ...sourceRef,
+          document: "overview-ict" as const,
+        })),
+      })),
+    };
+    const validatedProductionBank = validateContentBank(productionBank, {
+      production: true,
+    });
+
+    await expect(importProtectedContent(validatedProductionBank, {
+      supabaseUrl: "http://127.0.0.1:54321",
+      secretKey: "synthetic-local-service-role-key",
+      expectedContentVersion: "different-approved-version",
+    })).rejects.toThrow(/does not match the approved version/i);
   });
 
   it("requires exact confirmation before targeting any hosted project", () => {
@@ -192,14 +228,14 @@ describe("protected import safeguards", () => {
     expect(() =>
       assertImportConfiguration({
         supabaseUrl: `https://${stagingRef}.supabase.co`,
-        serviceRoleKey: "synthetic-service-role-key",
+        secretKey: "synthetic-service-role-key",
       }),
     ).toThrow(new RegExp(`confirm-project-ref=${stagingRef}`, "i"));
 
     expect(() =>
       assertImportConfiguration({
         supabaseUrl: `https://${stagingRef}.supabase.co`,
-        serviceRoleKey: "synthetic-service-role-key",
+        secretKey: "synthetic-service-role-key",
         confirmedProjectRef: liveRef,
       }),
     ).toThrow(new RegExp(`confirm-project-ref=${stagingRef}`, "i"));
@@ -207,7 +243,7 @@ describe("protected import safeguards", () => {
     expect(() =>
       assertImportConfiguration({
         supabaseUrl: `https://${liveRef}.supabase.co`,
-        serviceRoleKey: "synthetic-service-role-key",
+        secretKey: "synthetic-service-role-key",
         confirmedProjectRef: liveRef,
       }),
     ).not.toThrow();
@@ -216,7 +252,7 @@ describe("protected import safeguards", () => {
   it("rejects insecure or non-root hosted project URLs", () => {
     const projectRef = "abcdefghijklmnopqrst";
     const configuration = {
-      serviceRoleKey: "synthetic-service-role-key",
+      secretKey: "synthetic-service-role-key",
       confirmedProjectRef: projectRef,
     };
 

@@ -5,6 +5,8 @@ import { isDeepStrictEqual } from "node:util";
 import { load } from "js-yaml";
 import { validateBootstrapFunctionRepairConfiguration } from
   "./bootstrap-function-repair-config.mjs";
+import { validateProductionContentImportConfiguration } from
+  "./production-content-import-config.mjs";
 
 const PINNED_ACTION = /^[^@\s]+@[0-9a-f]{40}$/;
 const GITLEAKS_ACTION = "gitleaks/gitleaks-action@v2";
@@ -671,14 +673,29 @@ export async function loadDeploymentConfiguration(baseDirectory) {
   const workflowDirectory = resolve(baseDirectory, ".github", "workflows");
   const readWorkflow = async (name) =>
     load(await readFile(resolve(workflowDirectory, name), "utf8"));
-  const [ci, backend, pages, rollback, bootstrapFunctionRepair] = await Promise.all([
+  const [
+    ci,
+    backend,
+    pages,
+    rollback,
+    bootstrapFunctionRepair,
+    productionContentImport,
+  ] = await Promise.all([
     readWorkflow("ci.yml"),
     readWorkflow("backend-production.yml"),
     readWorkflow("pages.yml"),
     readWorkflow("pages-rollback.yml"),
     readWorkflow("bootstrap-function-repair.yml"),
+    readWorkflow("production-content-import.yml"),
   ]);
-  return { ci, backend, pages, rollback, bootstrapFunctionRepair };
+  return {
+    ci,
+    backend,
+    pages,
+    rollback,
+    bootstrapFunctionRepair,
+    productionContentImport,
+  };
 }
 
 async function main() {
@@ -686,6 +703,9 @@ async function main() {
   validateDeploymentConfiguration(configuration);
   validateBootstrapFunctionRepairConfiguration(
     configuration.bootstrapFunctionRepair,
+  );
+  validateProductionContentImportConfiguration(
+    configuration.productionContentImport,
   );
   process.stdout.write("Deployment workflow boundaries passed.\n");
 }
