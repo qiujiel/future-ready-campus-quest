@@ -63,7 +63,10 @@ const RELEASE_AUTHORIZATION_STEPS = [
   {
     name: "Set up Node",
     uses: "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444",
-    with: { "node-version": 24 },
+    with: {
+      "node-version": 24,
+      "package-manager-cache": false,
+    },
   },
   {
     name: "Validate redaction-safe release authorization",

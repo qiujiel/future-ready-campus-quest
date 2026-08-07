@@ -117,7 +117,10 @@ function validConfiguration() {
             {
               name: "Set up Node",
               uses: pinnedSetupNode,
-              with: { "node-version": 24 },
+              with: {
+                "node-version": 24,
+                "package-manager-cache": false,
+              },
             },
             {
               name: "Validate redaction-safe release authorization",
@@ -702,6 +705,17 @@ describe("deployment workflow boundaries", () => {
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /release_mode/i,
+    );
+  });
+
+  it("disables package-manager cache discovery in the dependency-free authorization job", () => {
+    const configuration = validConfiguration();
+    const setupNode = configuration.backend.jobs.validate_release_authorization.steps
+      .find((step) => step.name === "Set up Node");
+    delete setupNode.with["package-manager-cache"];
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /canonical ordered evidence steps/i,
     );
   });
 
