@@ -150,6 +150,8 @@ function validConfiguration() {
             PRODUCTION_SUPABASE_PROJECT_REF:
               "${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}",
             PRODUCTION_SUPABASE_URL: "${{ vars.VITE_SUPABASE_URL }}",
+            PRODUCTION_SUPABASE_PUBLISHABLE_KEY:
+              "${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}",
             RELEASE_MODE: "${{ inputs.release_mode }}",
             BOOTSTRAP_AUTHORIZATION_ID:
               "${{ inputs.bootstrap_authorization_id }}",
@@ -184,8 +186,14 @@ function validConfiguration() {
             { run: "supabase db push --dry-run --linked" },
             { run: "supabase db push --linked" },
             {
+              env: {
+                PRODUCTION_SUPABASE_SECRET_KEY:
+                  "${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}",
+              },
               run: [
                 "node scripts/production-function-config.mjs",
+                '"FRCQ_SUPABASE_PUBLISHABLE_KEY=$PRODUCTION_SUPABASE_PUBLISHABLE_KEY"',
+                '"FRCQ_SUPABASE_SECRET_KEY=$PRODUCTION_SUPABASE_SECRET_KEY"',
                 "supabase secrets set --env-file /tmp/functions.env",
               ].join("\n"),
             },
@@ -900,6 +908,18 @@ describe("deployment workflow boundaries", () => {
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /Function configuration validation.*secrets/i,
+    );
+  });
+
+  it("requires modern publishable and secret keys in production Functions", () => {
+    const configuration = validConfiguration();
+    const secretStep = configuration.backend.jobs.release.steps.find((step) =>
+      step.run?.includes("supabase secrets set")
+    );
+    delete secretStep.env.PRODUCTION_SUPABASE_SECRET_KEY;
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /modern Function credentials/i,
     );
   });
 

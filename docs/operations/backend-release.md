@@ -84,15 +84,20 @@ The workflow performs one ordered sequence from the approved commit:
 4. record `supabase migration list`;
 5. run `supabase db push --dry-run` and review the pending timestamps;
 6. apply pending migrations once with `supabase db push`;
-7. set the five custom Edge Function secrets from a mode-restricted temporary
+7. set the seven custom Edge Function secrets from a mode-restricted temporary
    file outside the checkout;
 8. deploy all eleven functions together from `supabase/config.toml`, including
    the custom-secret-protected `production-readiness` endpoint;
 9. run `production-preflight.mjs --backend-only` to verify exact project
    identity, migrations through `20260806000700`, required RPCs, the exact
    unique active cleanup schedule, Auth health, and all application-function
-   method boundaries probed server-side with provider-managed credentials;
+   method boundaries probed server-side with the modern publishable key;
 10. delete temporary secret material in an always-run step.
+
+The Function secret step installs `FRCQ_SUPABASE_PUBLISHABLE_KEY` and
+`FRCQ_SUPABASE_SECRET_KEY` from the protected modern GitHub values before
+deployment. Hosted Functions use these modern keys; provider-injected legacy
+JWT API keys are permitted only as a local Supabase fallback.
 
 Expected deploy set:
 

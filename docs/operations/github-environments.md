@@ -79,7 +79,7 @@ Secrets:
 | --- | --- |
 | `SUPABASE_ACCESS_TOKEN` | CLI authorization for the production organization |
 | `PRODUCTION_SUPABASE_DB_PASSWORD` | linked migration access |
-| `PRODUCTION_SUPABASE_SECRET_KEY` | modern `sb_secret_` server-only key for Auth and Storage cross-checks during the one-time bootstrap emptiness preflight |
+| `PRODUCTION_SUPABASE_SECRET_KEY` | modern `sb_secret_` server-only key for the bootstrap emptiness preflight and deployed Function admin operations |
 | `PRODUCTION_READINESS_SECRET` | custom authorization for the least-privilege readiness endpoint |
 | `ALLOWED_FRONTEND_ORIGINS` | exact browser origin only; no path or trailing slash |
 | `FRONTEND_APP_URL` | full hosted application base URL, including the Pages base path |
@@ -110,8 +110,15 @@ the load project. The backend workflow also installs
 Never put it in a repository variable or a repository secret. It is forbidden
 from `production-readiness`, `github-pages`, frontend values or bundles, logs,
 job summaries, artifacts, caches, issues, and release records. The bootstrap
-step receives it only as an environment secret and never prints it. Rotate it after any unintended disclosure,
+and Function-secret steps receive it only as an environment secret and never
+print it. Rotate it after any unintended disclosure,
 then treat the event as a credential incident.
+
+The backend release also installs the same credential under the application
+name `FRCQ_SUPABASE_SECRET_KEY`, alongside
+`FRCQ_SUPABASE_PUBLISHABLE_KEY`, as encrypted Function secrets. Production
+Functions prefer those modern keys. Provider-injected legacy JWT keys remain a
+local-development fallback only and must not be used by hosted production code.
 
 ## `production-readiness` environment
 

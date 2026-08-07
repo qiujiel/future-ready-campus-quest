@@ -22,13 +22,18 @@ describe("production readiness authorization", () => {
       .toBe(false);
   });
 
-  it("probes application functions server-side with the provider credential", async () => {
-    const fetcher = vi.fn(async () => new Response(null, { status: 405 }));
+  it("probes deployed boundaries with the modern publishable key", async () => {
+    const publicFunctions = new Set(["join-cohort", "recover-student"]);
+    const fetcher = vi.fn(async (url: string | URL | Request) => {
+      const name = String(url).split("/").at(-1) ?? "";
+      return new Response(null, {
+        status: publicFunctions.has(name) ? 405 : 401,
+      });
+    });
 
     await expect(probeFunctionBoundaries({
       supabaseUrl: "https://abcdefghijklmnopqrst.supabase.co",
-      anonKey: "provider-anon-key",
-      serviceRoleKey: "provider-service-role-jwt",
+      publishableKey: "modern-publishable-key",
       frontendOrigin: "https://school.example",
       fetcher,
     })).resolves.toEqual({ edgeFunctionsReady: 10 });
@@ -37,25 +42,27 @@ describe("production readiness authorization", () => {
       "https://abcdefghijklmnopqrst.supabase.co/functions/v1/teacher-controls",
       expect.objectContaining({
         headers: expect.objectContaining({
-          Authorization: "Bearer provider-service-role-jwt",
+          apikey: "modern-publishable-key",
         }),
       }),
     );
+    expect(fetcher.mock.calls.some(([, options]) =>
+      "Authorization" in ((options?.headers ?? {}) as Record<string, string>)
+    )).toBe(false);
   });
 
-  it("rejects a function boundary blocked before its handler", async () => {
+  it("rejects a missing or incorrectly configured function boundary", async () => {
     const fetcher = vi.fn(async (url: string | URL | Request) =>
       new Response(null, {
-        status: String(url).endsWith("/teacher-controls") ? 401 : 405,
+        status: String(url).endsWith("/teacher-controls") ? 404 : 405,
       })
     );
 
     await expect(probeFunctionBoundaries({
       supabaseUrl: "https://abcdefghijklmnopqrst.supabase.co",
-      anonKey: "provider-anon-key",
-      serviceRoleKey: "provider-service-role-jwt",
+      publishableKey: "modern-publishable-key",
       frontendOrigin: "https://school.example",
       fetcher,
-    })).rejects.toThrow(/teacher-controls returned 401/i);
+    })).rejects.toThrow(/teacher-controls returned 404/i);
   });
 });

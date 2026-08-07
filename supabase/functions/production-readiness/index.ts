@@ -1,4 +1,4 @@
-import { adminClient } from "../_shared/auth.ts";
+import { adminClient, supabaseKeys } from "../_shared/auth.ts";
 import { corsHeaders, RequestOriginError } from "../_shared/cors.ts";
 import { jsonResponse, readJson } from "../_shared/http.ts";
 import {
@@ -46,10 +46,10 @@ Deno.serve(async (request) => {
       p_smoke_cohort_id: requiredString(input.cohortId),
     });
     if (result.error) throw new Error("READINESS_RPC_FAILED");
+    const { publishableKey } = supabaseKeys();
     const edgeEvidence = await probeFunctionBoundaries({
       supabaseUrl: requiredEnvironment("SUPABASE_URL"),
-      anonKey: requiredEnvironment("SUPABASE_ANON_KEY"),
-      serviceRoleKey: requiredEnvironment("SUPABASE_SERVICE_ROLE_KEY"),
+      publishableKey,
       frontendOrigin: request.headers.get("Origin") ?? "",
     });
     return jsonResponse({ ...result.data, ...edgeEvidence }, 200, headers);

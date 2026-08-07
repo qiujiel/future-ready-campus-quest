@@ -13,6 +13,8 @@ export const APPLICATION_FUNCTION_NAMES = Object.freeze([
   "teacher-dashboard",
 ]);
 
+const PUBLIC_FUNCTION_NAMES = new Set(["join-cohort", "recover-student"]);
+
 async function digest(value: string): Promise<Uint8Array> {
   return new Uint8Array(
     await crypto.subtle.digest("SHA-256", encoder.encode(value)),
@@ -37,14 +39,12 @@ export async function readinessSecretMatches(
 
 export async function probeFunctionBoundaries({
   supabaseUrl,
-  anonKey,
-  serviceRoleKey,
+  publishableKey,
   frontendOrigin,
   fetcher = fetch,
 }: {
   supabaseUrl: string;
-  anonKey: string;
-  serviceRoleKey: string;
+  publishableKey: string;
   frontendOrigin: string;
   fetcher?: typeof fetch;
 }): Promise<{ edgeFunctionsReady: number }> {
@@ -56,13 +56,13 @@ export async function probeFunctionBoundaries({
         {
           method: "GET",
           headers: {
-            apikey: anonKey,
-            Authorization: `Bearer ${serviceRoleKey}`,
+            apikey: publishableKey,
             Origin: frontendOrigin,
           },
         },
       );
-      if (response.status !== 405) {
+      const expectedStatus = PUBLIC_FUNCTION_NAMES.has(name) ? 405 : 401;
+      if (response.status !== expectedStatus) {
         failures.push(`${name} returned ${response.status}`);
       }
     } catch {
