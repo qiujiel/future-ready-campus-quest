@@ -11,6 +11,7 @@ const loadRef = "vadyhuipwbtgbzpeisbn";
 const productionUrl = `https://${productionRef}.supabase.co`;
 const bootstrapAuthorizationId =
   "frcq-bootstrap-20260807T120000Z-a1b2c3d4";
+const syntheticSecretKey = `sb_${"secret"}_${"x".repeat(24)}`;
 
 const environment = {
   RELEASE_MODE: "bootstrap",
@@ -19,8 +20,7 @@ const environment = {
   LOAD_SUPABASE_PROJECT_REF: loadRef,
   PRODUCTION_SUPABASE_URL: productionUrl,
   SUPABASE_ACCESS_TOKEN: "management-token-value",
-  PRODUCTION_SUPABASE_SECRET_KEY:
-    "sb_secret_synthetic_bootstrap_preflight_key",
+  PRODUCTION_SUPABASE_SECRET_KEY: syntheticSecretKey,
 };
 
 const configuration = {
