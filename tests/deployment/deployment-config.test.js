@@ -222,6 +222,10 @@ function validConfiguration() {
               run: "deno check --frozen --config supabase/functions/deno.json --lock supabase/functions/deno.lock supabase/functions/*/index.ts",
             },
             {
+              name: "Run browser and representative-load gates",
+              run: "pnpm playwright test\npnpm test:load",
+            },
+            {
               env: {
                 LOAD_SUPABASE_PROJECT_REF:
                   "${{ vars.LOAD_SUPABASE_PROJECT_REF }}",
@@ -232,6 +236,20 @@ function validConfiguration() {
                   "${{ secrets.LOAD_SUPABASE_SECRET_KEY }}",
               },
               run: "pnpm test:load:live",
+            },
+            {
+              name: "Build and scan the final public shell",
+              env: {
+                VITE_SUPABASE_URL: "${{ vars.VITE_SUPABASE_URL }}",
+                VITE_SUPABASE_PUBLISHABLE_KEY:
+                  "${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}",
+                VITE_BASE_PATH: "${{ vars.VITE_BASE_PATH }}",
+              },
+              run: "pnpm build\npnpm check:bundle",
+            },
+            {
+              name: "Create immutable artifact evidence",
+              run: "node scripts/pages-artifact.mjs create dist",
             },
             {
               id: "pages-artifact",
@@ -935,6 +953,23 @@ describe("deployment workflow boundaries", () => {
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /production-readiness/i,
+    );
+  });
+
+  it("rejects a public artifact build that browser tests can overwrite", () => {
+    const configuration = validConfiguration();
+    const steps = configuration.pages.jobs.package.steps;
+    const buildIndex = steps.findIndex((step) =>
+      step.name === "Build and scan the final public shell"
+    );
+    const [buildStep] = steps.splice(buildIndex, 1);
+    const browserIndex = steps.findIndex((step) =>
+      step.name === "Run browser and representative-load gates"
+    );
+    steps.splice(browserIndex, 0, buildStep);
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /final public build.*after browser and live load.*before artifact/i,
     );
   });
 

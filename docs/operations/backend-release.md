@@ -199,6 +199,16 @@ it is a known limitation, not permission to reduce
 authentication, code validation, the 45/90 rate and capacity limits, replay
 protection, RLS, student isolation, or teacher authorization.
 
+Protected Pages run `31243468453` at commit
+`68ab33aed1636330c06475054954e9da17b6b223` is the accepted classroom-load
+receipt. It admitted 30 of 30 simultaneous students with zero failed joins,
+incorrect group assignments, duplicate identities, authorization failures,
+accepted unauthorized calls, or duplicate responses. Join p95 was `4,835.64`
+ms; response p95 was `1,265.06` ms; dashboard p95 was `1,078.02` ms. All 30
+students completed in five valid groups with the verified score formula. The
+join latency is accepted only as the documented one-time classroom-entry
+limitation; it does not relax any later request or security gate.
+
 Migration `20260808000300_combined_join_preparation.sql` combines completed
 request replay detection with code, rate, and capacity preflight in one
 service-role-only RPC. Completed retries bypass a second rate-limit attempt;

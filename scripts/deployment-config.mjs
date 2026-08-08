@@ -582,6 +582,49 @@ function requirePagesDeployPermissions(job) {
   }
 }
 
+function requireFinalPublicArtifactBuild(job) {
+  const steps = job?.steps ?? [];
+  const browserIndex = steps.findIndex((step) => {
+    const run = String(step?.run ?? "");
+    return run.includes("pnpm playwright test") && run.includes("pnpm test:load");
+  });
+  const liveLoadIndex = steps.findIndex((step) =>
+    String(step?.run ?? "").includes("pnpm test:load:live")
+  );
+  const buildIndex = steps.findIndex((step) => {
+    const run = String(step?.run ?? "");
+    return run.includes("pnpm build") && run.includes("pnpm check:bundle");
+  });
+  const artifactIndex = steps.findIndex((step) =>
+    String(step?.run ?? "").includes("pages-artifact.mjs create dist")
+  );
+  const uploadIndex = steps.findIndex((step) =>
+    String(step?.uses ?? "").startsWith("actions/upload-pages-artifact@")
+  );
+  const buildEnvironment = steps[buildIndex]?.env ?? {};
+
+  if (
+    browserIndex < 0 ||
+    liveLoadIndex < 0 ||
+    buildIndex < 0 ||
+    artifactIndex < 0 ||
+    uploadIndex < 0 ||
+    browserIndex >= buildIndex ||
+    liveLoadIndex >= buildIndex ||
+    buildIndex >= artifactIndex ||
+    artifactIndex >= uploadIndex ||
+    buildEnvironment.VITE_SUPABASE_URL !== "${{ vars.VITE_SUPABASE_URL }}" ||
+    buildEnvironment.VITE_SUPABASE_PUBLISHABLE_KEY !==
+      "${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}" ||
+    buildEnvironment.VITE_BASE_PATH !== "${{ vars.VITE_BASE_PATH }}"
+  ) {
+    fail(
+      "Pages final public build must run after browser and live load gates " +
+        "and before artifact hashing/upload with the reviewed public variables",
+    );
+  }
+}
+
 function requireCiSecretScan(ci) {
   const permissions = ci?.permissions ?? {};
   if (
@@ -736,6 +779,7 @@ export function validateDeploymentConfiguration({ ci, backend, pages, rollback }
   requireEdgeReadyWait(packageJob, "Pages package");
   requireFrozenDenoCheck(packageJob, "Pages package");
   requireDedicatedLiveLoad(packageJob);
+  requireFinalPublicArtifactBuild(packageJob);
   requireEnvironment(preflightJob, "production-readiness");
   requireLeastPrivilegeReadiness(preflightJob);
   if (!needsJob(preflightJob, "package")) {
