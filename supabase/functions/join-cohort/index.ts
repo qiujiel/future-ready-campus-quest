@@ -60,55 +60,78 @@ function dependencies(
   admin: SupabaseClient,
   publicClient: SupabaseClient,
   rateKeyHash: string,
+  timings: Record<string, number>,
 ): JoinDependencies {
+  async function measured<T>(name: string, action: () => Promise<T>): Promise<T> {
+    const started = performance.now();
+    try {
+      return await action();
+    } finally {
+      timings[name] = performance.now() - started;
+    }
+  }
+
   return {
     async findCompletedJoin(codeHash, requestKey): Promise<StoredJoin | null> {
-      const result = await admin.rpc("find_completed_student_code_join", {
-        p_code_hash: codeHash,
-        p_request_key: requestKey,
+      return measured("find", async () => {
+        const result = await admin.rpc("find_completed_student_code_join", {
+          p_code_hash: codeHash,
+          p_request_key: requestKey,
+        });
+        if (result.error) safeRpcError(result.error);
+        const row = result.data?.[0] as Record<string, unknown> | undefined;
+        return row ? { identity: mapIdentity(row) } : null;
       });
-      if (result.error) safeRpcError(result.error);
-      const row = result.data?.[0] as Record<string, unknown> | undefined;
-      return row ? { identity: mapIdentity(row) } : null;
     },
     async preflightJoin(codeHash) {
-      const result = await admin.rpc("preflight_student_code_join", {
-        p_code_hash: codeHash,
-        p_rate_key_hash: rateKeyHash,
+      return measured("preflight", async () => {
+        const result = await admin.rpc("preflight_student_code_join", {
+          p_code_hash: codeHash,
+          p_rate_key_hash: rateKeyHash,
+        });
+        if (result.error) safeRpcError(result.error);
+        return { groupNumber: Number(result.data) };
       });
-      if (result.error) safeRpcError(result.error);
-      return { groupNumber: Number(result.data) };
     },
     async createSyntheticUser(): Promise<SyntheticUser> {
-      const internalEmail = `${crypto.randomUUID()}@students.invalid`;
-      const result = await admin.auth.admin.createUser({
-        email: internalEmail,
-        email_confirm: true,
-        app_metadata: { role: "student" },
+      return measured("create", async () => {
+        const internalEmail = `${crypto.randomUUID()}@students.invalid`;
+        const result = await admin.auth.admin.createUser({
+          email: internalEmail,
+          email_confirm: true,
+          app_metadata: { role: "student" },
+        });
+        if (result.error || !result.data.user) {
+          throw new Error("AUTH_CREATE_FAILED");
+        }
+        return {
+          studentId: result.data.user.id,
+          internalEmail,
+        };
       });
-      if (result.error || !result.data.user) throw new Error("AUTH_CREATE_FAILED");
-      return {
-        studentId: result.data.user.id,
-        internalEmail,
-      };
     },
     async signInNewUser(user): Promise<SessionTokens> {
-      return issueInitialStudentSession(admin, publicClient, user.internalEmail);
+      return measured(
+        "sign",
+        () => issueInitialStudentSession(admin, publicClient, user.internalEmail),
+      );
     },
     async issueReplacementSession(studentId): Promise<SessionTokens> {
       return issueSessionForExistingUser(admin, publicClient, studentId);
     },
     async completeJoin(input: CompleteJoinInput): Promise<StudentIdentity> {
-      const result = await admin.rpc("complete_student_code_join", {
-        p_code_hash: input.codeHash,
-        p_request_key: input.requestKey,
-        p_student_id: input.studentId,
-        p_display_name: input.displayName,
+      return measured("complete", async () => {
+        const result = await admin.rpc("complete_student_code_join", {
+          p_code_hash: input.codeHash,
+          p_request_key: input.requestKey,
+          p_student_id: input.studentId,
+          p_display_name: input.displayName,
+        });
+        if (result.error) safeRpcError(result.error);
+        const row = result.data?.[0] as Record<string, unknown> | undefined;
+        if (!row) throw new Error("JOIN_RESULT_MISSING");
+        return mapIdentity(row);
       });
-      if (result.error) safeRpcError(result.error);
-      const row = result.data?.[0] as Record<string, unknown> | undefined;
-      if (!row) throw new Error("JOIN_RESULT_MISSING");
-      return mapIdentity(row);
     },
     async deleteSyntheticUser(studentId): Promise<void> {
       const result = await admin.auth.admin.deleteUser(studentId, false);
@@ -147,10 +170,16 @@ Deno.serve(async (request) => {
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
       "unknown";
     const rateKeyHash = await hashJoinToken(`${rateSecret}\0${clientAddress}`);
+    const timings: Record<string, number> = {};
     const result = await joinStudent(
       input,
-      dependencies(adminClient(), publicAuthClient(), rateKeyHash),
+      dependencies(adminClient(), publicAuthClient(), rateKeyHash, timings),
     );
+    if (Deno.env.get("FRONTEND_APP_URL")?.includes("127.0.0.1")) {
+      headers["Server-Timing"] = Object.entries(timings)
+        .map(([name, duration]) => `${name};dur=${duration.toFixed(3)}`)
+        .join(", ");
+    }
     return jsonResponse(result, 200, headers);
   } catch (error) {
     const status =
