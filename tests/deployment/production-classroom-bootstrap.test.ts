@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   RETENTION_QUERY,
   assertBootstrapConfiguration,
   bootstrapProductionClassroom,
+  bootstrapConfigurationFromEnvironment,
+  createProductionBootstrapDependencies,
   type BootstrapCohort,
   type BootstrapConfiguration,
   type BootstrapDependencies,
@@ -220,5 +222,164 @@ describe("production classroom bootstrap orchestration", () => {
 
     expect(error).toContain("BOOTSTRAP_ACCOUNT_FAILED");
     for (const value of privateValues) expect(error).not.toContain(value);
+  });
+});
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+describe("production classroom bootstrap adapters", () => {
+  it("uses an isolated Auth client storage namespace", () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      createProductionBootstrapDependencies(validConfiguration, async () =>
+        jsonResponse([]));
+      createProductionBootstrapDependencies(validConfiguration, async () =>
+        jsonResponse([]));
+      expect(warning).not.toHaveBeenCalled();
+    } finally {
+      warning.mockRestore();
+    }
+  });
+
+  it("sends only the fixed parameterized retention query", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const recordingFetch: typeof fetch = async (input, init) => {
+      requests.push({ url: String(input), ...(init ? { init } : {}) });
+      return jsonResponse([{ retentionDays: 90 }], 201);
+    };
+    const adapters = createProductionBootstrapDependencies(
+      validConfiguration,
+      recordingFetch,
+    );
+
+    await expect(adapters.updateRetention(90, "course-owner"))
+      .resolves.toBe(90);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.url).toBe(
+      "https://api.supabase.com/v1/projects/ghohuwwjxgjqnbsauvzq/database/query",
+    );
+    expect(requests[0]?.init?.method).toBe("POST");
+    expect(requests[0]?.init?.headers).toMatchObject({
+      Authorization: "Bearer synthetic-management-token",
+      "Content-Type": "application/json",
+    });
+    expect(JSON.parse(String(requests[0]?.init?.body))).toEqual({
+      query: RETENTION_QUERY,
+      parameters: [90, "course-owner"],
+      read_only: false,
+    });
+  });
+
+  it("redacts a failed Management API response", async () => {
+    const privateBody = `${validConfiguration.teacherEmail} ${validConfiguration.accessToken}`;
+    const adapters = createProductionBootstrapDependencies(
+      validConfiguration,
+      async () => jsonResponse({ message: privateBody }, 500),
+    );
+
+    const error = await adapters.updateRetention(90, "course-owner")
+      .catch((reason: unknown) => String(reason));
+    expect(error).toContain("BOOTSTRAP_RETENTION_FAILED");
+    expect(error).not.toContain(validConfiguration.teacherEmail);
+    expect(error).not.toContain(validConfiguration.accessToken);
+  });
+
+  it("creates an email-confirmed teacher with the exact bootstrap marker", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const recordingFetch: typeof fetch = async (input, init) => {
+      const url = String(input);
+      requests.push({ url, ...(init ? { init } : {}) });
+      if (url.includes("api.supabase.com")) {
+        return jsonResponse([{ retentionDays: 90 }], 201);
+      }
+      return jsonResponse({
+        id: TEACHER_ID,
+        email: validConfiguration.teacherEmail,
+        app_metadata: {
+          role: "teacher",
+          bootstrapAuthorizationId: validConfiguration.authorizationId,
+        },
+      });
+    };
+    const adapters = createProductionBootstrapDependencies(
+      validConfiguration,
+      recordingFetch,
+    );
+
+    await expect(adapters.createTeacher({
+      email: validConfiguration.teacherEmail,
+      password: validConfiguration.teacherPassword,
+      authorizationId: validConfiguration.authorizationId,
+    })).resolves.toEqual({
+      id: TEACHER_ID,
+      bootstrapAuthorizationId: validConfiguration.authorizationId,
+    });
+    const authRequest = requests.find(({ url }) =>
+      url.endsWith("/auth/v1/admin/users")
+    );
+    expect(authRequest?.init?.method).toBe("POST");
+    expect(JSON.parse(String(authRequest?.init?.body))).toEqual({
+      email: validConfiguration.teacherEmail,
+      password: validConfiguration.teacherPassword,
+      email_confirm: true,
+      app_metadata: {
+        role: "teacher",
+        bootstrapAuthorizationId: validConfiguration.authorizationId,
+      },
+    });
+  });
+
+  it("rejects a classroom with an active join window", async () => {
+    const seenUrls: string[] = [];
+    const recordingFetch: typeof fetch = async (input) => {
+      const url = String(input);
+      seenUrls.push(url);
+      if (url.includes("/rest/v1/groups")) {
+        return jsonResponse(Array.from({ length: 5 }, (_, index) => ({
+          id: `group-${index + 1}`,
+        })));
+      }
+      if (url.includes("/rest/v1/cohort_join_windows")) {
+        return jsonResponse([{ id: "active-window" }]);
+      }
+      if (url.includes("/rest/v1/cohort_session_controls")) {
+        return jsonResponse([]);
+      }
+      return jsonResponse([]);
+    };
+    const adapters = createProductionBootstrapDependencies(
+      validConfiguration,
+      recordingFetch,
+    );
+
+    await expect(adapters.verifyClosedClassroom(TEACHER_ID, COHORT_ID))
+      .rejects.toThrow("BOOTSTRAP_VERIFICATION_FAILED");
+    expect(seenUrls).toEqual(expect.arrayContaining([
+      expect.stringContaining("/rest/v1/groups"),
+      expect.stringContaining("/rest/v1/cohort_join_windows"),
+    ]));
+  });
+
+  it("maps only named protected environment values into configuration", () => {
+    const environment = {
+      PRODUCTION_SUPABASE_URL: validConfiguration.supabaseUrl,
+      PRODUCTION_SUPABASE_PROJECT_REF: validConfiguration.productionProjectRef,
+      LOAD_SUPABASE_PROJECT_REF: validConfiguration.loadProjectRef,
+      PRODUCTION_SUPABASE_SECRET_KEY: validConfiguration.secretKey,
+      SUPABASE_ACCESS_TOKEN: validConfiguration.accessToken,
+      PRODUCTION_TEACHER_EMAIL: validConfiguration.teacherEmail,
+      PRODUCTION_TEACHER_PASSWORD: validConfiguration.teacherPassword,
+      PRODUCTION_RETENTION_DAYS: "90",
+      BOOTSTRAP_AUTHORIZATION_ID: validConfiguration.authorizationId,
+      SUPABASE_SERVICE_ROLE_KEY: "forbidden-legacy-value",
+    };
+
+    expect(bootstrapConfigurationFromEnvironment(environment))
+      .toEqual(validConfiguration);
   });
 });
