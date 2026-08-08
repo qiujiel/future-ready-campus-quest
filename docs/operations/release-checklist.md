@@ -108,6 +108,8 @@ it was not required. A blank or assumed `N/A` leaves the item unchecked.
 - [ ] Dedicated-project live-load evidence reports five teams of six, no
   duplicates, zero authorized failures, zero accepted unauthorized calls,
   join/response p95 below 1.5 seconds, and dashboard p95 below 2.5 seconds.
+- [ ] The installed join preflight permits 45 shared-network attempts per minute
+  for one 30-student class while retaining the 90-request join-window cap.
 - [ ] Release action references are reviewed full commit SHAs.
 
 ## 4. Backend release approval
