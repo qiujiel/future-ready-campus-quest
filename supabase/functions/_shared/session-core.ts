@@ -10,7 +10,7 @@ interface MagicLinkAdminClient {
         type: "magiclink";
         email: string;
       }): Promise<{
-        data: { properties?: { hashed_token?: string } };
+        data: { properties?: { hashed_token?: string } | null };
         error: unknown;
       }>;
     };
