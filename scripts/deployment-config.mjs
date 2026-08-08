@@ -7,6 +7,8 @@ import { validateBootstrapFunctionRepairConfiguration } from
   "./bootstrap-function-repair-config.mjs";
 import { validateProductionContentImportConfiguration } from
   "./production-content-import-config.mjs";
+import { validateProductionClassroomBootstrapConfiguration } from
+  "./production-classroom-bootstrap-config.mjs";
 
 const PINNED_ACTION = /^[^@\s]+@[0-9a-f]{40}$/;
 const GITLEAKS_ACTION = "gitleaks/gitleaks-action@v2";
@@ -680,6 +682,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     rollback,
     bootstrapFunctionRepair,
     productionContentImport,
+    productionClassroomBootstrap,
   ] = await Promise.all([
     readWorkflow("ci.yml"),
     readWorkflow("backend-production.yml"),
@@ -687,6 +690,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     readWorkflow("pages-rollback.yml"),
     readWorkflow("bootstrap-function-repair.yml"),
     readWorkflow("production-content-import.yml"),
+    readWorkflow("production-classroom-bootstrap.yml"),
   ]);
   return {
     ci,
@@ -695,6 +699,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     rollback,
     bootstrapFunctionRepair,
     productionContentImport,
+    productionClassroomBootstrap,
   };
 }
 
@@ -706,6 +711,9 @@ async function main() {
   );
   validateProductionContentImportConfiguration(
     configuration.productionContentImport,
+  );
+  validateProductionClassroomBootstrapConfiguration(
+    configuration.productionClassroomBootstrap,
   );
   process.stdout.write("Deployment workflow boundaries passed.\n");
 }
