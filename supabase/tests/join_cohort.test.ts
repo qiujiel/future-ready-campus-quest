@@ -41,8 +41,11 @@ function createDependencies(capacity = 6): JoinDependencies & {
     async findCompletedJoin(codeHash, requestKey) {
       return stored.get(`${codeHash}:${requestKey}`) ?? null;
     },
-    async preflightJoin() {
-      return { groupNumber: 4 };
+    async prepareJoin(codeHash, requestKey) {
+      const completed = stored.get(`${codeHash}:${requestKey}`) ?? null;
+      return completed
+        ? { completed, groupNumber: completed.identity.groupNumber }
+        : { completed: null, groupNumber: 4 };
     },
     async createSyntheticUser() {
       this.createdUsers += 1;
@@ -163,12 +166,12 @@ it("rejects a malformed group code before creating an Auth user", async () => {
   expect(dependencies.createdUsers).toBe(0);
 });
 
-it("hashes the normalized code before the trusted preflight", async () => {
+it("hashes the normalized code before the trusted prepare operation", async () => {
   const dependencies = createDependencies();
   let observedHash = "";
-  dependencies.preflightJoin = async (codeHash) => {
+  dependencies.prepareJoin = async (codeHash) => {
     observedHash = codeHash;
-    return { groupNumber: 4 };
+    return { completed: null, groupNumber: 4 };
   };
 
   await joinStudent(baseInput, dependencies);
@@ -177,9 +180,9 @@ it("hashes the normalized code before the trusted preflight", async () => {
   expect(observedHash).not.toContain("FJP5Z8YN");
 });
 
-it("runs the trusted join preflight before creating an Auth user", async () => {
+it("runs the trusted replay and preflight preparation before creating an Auth user", async () => {
   const dependencies = createDependencies();
-  dependencies.preflightJoin = async () => {
+  dependencies.prepareJoin = async () => {
     throw new JoinBoundaryError("GROUP_JOIN_CLOSED", 410);
   };
 
@@ -188,6 +191,19 @@ it("runs the trusted join preflight before creating an Auth user", async () => {
     status: 410,
   });
   expect(dependencies.createdUsers).toBe(0);
+});
+
+it("uses one trusted preparation call before creating a new identity", async () => {
+  const dependencies = createDependencies();
+  let preparationCalls = 0;
+  dependencies.prepareJoin = async () => {
+    preparationCalls += 1;
+    return { completed: null, groupNumber: 4 };
+  };
+
+  await joinStudent(baseInput, dependencies);
+
+  expect(preparationCalls).toBe(1);
 });
 
 it("exchanges the session while the trusted completion is running", async () => {
@@ -238,7 +254,7 @@ it("keeps a completed identity when initial session exchange fails", async () =>
 it("returns the safe invalid-code error from the trusted boundary", async () => {
   const dependencies = createDependencies();
   dependencies.findCompletedJoin = async () => null;
-  dependencies.preflightJoin = async () => {
+  dependencies.prepareJoin = async () => {
     throw new JoinBoundaryError("INVALID_JOIN_CODE", 404);
   };
 

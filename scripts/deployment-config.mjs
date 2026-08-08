@@ -673,7 +673,7 @@ export function validateProductionJoinLatencyFixConfiguration(workflow) {
     !String(job?.if ?? "").includes("refs/heads/main") ||
     !serialized.includes(PRODUCTION_PROJECT_REF) ||
     !serialized.includes(LOAD_PROJECT_REF) ||
-    !serialized.includes("ca83d90f6f468f9e7684a9df13a7384509afc07e") ||
+    !serialized.includes("74ca35cf7745a4b559884903c554955caf14efbb") ||
     !runs.includes("functions deploy join-cohort") ||
     !serialized.includes("SUPABASE_ACCESS_TOKEN") ||
     !serialized.includes("PRODUCTION_READINESS_SECRET")
@@ -690,14 +690,13 @@ export function validateProductionJoinLatencyFixConfiguration(workflow) {
     fail("production join fix must not receive application/database keys or mutate schema");
   }
   if (
-    !runs.includes("git diff --exit-code") ||
-    !runs.includes("-- supabase/migrations") ||
+    !runs.includes("git diff --name-only") ||
+    !runs.includes("20260808000300_combined_join_preparation.sql") ||
     !runs.includes("supabase/functions/join-cohort/index.ts") ||
     !runs.includes("supabase/functions/_shared/join-core.ts") ||
-    !runs.includes("supabase/functions/_shared/session-core.ts") ||
-    !runs.includes("git diff --name-only")
+    runs.includes("supabase/functions/_shared/session-core.ts")
   ) {
-    fail("production join fix must prove schema immutability and exact Function scope");
+    fail("production join fix must prove exact migration and Function scope");
   }
   requireContentsReadOnly(job, "production join fix");
   requireFrozenDenoCheck(job, "production join fix");

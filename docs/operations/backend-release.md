@@ -188,6 +188,14 @@ concurrently. Browser route checks read `current_role()` from the protected
 role table rather than trusting token metadata. The 1.5-second p95 join
 requirement remains unchanged.
 
+Migration `20260808000300_combined_join_preparation.sql` combines completed
+request replay detection with code, rate, and capacity preflight in one
+service-role-only RPC. Completed retries bypass a second rate-limit attempt;
+new joins retain the exact 45-network/90-window limits before any Auth identity
+is created. Apply and verify it through the same exact-target
+`production-classroom-nat-fix.yml` workflow before deploying the matching
+`join-cohort` Function.
+
 For this pre-publication Function-only correction, dispatch
 `production-join-latency-fix.yml` from its exact reviewed `main` SHA. The job
 proves migrations and Function source are unchanged from the reviewed fix,

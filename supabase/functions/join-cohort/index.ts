@@ -75,6 +75,24 @@ function dependencies(
   }
 
   return {
+    async prepareJoin(codeHash, requestKey) {
+      return measured("preflight", async () => {
+        const result = await admin.rpc("prepare_student_code_join", {
+          p_code_hash: codeHash,
+          p_request_key: requestKey,
+          p_rate_key_hash: rateKeyHash,
+        });
+        if (result.error) safeRpcError(result.error);
+        const row = result.data?.[0] as Record<string, unknown> | undefined;
+        if (!row) throw new Error("JOIN_PREPARE_MISSING");
+        return {
+          completed: row.completed
+            ? { identity: mapIdentity(row) }
+            : null,
+          groupNumber: Number(row.group_number),
+        };
+      });
+    },
     async findCompletedJoin(codeHash, requestKey): Promise<StoredJoin | null> {
       return measured("find", async () => {
         const result = await admin.rpc("find_completed_student_code_join", {
@@ -84,16 +102,6 @@ function dependencies(
         if (result.error) safeRpcError(result.error);
         const row = result.data?.[0] as Record<string, unknown> | undefined;
         return row ? { identity: mapIdentity(row) } : null;
-      });
-    },
-    async preflightJoin(codeHash) {
-      return measured("preflight", async () => {
-        const result = await admin.rpc("preflight_student_code_join", {
-          p_code_hash: codeHash,
-          p_rate_key_hash: rateKeyHash,
-        });
-        if (result.error) safeRpcError(result.error);
-        return { groupNumber: Number(result.data) };
       });
     },
     async createSyntheticUser(): Promise<SyntheticUser> {
