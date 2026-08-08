@@ -36,8 +36,9 @@ Release record:
 
 ## 2. Data-owner and recovery approval
 
-- [ ] The course owner approved `________` retention days; approver and time
-  are recorded in `private.data_retention_configuration`.
+- [ ] The course owner approved `90` retention days under authorization
+  `course-owner-2026-08-08`; approver and time are recorded in
+  `private.data_retention_configuration`.
 - [ ] Operational/privacy incident owner: `________________`.
 - [ ] Teacher-private CSV handling matches school policy.
 - [ ] Recovery custodian and key provisioning — Approver: `____________`; UTC: `____________`; Result: `____________`.
@@ -135,6 +136,14 @@ it was not required. A blank or assumed `N/A` leaves the item unchecked.
   accepted responses, rationales, sources, and C1–C8 coverage; a student token
   is denied.
 - [ ] Smoke teacher and unarchived owned cohort exist as opaque fixtures.
+- [ ] `production-classroom-bootstrap.yml` ran from the exact approved SHA,
+  received `PRODUCTION_TEACHER_EMAIL` and `PRODUCTION_TEACHER_PASSWORD` only as
+  encrypted environment secrets, and returned no personal or credential data.
+- [ ] The opaque receipt IDs exactly match `PRODUCTION_SMOKE_TEACHER_ID` and
+  `PRODUCTION_SMOKE_COHORT_ID` in `production-readiness`.
+- [ ] The temporary teacher password is scheduled to rotate before real
+  classroom use, and the operator will remove the one-time workflow and its
+  validator after readiness succeeds.
 - [ ] No live join window or recovery token remains from testing.
 - [ ] Daily cleanup job `campus-quest-expired-artifact-cleanup` has exactly one
   row, owned by `postgres` in the production database, active at `17 3 * * *`,

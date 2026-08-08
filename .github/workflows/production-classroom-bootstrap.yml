@@ -1,0 +1,115 @@
+name: Bootstrap Production Classroom
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full approved main-branch commit SHA
+        required: true
+        type: string
+      production_project_ref:
+        description: Confirmed production Supabase project reference
+        required: true
+        type: string
+      retention_days:
+        description: Course-owner-approved retention days
+        required: true
+        type: string
+      bootstrap_authorization_id:
+        description: Redaction-safe classroom bootstrap authorization
+        required: true
+        type: string
+
+concurrency:
+  group: campus-quest-production-backend
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production-backend
+    permissions:
+      contents: read
+    env:
+      PRODUCTION_SUPABASE_PROJECT_REF: ${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}
+      PRODUCTION_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      LOAD_SUPABASE_PROJECT_REF: ${{ vars.LOAD_SUPABASE_PROJECT_REF }}
+      PRODUCTION_RETENTION_DAYS: ${{ inputs.retention_days }}
+      BOOTSTRAP_AUTHORIZATION_ID: ${{ inputs.bootstrap_authorization_id }}
+
+    steps:
+      - name: Validate protected bootstrap identity
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMED_PROJECT_REF: ${{ inputs.production_project_ref }}
+          RETENTION_DAYS: ${{ inputs.retention_days }}
+          AUTHORIZATION_ID: ${{ inputs.bootstrap_authorization_id }}
+        run: |
+          if ! printf '%s' "$EXPECTED_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "expected_sha must be a full lowercase commit SHA" >&2
+            exit 1
+          fi
+          test "$EXPECTED_SHA" = "$GITHUB_SHA"
+          test "$CONFIRMED_PROJECT_REF" = "$PRODUCTION_SUPABASE_PROJECT_REF"
+          test "$CONFIRMED_PROJECT_REF" = "ghohuwwjxgjqnbsauvzq"
+          test "$PRODUCTION_SUPABASE_PROJECT_REF" = "ghohuwwjxgjqnbsauvzq"
+          test "$LOAD_SUPABASE_PROJECT_REF" = "vadyhuipwbtgbzpeisbn"
+          test "$PRODUCTION_SUPABASE_URL" = "https://ghohuwwjxgjqnbsauvzq.supabase.co"
+          test "$PRODUCTION_SUPABASE_PROJECT_REF" != "$LOAD_SUPABASE_PROJECT_REF"
+          test "$RETENTION_DAYS" = "90"
+          test "$AUTHORIZATION_ID" = "course-owner-2026-08-08"
+
+      - name: Check out the approved source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 11.9.0
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Reverify protected bootstrap source
+        run: |
+          pnpm check:repo
+          pnpm check:deployment
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+          pnpm test:functions
+
+      - name: Bootstrap the closed production classroom
+        env:
+          PRODUCTION_SUPABASE_SECRET_KEY: ${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PRODUCTION_TEACHER_EMAIL: ${{ secrets.PRODUCTION_TEACHER_EMAIL }}
+          PRODUCTION_TEACHER_PASSWORD: ${{ secrets.PRODUCTION_TEACHER_PASSWORD }}
+        run: pnpm bootstrap:production-classroom > /tmp/campus-quest-classroom-bootstrap.json
+
+      - name: Record the opaque bootstrap receipt
+        run: |
+          node --input-type=module -e '
+            import { readFile } from "node:fs/promises";
+            const receipt = JSON.parse(await readFile("/tmp/campus-quest-classroom-bootstrap.json", "utf8"));
+            const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+            if (!uuid.test(receipt.teacherId) || !uuid.test(receipt.cohortId) || receipt.retentionDays !== 90 || receipt.groupCount !== 5 || receipt.groupCapacity !== 6) process.exit(1);
+            process.stdout.write(`${JSON.stringify(receipt)}\n`);
+          '
+
+      - name: Remove temporary bootstrap receipt
+        if: always()
+        run: rm -f /tmp/campus-quest-classroom-bootstrap.json

@@ -144,6 +144,28 @@ always removes its temporary file. Every non-local invocation also requires
 `--expected-content-version=<approved-version>`. Record only the version key and
 the 24-item/8-concept receipt, never content or credentials.
 
+## One-time production classroom bootstrap
+
+After protected content import, store `PRODUCTION_TEACHER_EMAIL` and
+`PRODUCTION_TEACHER_PASSWORD` only as encrypted `production-backend`
+environment secrets. Dispatch `production-classroom-bootstrap.yml` from the
+exact approved `main` SHA with project `ghohuwwjxgjqnbsauvzq`, retention days
+`90`, and authorization ID `course-owner-2026-08-08`. The workflow records the
+course-owner retention approval, creates or confirms only its marked teacher
+and closed five-by-six `Production Classroom` cohort, and prints only the
+opaque teacher/cohort IDs and approved counts.
+
+Set the successful receipt IDs as the non-sensitive
+`PRODUCTION_SMOKE_TEACHER_ID` and `PRODUCTION_SMOKE_COHORT_ID` variables in the
+`production-readiness` environment. Also set `PRODUCTION_CONTENT_VERSION` to
+`2026-07-30-approved-blueprint-v1`. Do not open joining or allow quest starts
+during this setup.
+
+After the receipt and production readiness pass, remove the one-time workflow
+and its validator in a protected pull request. Rotate the temporary teacher
+password before real classroom use. Never write either teacher credential to a
+file, artifact, workflow input, log, repository path, or release record.
+
 ## Post-backend evidence
 
 Record the backend workflow run, approved SHA, production project ref,
