@@ -1,4 +1,4 @@
-name: Apply Production Classroom NAT Join Fix
+name: Apply Production Classroom Join Concurrency Fixes
 
 on:
   workflow_dispatch:
@@ -69,7 +69,7 @@ jobs:
           pnpm test
           pnpm test:functions
 
-      - name: Apply and verify the single forward migration
+      - name: Apply and verify the reviewed forward migrations
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node scripts/production-classroom-nat-fix.mjs

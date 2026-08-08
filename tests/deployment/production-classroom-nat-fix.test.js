@@ -33,7 +33,7 @@ describe("production classroom NAT join fix", () => {
     },
   );
 
-  it("uses one guarded forward migration and no application credential", async () => {
+  it("uses guarded classroom forward migrations and no application credential", async () => {
     const workflow = load(await readFile(resolve(
       root,
       ".github/workflows/production-classroom-nat-fix.yml",
@@ -46,6 +46,7 @@ describe("production classroom NAT join fix", () => {
     expect(serialized).toContain(productionRef);
     expect(serialized).toContain(loadRef);
     expect(serialized).toContain("scripts/production-classroom-nat-fix.mjs");
+    expect(serialized).toContain("reviewed forward migrations");
     expect(serialized).toContain("SUPABASE_ACCESS_TOKEN");
     expect(serialized).not.toContain("PRODUCTION_SUPABASE_SECRET_KEY");
     expect(serialized).not.toContain("PRODUCTION_SUPABASE_DB_PASSWORD");
