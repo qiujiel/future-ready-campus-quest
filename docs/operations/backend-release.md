@@ -153,7 +153,9 @@ exact approved `main` SHA with project `ghohuwwjxgjqnbsauvzq`, retention days
 `90`, and authorization ID `course-owner-2026-08-08`. The workflow records the
 course-owner retention approval, creates or confirms only its marked teacher
 and closed five-by-six `Production Classroom` cohort, and prints only the
-opaque teacher/cohort IDs and approved counts.
+opaque teacher/cohort IDs and approved counts. Its final check uses one fixed,
+read-only aggregate Management API query; it does not broaden the intentionally
+restricted table grants for groups or session controls.
 
 Set the successful receipt IDs as the non-sensitive
 `PRODUCTION_SMOKE_TEACHER_ID` and `PRODUCTION_SMOKE_COHORT_ID` variables in the

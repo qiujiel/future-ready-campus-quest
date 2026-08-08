@@ -66,6 +66,31 @@ where singleton = true
 returning cohort_retention_days as "retentionDays";
 `;
 
+export const CLASSROOM_VERIFICATION_QUERY = `
+select
+  exists (
+    select 1
+    from public.cohorts
+    where id = $1::uuid
+      and teacher_id = $2::uuid
+      and title = 'Production Classroom'
+      and group_count = 5
+      and group_capacity = 6
+      and archived_at is null
+  ) as "cohortValid",
+  (select count(*)::integer
+   from public.groups
+   where cohort_id = $1::uuid) as "groupCount",
+  (select count(*)::integer
+   from public.cohort_join_windows
+   where cohort_id = $1::uuid
+     and closed_at is null) as "openJoinWindows",
+  (select count(*)::integer
+   from public.cohort_session_controls
+   where cohort_id = $1::uuid
+     and quest_starts_allowed = true) as "allowedQuestStarts";
+`;
+
 export function assertBootstrapConfiguration(
   configuration: BootstrapConfiguration,
 ): void {
@@ -364,42 +389,37 @@ export function createProductionBootstrapDependencies(
     },
 
     async verifyClosedClassroom(teacherId, cohortId) {
-      const cohortResult = await admin
-        .from("cohorts")
-        .select("id")
-        .eq("id", cohortId)
-        .eq("teacher_id", teacherId)
-        .is("archived_at", null)
-        .limit(1);
-      const groupsResult = await admin
-        .from("groups")
-        .select("id")
-        .eq("cohort_id", cohortId);
-      const windowsResult = await admin
-        .from("cohort_join_windows")
-        .select("id")
-        .eq("cohort_id", cohortId)
-        .is("closed_at", null)
-        .limit(1);
-      const controlsResult = await admin
-        .from("cohort_session_controls")
-        .select("quest_starts_allowed,closed_at")
-        .eq("cohort_id", cohortId)
-        .limit(1);
-      if (
-        cohortResult.error || groupsResult.error || windowsResult.error ||
-        controlsResult.error || cohortResult.data?.length !== 1 ||
-        groupsResult.data?.length !== 5 ||
-        (windowsResult.data?.length ?? 0) !== 0
-      ) {
+      let data: unknown;
+      try {
+        const response = await fetchImplementation(
+          `https://api.supabase.com/v1/projects/${configuration.productionProjectRef}/database/query`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${configuration.accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              query: CLASSROOM_VERIFICATION_QUERY,
+              parameters: [cohortId, teacherId],
+              read_only: true,
+            }),
+          },
+        );
+        if (response.status !== 201) {
+          throw new Error("unexpected Management API status");
+        }
+        data = await response.json();
+      } catch {
         throw new Error("BOOTSTRAP_VERIFICATION_FAILED");
       }
-      const control = controlsResult.data?.[0] as
-        | { quest_starts_allowed?: boolean; closed_at?: string | null }
-        | undefined;
+      const receipt = Array.isArray(data) ? data[0] : undefined;
       if (
-        control &&
-        (control.quest_starts_allowed !== false || control.closed_at === null)
+        !receipt || typeof receipt !== "object" ||
+        (receipt as Record<string, unknown>).cohortValid !== true ||
+        Number((receipt as Record<string, unknown>).groupCount) !== 5 ||
+        Number((receipt as Record<string, unknown>).openJoinWindows) !== 0 ||
+        Number((receipt as Record<string, unknown>).allowedQuestStarts) !== 0
       ) {
         throw new Error("BOOTSTRAP_VERIFICATION_FAILED");
       }
