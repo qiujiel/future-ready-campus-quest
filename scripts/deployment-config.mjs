@@ -640,6 +640,30 @@ export function validateLoadTestBootstrapConfiguration(workflow) {
   requirePinnedActions([workflow]);
 }
 
+export function validateProductionClassroomNatFixConfiguration(workflow) {
+  const job = workflow?.jobs?.apply_fix;
+  const serialized = JSON.stringify(workflow ?? {});
+  if (
+    environmentName(job) !== "production-backend" ||
+    !String(job?.if ?? "").includes("refs/heads/main") ||
+    !serialized.includes(PRODUCTION_PROJECT_REF) ||
+    !serialized.includes(LOAD_PROJECT_REF) ||
+    !serialized.includes("scripts/production-classroom-nat-fix.mjs") ||
+    !serialized.includes("SUPABASE_ACCESS_TOKEN")
+  ) {
+    fail("production NAT fix requires exact identities, main, and protected access");
+  }
+  if (
+    serialized.includes("PRODUCTION_SUPABASE_SECRET_KEY") ||
+    serialized.includes("PRODUCTION_SUPABASE_DB_PASSWORD") ||
+    serialized.includes("LOAD_SUPABASE_SECRET_KEY")
+  ) {
+    fail("production NAT fix must not receive application or database keys");
+  }
+  requireContentsReadOnly(job, "production NAT fix");
+  requirePinnedActions([workflow]);
+}
+
 export function validateDeploymentConfiguration({ ci, backend, pages, rollback }) {
   const backendJob = backend?.jobs?.release;
   const authorizationJob = backend?.jobs?.validate_release_authorization;
@@ -726,6 +750,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     productionContentImport,
     productionClassroomBootstrap,
     loadTestBootstrap,
+    productionClassroomNatFix,
   ] = await Promise.all([
     readWorkflow("ci.yml"),
     readWorkflow("backend-production.yml"),
@@ -735,6 +760,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     readWorkflow("production-content-import.yml"),
     readWorkflow("production-classroom-bootstrap.yml"),
     readWorkflow("load-test-bootstrap.yml"),
+    readWorkflow("production-classroom-nat-fix.yml"),
   ]);
   return {
     ci,
@@ -745,6 +771,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     productionContentImport,
     productionClassroomBootstrap,
     loadTestBootstrap,
+    productionClassroomNatFix,
   };
 }
 
@@ -761,6 +788,9 @@ async function main() {
     configuration.productionClassroomBootstrap,
   );
   validateLoadTestBootstrapConfiguration(configuration.loadTestBootstrap);
+  validateProductionClassroomNatFixConfiguration(
+    configuration.productionClassroomNatFix,
+  );
   process.stdout.write("Deployment workflow boundaries passed.\n");
 }
 

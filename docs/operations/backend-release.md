@@ -168,6 +168,23 @@ and its validator in a protected pull request. Rotate the temporary teacher
 password before real classroom use. Never write either teacher credential to a
 file, artifact, workflow input, log, repository path, or release record.
 
+## One-time classroom shared-network forward fix
+
+The first mandatory live-load run proved that the original 12-join-per-minute
+network burst blocks a 30-student class sharing one school NAT address. Migration
+`20260808000100_classroom_nat_join_capacity.sql` raises only that per-network
+burst to 45 while preserving the independent 90-request join-window cap, group
+capacity, short expiry, and group-code hashing.
+
+For the pre-publication forward fix only, dispatch
+`production-classroom-nat-fix.yml` from the exact reviewed `main` SHA. The job is
+hard-coded to production `ghohuwwjxgjqnbsauvzq`, rejects the dedicated load
+project, receives only `SUPABASE_ACCESS_TOKEN`, applies that single migration,
+and verifies both limits from the installed function definition. Rerun the
+one-time load-test bootstrap at the same SHA so the dedicated project receives
+the same migration. Remove both one-time workflows and their validators after
+the release gate passes.
+
 ## Post-backend evidence
 
 Record the backend workflow run, approved SHA, production project ref,

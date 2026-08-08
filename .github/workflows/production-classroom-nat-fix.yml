@@ -1,0 +1,75 @@
+name: Apply Production Classroom NAT Join Fix
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full approved main-branch commit SHA
+        required: true
+        type: string
+      production_project_ref:
+        description: Confirmed production Supabase project reference
+        required: true
+        type: string
+
+concurrency:
+  group: campus-quest-production-backend
+  cancel-in-progress: false
+
+jobs:
+  apply_fix:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production-backend
+    permissions:
+      contents: read
+    env:
+      PRODUCTION_SUPABASE_PROJECT_REF: ${{ inputs.production_project_ref }}
+      LOAD_SUPABASE_PROJECT_REF: ${{ vars.LOAD_SUPABASE_PROJECT_REF }}
+
+    steps:
+      - name: Validate exact production target
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          test "$EXPECTED_SHA" = "$GITHUB_SHA"
+          test "$PRODUCTION_SUPABASE_PROJECT_REF" = "ghohuwwjxgjqnbsauvzq"
+          test "$LOAD_SUPABASE_PROJECT_REF" = "vadyhuipwbtgbzpeisbn"
+          test "$PRODUCTION_SUPABASE_PROJECT_REF" != "$LOAD_SUPABASE_PROJECT_REF"
+
+      - name: Check out the approved source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 11.9.0
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Reverify forward-fix source
+        run: |
+          pnpm check:repo
+          pnpm check:deployment
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+          pnpm test:functions
+
+      - name: Apply and verify the single forward migration
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node scripts/production-classroom-nat-fix.mjs
