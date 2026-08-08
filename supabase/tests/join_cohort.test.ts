@@ -51,7 +51,6 @@ function createDependencies(capacity = 6): JoinDependencies & {
       return {
         studentId,
         internalEmail: `${studentId}@students.invalid`,
-        password: "server-generated-password-that-is-never-persisted",
       };
     },
     async signInNewUser(): Promise<SessionTokens> {

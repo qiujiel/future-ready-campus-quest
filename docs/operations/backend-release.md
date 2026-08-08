@@ -176,6 +176,14 @@ network burst blocks a 30-student class sharing one school NAT address. Migratio
 burst to 45 while preserving the independent 90-request join-window cap, group
 capacity, short expiry, and group-code hashing.
 
+The follow-up live-load run admitted and completed all 30 synthetic learners but
+exposed password hashing plus password login as a join-latency bottleneck. New
+student identities now receive their initial session through a server-side,
+one-time magic-link hash exchange. This sends no email, stores no student
+password, and preserves the existing synthetic-user role, opaque browser
+session, RLS, recovery, replay, and cleanup boundaries. The 1.5-second p95 join
+requirement remains unchanged.
+
 For the pre-publication forward fix only, dispatch
 `production-classroom-nat-fix.yml` from the exact reviewed `main` SHA. The job is
 hard-coded to production `ghohuwwjxgjqnbsauvzq`, rejects the dedicated load

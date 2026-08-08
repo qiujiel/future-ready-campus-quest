@@ -4,6 +4,7 @@ import {
   issueSessionForExistingUser,
   publicAuthClient,
 } from "../_shared/auth.ts";
+import { issueInitialStudentSession } from "../_shared/session-core.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import {
   type CompleteJoinInput,
@@ -22,11 +23,6 @@ import type {
   StudentIdentity,
 } from "../../../src/shared/api/contracts.ts";
 
-function randomPassword(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
 function mapIdentity(row: Record<string, unknown>): StudentIdentity {
   return {
     studentId: String(row.student_id),
@@ -35,16 +31,6 @@ function mapIdentity(row: Record<string, unknown>): StudentIdentity {
     groupNumber: Number(row.group_number),
     nickname: String(row.nickname),
     isGroupIdentityEditor: Boolean(row.is_group_identity_editor),
-  };
-}
-
-function sessionTokens(
-  session: { access_token: string; refresh_token: string } | null,
-): SessionTokens {
-  if (!session) throw new Error("SESSION_NOT_CREATED");
-  return {
-    accessToken: session.access_token,
-    refreshToken: session.refresh_token,
   };
 }
 
@@ -94,11 +80,9 @@ function dependencies(
       return { groupNumber: Number(result.data) };
     },
     async createSyntheticUser(): Promise<SyntheticUser> {
-      const password = randomPassword();
       const internalEmail = `${crypto.randomUUID()}@students.invalid`;
       const result = await admin.auth.admin.createUser({
         email: internalEmail,
-        password,
         email_confirm: true,
         app_metadata: { role: "student" },
       });
@@ -106,16 +90,10 @@ function dependencies(
       return {
         studentId: result.data.user.id,
         internalEmail,
-        password,
       };
     },
     async signInNewUser(user): Promise<SessionTokens> {
-      const result = await publicClient.auth.signInWithPassword({
-        email: user.internalEmail,
-        password: user.password,
-      });
-      if (result.error) throw new Error("AUTH_SESSION_FAILED");
-      return sessionTokens(result.data.session);
+      return issueInitialStudentSession(admin, publicClient, user.internalEmail);
     },
     async issueReplacementSession(studentId): Promise<SessionTokens> {
       return issueSessionForExistingUser(admin, publicClient, studentId);

@@ -3,6 +3,7 @@ import {
   type SupabaseClient,
 } from "npm:@supabase/supabase-js@2.111.0";
 import { selectSupabaseKeys } from "./auth-configuration.ts";
+import { issueInitialStudentSession } from "./session-core.ts";
 
 function requiredEnvironment(name: string): string {
   const value = Deno.env.get(name);
@@ -86,20 +87,5 @@ export async function issueSessionForExistingUser(
   const user = await admin.auth.admin.getUserById(studentId);
   const email = user.data.user?.email;
   if (user.error || !email) throw new Error("AUTH_USER_NOT_FOUND");
-  const link = await admin.auth.admin.generateLink({
-    type: "magiclink",
-    email,
-  });
-  const tokenHash = link.data.properties?.hashed_token;
-  if (link.error || !tokenHash) throw new Error("AUTH_LINK_FAILED");
-  const verified = await publicClient.auth.verifyOtp({
-    token_hash: tokenHash,
-    type: "email",
-  });
-  const session = verified.data.session;
-  if (verified.error || !session) throw new Error("AUTH_SESSION_FAILED");
-  return {
-    accessToken: session.access_token,
-    refreshToken: session.refresh_token,
-  };
+  return issueInitialStudentSession(admin, publicClient, email);
 }

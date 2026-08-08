@@ -42,7 +42,6 @@ export interface StoredJoin {
 export interface SyntheticUser {
   studentId: string;
   internalEmail: string;
-  password: string;
 }
 
 export interface CompleteJoinInput {
