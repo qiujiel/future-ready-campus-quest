@@ -664,6 +664,42 @@ export function validateProductionClassroomNatFixConfiguration(workflow) {
   requirePinnedActions([workflow]);
 }
 
+export function validateProductionJoinLatencyFixConfiguration(workflow) {
+  const job = workflow?.jobs?.deploy_fix;
+  const serialized = JSON.stringify(workflow ?? {});
+  const runs = combinedRuns(job);
+  if (
+    environmentName(job) !== "production-backend" ||
+    !String(job?.if ?? "").includes("refs/heads/main") ||
+    !serialized.includes(PRODUCTION_PROJECT_REF) ||
+    !serialized.includes(LOAD_PROJECT_REF) ||
+    !serialized.includes("d456c2dc3f04386597d73d71124bb7a4c5ae1329") ||
+    !runs.includes("functions deploy join-cohort") ||
+    !serialized.includes("SUPABASE_ACCESS_TOKEN") ||
+    !serialized.includes("PRODUCTION_READINESS_SECRET")
+  ) {
+    fail("production join fix requires reviewed source and an exact protected target");
+  }
+  if (
+    serialized.includes("PRODUCTION_SUPABASE_SECRET_KEY") ||
+    serialized.includes("PRODUCTION_SUPABASE_DB_PASSWORD") ||
+    serialized.includes("LOAD_SUPABASE_SECRET_KEY") ||
+    /\bdb push\b/.test(runs) ||
+    /\bmigration repair\b/.test(runs)
+  ) {
+    fail("production join fix must not receive application/database keys or mutate schema");
+  }
+  if (
+    !runs.includes("git diff --exit-code") ||
+    !runs.includes("supabase/migrations supabase/functions")
+  ) {
+    fail("production join fix must prove database and Function source immutability");
+  }
+  requireContentsReadOnly(job, "production join fix");
+  requireFrozenDenoCheck(job, "production join fix");
+  requirePinnedActions([workflow]);
+}
+
 export function validateDeploymentConfiguration({ ci, backend, pages, rollback }) {
   const backendJob = backend?.jobs?.release;
   const authorizationJob = backend?.jobs?.validate_release_authorization;
@@ -751,6 +787,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     productionClassroomBootstrap,
     loadTestBootstrap,
     productionClassroomNatFix,
+    productionJoinLatencyFix,
   ] = await Promise.all([
     readWorkflow("ci.yml"),
     readWorkflow("backend-production.yml"),
@@ -761,6 +798,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     readWorkflow("production-classroom-bootstrap.yml"),
     readWorkflow("load-test-bootstrap.yml"),
     readWorkflow("production-classroom-nat-fix.yml"),
+    readWorkflow("production-join-latency-fix.yml"),
   ]);
   return {
     ci,
@@ -772,6 +810,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     productionClassroomBootstrap,
     loadTestBootstrap,
     productionClassroomNatFix,
+    productionJoinLatencyFix,
   };
 }
 
@@ -790,6 +829,9 @@ async function main() {
   validateLoadTestBootstrapConfiguration(configuration.loadTestBootstrap);
   validateProductionClassroomNatFixConfiguration(
     configuration.productionClassroomNatFix,
+  );
+  validateProductionJoinLatencyFixConfiguration(
+    configuration.productionJoinLatencyFix,
   );
   process.stdout.write("Deployment workflow boundaries passed.\n");
 }
