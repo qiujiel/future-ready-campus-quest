@@ -27,8 +27,11 @@ Release record:
   `https://ghohuwwjxgjqnbsauvzq.supabase.co` exactly.
 - [ ] The dedicated load ref and load fixtures equal only
   `vadyhuipwbtgbzpeisbn`; neither may be used as production or a restore target.
-- [ ] `production-backend`, `production-readiness`, and `github-pages` have
-  distinct required-reviewer gates, self-review prevention, and `main` rules.
+- [ ] `load-test`, `production-backend`, `production-readiness`, and
+  `github-pages` are distinct required-reviewer gates, limited to `main`, or use
+  the explicitly recorded initial owner exception.
+- [ ] The release load gate creates and removes its synthetic teacher, cohort,
+  group codes, and students per run; no static load token or fixture ID exists.
 - [ ] `github-pages` contains no Supabase secret.
 - [ ] Public `VITE_*` values contain no service-role or private credential.
 - [ ] Environment verification completed at `________________` by
@@ -150,6 +153,8 @@ it was not required. A blank or assumed `N/A` leaves the item unchecked.
   and the non-production cleanup rehearsal passed.
 - [ ] Pages package job produced one 90-day `github-pages` artifact without
   Pages write or OIDC permission.
+- [ ] The dedicated-project 30-student live gate passed using the protected
+  `load-test` environment and modern load secret key.
 - [ ] Package evidence: artifact ID `________________`, commit
   `________________`, manifest SHA-256 `________________`.
 - [ ] `production-readiness` approver reviewed the downloaded artifact's exact

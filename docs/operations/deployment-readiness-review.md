@@ -69,9 +69,11 @@ served-release metadata, smoke checks, and rollback evidence.
 
 GitHub Pages is configured to publish from Actions at
 `https://qiujiel.github.io/future-ready-campus-quest/`, but no production Pages
-artifact has yet completed deployment or hosted verification. The three
-environments exist and are limited to `main`; the second-person reviewer control
-is intentionally absent under the owner exception.
+artifact has yet completed deployment or hosted verification. The four
+environments (`load-test`, `production-backend`, `production-readiness`, and
+`github-pages`) are limited to `main`; the second-person reviewer control is
+intentionally absent under the owner exception. The load gate creates only
+synthetic per-run classroom identities and deletes them after measurement.
 
 ## GitHub variables and secrets inventory
 

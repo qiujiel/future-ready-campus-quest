@@ -35,11 +35,10 @@ export function readDedicatedLoadConfiguration(environment) {
   return {
     projectRef,
     apiUrl,
-    anonKey: required(environment, "LOAD_SUPABASE_ANON_KEY"),
-    serviceKey: required(environment, "LOAD_SUPABASE_SERVICE_ROLE_KEY"),
-    teacherToken: required(environment, "LOAD_TEACHER_ACCESS_TOKEN"),
-    cohortId: required(environment, "LOAD_COHORT_ID"),
-    joinToken: required(environment, "LOAD_JOIN_TOKEN"),
-    contentVersionId: required(environment, "LOAD_CONTENT_VERSION_ID"),
+    publishableKey: required(
+      environment,
+      "LOAD_SUPABASE_PUBLISHABLE_KEY",
+    ),
+    secretKey: required(environment, "LOAD_SUPABASE_SECRET_KEY"),
   };
 }
