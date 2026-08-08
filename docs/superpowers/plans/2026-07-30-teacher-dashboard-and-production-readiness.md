@@ -344,7 +344,10 @@ For the dedicated test project:
 
 - no failed authorized requests;
 - no accepted unauthorized requests;
-- p95 join and response submission below 1.5 seconds;
+- p95 response submission below 1.5 seconds;
+- p95 initial join below 5 seconds for 30 simultaneous students, superseding
+  the original 1.5-second join objective under the approved 2026-08-08
+  classroom-readiness decision;
 - p95 dashboard summary below 2.5 seconds;
 - no duplicate response rows;
 - correct five-team completion and score calculation.

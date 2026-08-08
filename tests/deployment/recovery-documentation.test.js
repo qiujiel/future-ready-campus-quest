@@ -267,6 +267,8 @@ const assertBackendReleasePolicy = (backend) => {
   assertPatterns(backend, [
     /only accepted recovery path[\s\S]*verified Free-plan encrypted logical/is,
     /Before approving\s+`production-backend`[\s\S]*compares all four inputs/is,
+    /one-time join p95 below 5\s+seconds[\s\S]*response p95 below 1\.5 seconds/is,
+    /zero incorrect group assignments[\s\S]*zero duplicate student\s+identities/is,
   ]);
   rejectPatterns(backend, [
     /either[^\n]*provider-managed[^\n]*or/i,
@@ -389,6 +391,10 @@ const assertChecklistPolicy = (checklist) => {
     "Independent reviewer signature/time",
     "Any unchecked item means **HOLD**",
     "No operator, owner, approver, or reviewer may waive",
+    "one-time join p95 below 5 seconds",
+    "response p95 below 1.5 seconds",
+    "zero incorrect group assignments",
+    "zero duplicate student identities",
   ]);
 
   for (const label of remoteApprovalLabels) {

@@ -5,6 +5,11 @@ import {
   launchLoadQuest,
 } from "../../scripts/load-test-fixture.mjs";
 import { parseJoinServerTiming } from "./server-timing.js";
+import {
+  buildJoinPhaseEvidence,
+  CLASSROOM_JOIN_P95_LIMIT_MS,
+  classroomLoadGateFailures,
+} from "./class-session-policy.js";
 
 const studentCount = 30;
 const groupCount = 5;
@@ -36,6 +41,7 @@ async function liveRun() {
   };
   const responseLatencies = [];
   const studentIds = [];
+  const joinedStudents = [];
   let authorizedFailures = 0;
 
   function requireAuthorized(response, label) {
@@ -45,39 +51,68 @@ async function liveRun() {
   }
 
   try {
-    const sessions = await Promise.all(
+    const joinResults = await Promise.all(
       Array.from({ length: studentCount }, async (_, index) => {
-        const joined = await timed(async () => {
-          const response = await fetch(`${apiUrl}/functions/v1/join-cohort`, {
-            method: "POST",
-            headers: {
-              apikey: publishableKey,
-              Origin: "http://127.0.0.1:4173",
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              joinCode: groupCodes[Math.floor(index / studentsPerGroup)],
-              displayName: `Load Learner ${index + 1}`,
-              requestKey: crypto.randomUUID(),
-            }),
+        const expectedGroupNumber = Math.floor(index / studentsPerGroup) + 1;
+        try {
+          const joined = await timed(async () => {
+            const response = await fetch(`${apiUrl}/functions/v1/join-cohort`, {
+              method: "POST",
+              headers: {
+                apikey: publishableKey,
+                Origin: "http://127.0.0.1:4173",
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                joinCode: groupCodes[expectedGroupNumber - 1],
+                displayName: `Load Learner ${index + 1}`,
+                requestKey: crypto.randomUUID(),
+              }),
+            });
+            requireAuthorized(response, "join");
+            const stageTimings = parseJoinServerTiming(
+              response.headers.get("server-timing"),
+            );
+            for (const [stage, duration] of Object.entries(stageTimings)) {
+              joinStageLatencies[stage].push(duration);
+            }
+            return response.json();
           });
-          requireAuthorized(response, "join");
-          const stageTimings = parseJoinServerTiming(
-            response.headers.get("server-timing"),
-          );
-          for (const [stage, duration] of Object.entries(stageTimings)) {
-            joinStageLatencies[stage].push(duration);
-          }
-          return response.json();
-        });
-        joinLatencies.push(joined.duration);
-        studentIds.push(joined.value.identity.studentId);
-        return {
-          studentId: joined.value.identity.studentId,
-          accessToken: joined.value.accessToken,
-        };
+          joinLatencies.push(joined.duration);
+          studentIds.push(joined.value.identity.studentId);
+          joinedStudents.push({
+            studentId: joined.value.identity.studentId,
+            expectedGroupNumber,
+            actualGroupNumber: joined.value.identity.groupNumber,
+          });
+          return {
+            studentId: joined.value.identity.studentId,
+            accessToken: joined.value.accessToken,
+          };
+        } catch {
+          return null;
+        }
       }),
     );
+    const sessions = joinResults.filter((session) => session !== null);
+    const joinEvidence = buildJoinPhaseEvidence({
+      authorizedFailures,
+      joinLatencies,
+      joinStageLatencies,
+      joinedStudents,
+    });
+    process.stdout.write(`Join phase evidence: ${JSON.stringify(joinEvidence)}\n`);
+    if (
+      joinEvidence.authorizedFailures !== 0 ||
+      joinEvidence.studentsJoined !== studentCount ||
+      joinEvidence.failedJoins !== 0 ||
+      joinEvidence.incorrectGroupAssignments !== 0 ||
+      joinEvidence.duplicateStudentIdentities !== 0 ||
+      !Number.isFinite(joinEvidence.p95JoinMs) ||
+      joinEvidence.p95JoinMs >= CLASSROOM_JOIN_P95_LIMIT_MS
+    ) {
+      throw new Error(`Load join gate failed: ${JSON.stringify(joinEvidence)}`);
+    }
 
     await launchLoadQuest(configuration, fixture);
     const attempts = await admin
@@ -225,14 +260,9 @@ async function liveRun() {
         completion.result?.formulaVersion === "team-score-60-25-10-5-v1",
     ).length;
     const metrics = {
+      ...joinEvidence,
       authorizedFailures,
       unauthorizedAccepted: unauthorizedDashboard.ok ? 1 : 0,
-      p95JoinMs: percentile(joinLatencies, 95),
-      p95JoinFindMs: percentile(joinStageLatencies.find, 95),
-      p95JoinPreflightMs: percentile(joinStageLatencies.preflight, 95),
-      p95JoinCreateMs: percentile(joinStageLatencies.create, 95),
-      p95JoinSignMs: percentile(joinStageLatencies.sign, 95),
-      p95JoinCompleteMs: percentile(joinStageLatencies.complete, 95),
       p95ResponseMs: percentile(responseLatencies, 95),
       p95DashboardMs: dashboard.duration,
       duplicateResponses: keys.length - new Set(keys).size,
@@ -242,19 +272,11 @@ async function liveRun() {
       students: studentCount,
       studentsWithVerifiedFormula: validFormulaResults,
     };
-    if (
-      metrics.authorizedFailures !== 0 ||
-      metrics.unauthorizedAccepted !== 0 ||
-      metrics.p95JoinMs >= 1_500 ||
-      metrics.p95ResponseMs >= 1_500 ||
-      metrics.p95DashboardMs >= 2_500 ||
-      metrics.duplicateResponses !== 0 ||
-      metrics.completedStudents !== studentCount ||
-      metrics.groups !== groupCount ||
-      metrics.groupsWithValidScores !== groupCount ||
-      metrics.studentsWithVerifiedFormula !== studentCount
-    ) {
-      throw new Error(`Load gate failed: ${JSON.stringify(metrics)}`);
+    const gateFailures = classroomLoadGateFailures(metrics);
+    if (gateFailures.length > 0) {
+      throw new Error(
+        `Load gate failed (${gateFailures.join(", ")}): ${JSON.stringify(metrics)}`,
+      );
     }
     process.stdout.write(`${JSON.stringify(metrics, null, 2)}\n`);
   } finally {
