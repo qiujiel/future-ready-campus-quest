@@ -51,8 +51,9 @@ The implementation has three small boundaries:
 2. `production-classroom-bootstrap.ts` validates runtime configuration and
    performs idempotent setup. It uses the modern Supabase secret key for Auth
    and application-table provisioning. It uses the protected Supabase
-   Management API token only for the fixed, parameterized retention update to
-   the private schema. The Management API supports authenticated SQL queries at
+   Management API token only for the fixed, parameterized retention update and
+   the fixed, read-only aggregate classroom verification across restricted
+   tables. The Management API supports authenticated SQL queries at
    `POST /v1/projects/{ref}/database/query`; no arbitrary SQL comes from workflow
    inputs.
 3. `production-classroom-bootstrap.yml` checks the immutable source, reruns the

@@ -284,7 +284,7 @@ Run the focused Task 1 command. Expected: FAIL because production adapters are a
 
 - [ ] **Step 3: Implement minimal adapters and CLI**
 
-Use `createClient(configuration.supabaseUrl, configuration.secretKey, { auth: { persistSession: false, autoRefreshToken: false } })`. Paginate `auth.admin.listUsers` until an exact normalized email match or exhaustion. Create only a missing user with confirmed email and app metadata `{ role: "teacher", bootstrapAuthorizationId }`. Use service-level table access to insert/confirm `user_roles`, `cohorts`, and five generated `groups`; verify no active `cohort_join_windows` row and no open/allowed session control.
+Use `createClient(configuration.supabaseUrl, configuration.secretKey, { auth: { persistSession: false, autoRefreshToken: false } })`. Paginate `auth.admin.listUsers` until an exact normalized email match or exhaustion. Create only a missing user with confirmed email and app metadata `{ role: "teacher", bootstrapAuthorizationId }`. Use service-level table access to insert/confirm `user_roles` and `cohorts`. Verify cohort ownership, five generated groups, no active join window, and no allowed quest starts through one fixed, read-only, parameterized Management API aggregate query because the restricted `groups` and `cohort_session_controls` tables intentionally do not grant service-role `SELECT`.
 
 The CLI reads:
 

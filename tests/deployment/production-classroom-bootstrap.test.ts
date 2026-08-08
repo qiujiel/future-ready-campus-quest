@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   RETENTION_QUERY,
+  CLASSROOM_VERIFICATION_QUERY,
   assertBootstrapConfiguration,
   bootstrapProductionClassroom,
   bootstrapConfigurationFromEnvironment,
@@ -355,20 +356,15 @@ describe("production classroom bootstrap adapters", () => {
   });
 
   it("rejects a classroom with an active join window", async () => {
-    const seenUrls: string[] = [];
     const recordingFetch: typeof fetch = async (input) => {
       const url = String(input);
-      seenUrls.push(url);
-      if (url.includes("/rest/v1/groups")) {
-        return jsonResponse(Array.from({ length: 5 }, (_, index) => ({
-          id: `group-${index + 1}`,
-        })));
-      }
-      if (url.includes("/rest/v1/cohort_join_windows")) {
-        return jsonResponse([{ id: "active-window" }]);
-      }
-      if (url.includes("/rest/v1/cohort_session_controls")) {
-        return jsonResponse([]);
+      if (url.includes("api.supabase.com")) {
+        return jsonResponse([{
+          cohortValid: true,
+          groupCount: 5,
+          openJoinWindows: 1,
+          allowedQuestStarts: 0,
+        }], 201);
       }
       return jsonResponse([]);
     };
@@ -379,10 +375,32 @@ describe("production classroom bootstrap adapters", () => {
 
     await expect(adapters.verifyClosedClassroom(TEACHER_ID, COHORT_ID))
       .rejects.toThrow("BOOTSTRAP_VERIFICATION_FAILED");
-    expect(seenUrls).toEqual(expect.arrayContaining([
-      expect.stringContaining("/rest/v1/groups"),
-      expect.stringContaining("/rest/v1/cohort_join_windows"),
-    ]));
+  });
+
+  it("verifies the closed classroom through one fixed aggregate query", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const recordingFetch: typeof fetch = async (input, init) => {
+      requests.push({ url: String(input), ...(init ? { init } : {}) });
+      return jsonResponse([{
+        cohortValid: true,
+        groupCount: 5,
+        openJoinWindows: 0,
+        allowedQuestStarts: 0,
+      }], 201);
+    };
+    const adapters = createProductionBootstrapDependencies(
+      validConfiguration,
+      recordingFetch,
+    );
+
+    await expect(adapters.verifyClosedClassroom(TEACHER_ID, COHORT_ID))
+      .resolves.toBeUndefined();
+    expect(requests).toHaveLength(1);
+    expect(JSON.parse(String(requests[0]?.init?.body))).toEqual({
+      query: CLASSROOM_VERIFICATION_QUERY,
+      parameters: [COHORT_ID, TEACHER_ID],
+      read_only: true,
+    });
   });
 
   it("maps only named protected environment values into configuration", () => {
