@@ -195,11 +195,20 @@ If readiness fails, keep Pages unpublished and redeploy the prior immutable
 For the pre-publication forward fix only, dispatch
 `production-classroom-nat-fix.yml` from the exact reviewed `main` SHA. The job is
 hard-coded to production `ghohuwwjxgjqnbsauvzq`, rejects the dedicated load
-project, receives only `SUPABASE_ACCESS_TOKEN`, applies that single migration,
-and verifies both limits from the installed function definition. Rerun the
+project, receives only `SUPABASE_ACCESS_TOKEN`, applies only the reviewed
+classroom forward migrations, and verifies both limits from the installed
+function definition. Rerun the
 one-time load-test bootstrap at the same SHA so the dedicated project receives
 the same migration. Remove both one-time workflows and their validators after
 the release gate passes.
+
+After the second load run exposed class-wide exclusive lock contention, the
+same idempotent forward-fix job also applies
+`20260808000200_concurrent_join_locking.sql`. It verifies concurrent shared
+window locks, per-group exclusive capacity locks, ordered atomic rate locks,
+both recorded migration versions, and the unchanged 45/90 limits. Retention
+cleanup remains responsible for expired attempt rows; the request path no
+longer performs a class-wide cleanup scan for every learner.
 
 ## Post-backend evidence
 

@@ -4,8 +4,18 @@ import { pathToFileURL } from "node:url";
 
 const PRODUCTION_PROJECT_REF = "ghohuwwjxgjqnbsauvzq";
 const LOAD_PROJECT_REF = "vadyhuipwbtgbzpeisbn";
-const MIGRATION_VERSION = "20260808000100";
-const MIGRATION_NAME = "classroom_nat_join_capacity";
+const MIGRATIONS = [
+  {
+    version: "20260808000100",
+    name: "classroom_nat_join_capacity",
+    file: "20260808000100_classroom_nat_join_capacity.sql",
+  },
+  {
+    version: "20260808000200",
+    name: "concurrent_join_locking",
+    file: "20260808000200_concurrent_join_locking.sql",
+  },
+];
 
 function required(environment, name) {
   const value = environment[name]?.trim();
@@ -50,35 +60,39 @@ async function query(configuration, sql, readOnly = false) {
 }
 
 export async function applyProductionNatFix(configuration, baseDirectory) {
-  const existing = await query(configuration, `
-    select exists (
-      select 1 from supabase_migrations.schema_migrations
-      where version = '${MIGRATION_VERSION}'
-    ) as "alreadyApplied";
-  `, true);
-  const alreadyApplied = Array.isArray(existing) &&
-    existing[0]?.alreadyApplied === true;
+  const appliedVersions = [];
+  for (const candidate of MIGRATIONS) {
+    const existing = await query(configuration, `
+      select exists (
+        select 1 from supabase_migrations.schema_migrations
+        where version = '${candidate.version}'
+      ) as "alreadyApplied";
+    `, true);
+    const alreadyApplied = Array.isArray(existing) &&
+      existing[0]?.alreadyApplied === true;
+    if (alreadyApplied) continue;
 
-  if (!alreadyApplied) {
-    const migration = await readFile(resolve(
-      baseDirectory,
-      "supabase/migrations/20260808000100_classroom_nat_join_capacity.sql",
-    ), "utf8");
+    const migration = await readFile(
+      resolve(baseDirectory, "supabase/migrations", candidate.file),
+      "utf8",
+    );
     await query(configuration, `
-      begin;
-      ${migration}
-      insert into supabase_migrations.schema_migrations (version, name)
-      values ('${MIGRATION_VERSION}', '${MIGRATION_NAME}');
-      commit;
-    `);
+        begin;
+        ${migration}
+        insert into supabase_migrations.schema_migrations (version, name)
+        values ('${candidate.version}', '${candidate.name}');
+        commit;
+      `);
+    appliedVersions.push(candidate.version);
   }
 
   const verification = await query(configuration, `
     select
-      exists (
-        select 1 from supabase_migrations.schema_migrations
-        where version = '${MIGRATION_VERSION}'
-      ) as "migrationRecorded",
+      2 = (
+        select count(*)
+        from supabase_migrations.schema_migrations
+        where version in ('20260808000100', '20260808000200')
+      ) as "migrationsRecorded",
       position(
         'count(*) >= 45' in pg_get_functiondef(
           'public.preflight_student_join(text,smallint,text)'::regprocedure
@@ -88,21 +102,40 @@ export async function applyProductionNatFix(configuration, baseDirectory) {
         'count(*) >= 90' in pg_get_functiondef(
           'public.preflight_student_join(text,smallint,text)'::regprocedure
         )
-      ) > 0 as "windowLimitReady";
+      ) > 0 as "windowLimitReady",
+      position(
+        'pg_advisory_xact_lock' in pg_get_functiondef(
+          'public.preflight_student_join(text,smallint,text)'::regprocedure
+        )
+      ) > 0 as "atomicRateLockReady",
+      position(
+        'FOR SHARE OF codes, windows' in pg_get_functiondef(
+          'public.complete_student_code_join(text,uuid,uuid,text)'::regprocedure
+        )
+      ) > 0 as "sharedWindowLockReady",
+      position(
+        'FOR UPDATE OF groups' in pg_get_functiondef(
+          'public.complete_student_code_join(text,uuid,uuid,text)'::regprocedure
+        )
+      ) > 0 as "groupCapacityLockReady";
   `, true);
   const row = Array.isArray(verification) ? verification[0] : null;
   if (
-    row?.migrationRecorded !== true ||
+    row?.migrationsRecorded !== true ||
     row?.sharedNetworkLimitReady !== true ||
-    row?.windowLimitReady !== true
+    row?.windowLimitReady !== true ||
+    row?.atomicRateLockReady !== true ||
+    row?.sharedWindowLockReady !== true ||
+    row?.groupCapacityLockReady !== true
   ) {
     throw new Error("NAT_FIX_VERIFICATION_FAILED");
   }
   return {
-    applied: !alreadyApplied,
-    migrationVersion: MIGRATION_VERSION,
+    appliedVersions,
+    migrationVersions: MIGRATIONS.map((migration) => migration.version),
     sharedNetworkLimit: 45,
     windowLimit: 90,
+    concurrentWindowLocking: true,
   };
 }
 
