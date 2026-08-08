@@ -104,15 +104,6 @@ jobs:
           done
           pnpm test:integration
 
-      - name: Build and scan the public shell
-        env:
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH }}
-        run: |
-          pnpm build
-          pnpm check:bundle
-
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 
@@ -132,6 +123,15 @@ jobs:
       - name: Stop local Supabase
         if: always()
         run: pnpm exec supabase stop --no-backup
+
+      - name: Build and scan the final public shell
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH }}
+        run: |
+          pnpm build
+          pnpm check:bundle
 
       - name: Create immutable artifact evidence
         id: integrity
