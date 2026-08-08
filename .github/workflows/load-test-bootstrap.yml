@@ -1,0 +1,103 @@
+name: Bootstrap Dedicated Load-Test Project
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full approved main-branch commit SHA
+        required: true
+        type: string
+      load_project_ref:
+        description: Confirmed dedicated load-test Supabase project reference
+        required: true
+        type: string
+
+concurrency:
+  group: campus-quest-load-test-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production-backend
+    permissions:
+      contents: read
+    env:
+      LOAD_SUPABASE_PROJECT_REF: ${{ inputs.load_project_ref }}
+      PRODUCTION_SUPABASE_PROJECT_REF: ${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}
+
+    steps:
+      - name: Validate dedicated load-test identity
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          test "$EXPECTED_SHA" = "$GITHUB_SHA"
+          test "$LOAD_SUPABASE_PROJECT_REF" = "vadyhuipwbtgbzpeisbn"
+          test "$PRODUCTION_SUPABASE_PROJECT_REF" = "ghohuwwjxgjqnbsauvzq"
+          test "$LOAD_SUPABASE_PROJECT_REF" != "$PRODUCTION_SUPABASE_PROJECT_REF"
+
+      - name: Check out the approved source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 11.9.0
+          run_install: false
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Reverify bootstrap source
+        run: |
+          pnpm check:repo
+          pnpm check:deployment
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+
+      - name: Apply missing load-test migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node scripts/load-test-bootstrap.mjs
+
+      - name: Configure synthetic-only Function secrets
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          JOIN_TOKEN_SIGNING_SECRET="$(openssl rand -hex 32)"
+          RECOVERY_TOKEN_SIGNING_SECRET="$(openssl rand -hex 32)"
+          PRODUCTION_READINESS_SECRET="$(openssl rand -hex 32)"
+          printf '%s\n' \
+            "ALLOWED_FRONTEND_ORIGINS=http://127.0.0.1:4173" \
+            "FRONTEND_APP_URL=http://127.0.0.1:4173" \
+            "JOIN_TOKEN_SIGNING_SECRET=$JOIN_TOKEN_SIGNING_SECRET" \
+            "RECOVERY_TOKEN_SIGNING_SECRET=$RECOVERY_TOKEN_SIGNING_SECRET" \
+            "PRODUCTION_READINESS_SECRET=$PRODUCTION_READINESS_SECRET" \
+            > /tmp/campus-quest-load-functions.env
+          pnpm exec supabase secrets set \
+            --project-ref "$LOAD_SUPABASE_PROJECT_REF" \
+            --env-file /tmp/campus-quest-load-functions.env
+
+      - name: Deploy load-test Edge Functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: >-
+          pnpm exec supabase functions deploy
+          --project-ref "$LOAD_SUPABASE_PROJECT_REF"
+
+      - name: Remove temporary Function secrets
+        if: always()
+        run: rm -f /tmp/campus-quest-load-functions.env

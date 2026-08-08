@@ -16,22 +16,37 @@ operator review.
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Public browser key | backend validation, Pages build and preflight |
 | `VITE_BASE_PATH` | Pages base path, including leading and trailing `/` | build and preflight |
 | `LOAD_SUPABASE_PROJECT_REF` | Dedicated load project identity; must equal `vadyhuipwbtgbzpeisbn` | backend and production preflight separation |
-| `LOAD_COHORT_ID` | Non-production load fixture | release package live-load gate |
-| `LOAD_CONTENT_VERSION_ID` | Non-production load content fixture | release package live-load gate |
-| `LOAD_TEST_ENABLED` | Optional `true` switch for ordinary CI | ordinary CI only |
 
 ## Repository secrets
+
+No dedicated load-test or production credential belongs at repository scope.
+
+## `load-test` environment
+
+This environment is limited to `main` and is used only by the mandatory release
+package load gate. Its synthetic teacher, cohort, group codes, and student
+sessions are created for one run and deleted before the job exits.
+
+Variable:
+
+| Name | Validation |
+| --- | --- |
+| `LOAD_SUPABASE_PROJECT_REF` | exactly `vadyhuipwbtgbzpeisbn` |
+
+Secrets:
 
 | Name | Purpose |
 | --- | --- |
 | `LOAD_SUPABASE_URL` | Dedicated load API URL |
-| `LOAD_SUPABASE_ANON_KEY` | Dedicated load public key |
-| `LOAD_SUPABASE_SERVICE_ROLE_KEY` | Dedicated load setup/verification credential |
-| `LOAD_TEACHER_ACCESS_TOKEN` | Dedicated load teacher fixture credential |
-| `LOAD_JOIN_TOKEN` | Dedicated load cohort join token |
+| `LOAD_SUPABASE_PUBLISHABLE_KEY` | Dedicated load browser key |
+| `LOAD_SUPABASE_SECRET_KEY` | Modern dedicated load setup/cleanup key |
 
 These values must identify the load project, never production. Rotate the load
-fixture credentials after unintended disclosure or a shared rehearsal.
+credential after unintended disclosure. Do not store a legacy service-role key,
+teacher access token, join token, cohort ID, or content-version ID. The one-time
+`load-test-bootstrap.yml` workflow applies the reviewed schema and Functions to
+the exact dedicated project using only the organization access token already
+held in `production-backend`; it is removed after first successful release.
 
 ## Recovery workflow inputs
 

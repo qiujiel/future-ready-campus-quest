@@ -9,12 +9,8 @@ function validEnvironment() {
   return {
     LOAD_SUPABASE_PROJECT_REF: dedicatedRef,
     LOAD_SUPABASE_URL: `https://${dedicatedRef}.supabase.co`,
-    LOAD_SUPABASE_ANON_KEY: "load-anon-key",
-    LOAD_SUPABASE_SERVICE_ROLE_KEY: "load-service-key",
-    LOAD_TEACHER_ACCESS_TOKEN: "load-teacher-token",
-    LOAD_COHORT_ID: "00000000-0000-0000-0000-000000000001",
-    LOAD_JOIN_TOKEN: "load-join-token",
-    LOAD_CONTENT_VERSION_ID: "00000000-0000-0000-0000-000000000002",
+    LOAD_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_load-key",
+    LOAD_SUPABASE_SECRET_KEY: "sb_secret_load-key",
   };
 }
 
@@ -53,5 +49,29 @@ describe("dedicated live-load project guard", () => {
       ...validEnvironment(),
       LOAD_SUPABASE_URL: apiUrl,
     })).toThrow(/exact dedicated load-test project/i);
+  });
+
+  it("requires the modern load-test key names without static classroom credentials", () => {
+    const configuration = readDedicatedLoadConfiguration(validEnvironment());
+
+    expect(configuration).toEqual({
+      projectRef: dedicatedRef,
+      apiUrl: `https://${dedicatedRef}.supabase.co`,
+      publishableKey: "sb_publishable_load-key",
+      secretKey: "sb_secret_load-key",
+    });
+    expect(configuration).not.toHaveProperty("teacherToken");
+    expect(configuration).not.toHaveProperty("joinToken");
+    expect(configuration).not.toHaveProperty("cohortId");
+  });
+
+  it("rejects legacy load-test service-role configuration", () => {
+    const environment = validEnvironment();
+    delete environment.LOAD_SUPABASE_SECRET_KEY;
+    environment.LOAD_SUPABASE_SERVICE_ROLE_KEY = "legacy-load-key";
+
+    expect(() => readDedicatedLoadConfiguration(environment)).toThrow(
+      /LOAD_SUPABASE_SECRET_KEY/,
+    );
   });
 });

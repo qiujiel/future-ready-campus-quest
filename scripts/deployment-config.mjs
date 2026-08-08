@@ -222,6 +222,23 @@ function requireDedicatedLiveLoad(job) {
   if (!step?.env?.LOAD_SUPABASE_PROJECT_REF) {
     fail("Pages live load gate requires the dedicated load project ref");
   }
+  if (environmentName(job) !== "load-test") {
+    fail("Pages live load gate requires the protected load-test environment");
+  }
+  const serialized = JSON.stringify(step?.env ?? {});
+  if (
+    !step?.env?.LOAD_SUPABASE_PUBLISHABLE_KEY ||
+    !step?.env?.LOAD_SUPABASE_SECRET_KEY ||
+    serialized.includes("LOAD_SUPABASE_SERVICE_ROLE_KEY") ||
+    serialized.includes("LOAD_TEACHER_ACCESS_TOKEN") ||
+    serialized.includes("LOAD_JOIN_TOKEN") ||
+    serialized.includes("LOAD_COHORT_ID") ||
+    serialized.includes("LOAD_CONTENT_VERSION_ID")
+  ) {
+    fail(
+      "Pages live load requires an ephemeral load fixture and modern secret key",
+    );
+  }
 }
 
 function requireLeastPrivilegeReadiness(job) {
@@ -598,6 +615,31 @@ function requireCiSecretScan(ci) {
   }
 }
 
+export function validateLoadTestBootstrapConfiguration(workflow) {
+  const job = workflow?.jobs?.bootstrap;
+  const serialized = JSON.stringify(workflow ?? {});
+  if (
+    environmentName(job) !== "production-backend" ||
+    !String(job?.if ?? "").includes("refs/heads/main") ||
+    !serialized.includes(LOAD_PROJECT_REF) ||
+    !serialized.includes(PRODUCTION_PROJECT_REF) ||
+    !serialized.includes("scripts/load-test-bootstrap.mjs") ||
+    !serialized.includes("supabase functions deploy") ||
+    !serialized.includes("SUPABASE_ACCESS_TOKEN")
+  ) {
+    fail("load-test bootstrap requires exact identities, main, and protected access");
+  }
+  if (
+    serialized.includes("PRODUCTION_SUPABASE_SECRET_KEY") ||
+    serialized.includes("PRODUCTION_SUPABASE_DB_PASSWORD") ||
+    serialized.includes("LOAD_SUPABASE_SECRET_KEY")
+  ) {
+    fail("load-test bootstrap must not receive production or load application keys");
+  }
+  requireContentsReadOnly(job, "load-test bootstrap");
+  requirePinnedActions([workflow]);
+}
+
 export function validateDeploymentConfiguration({ ci, backend, pages, rollback }) {
   const backendJob = backend?.jobs?.release;
   const authorizationJob = backend?.jobs?.validate_release_authorization;
@@ -683,6 +725,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     bootstrapFunctionRepair,
     productionContentImport,
     productionClassroomBootstrap,
+    loadTestBootstrap,
   ] = await Promise.all([
     readWorkflow("ci.yml"),
     readWorkflow("backend-production.yml"),
@@ -691,6 +734,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     readWorkflow("bootstrap-function-repair.yml"),
     readWorkflow("production-content-import.yml"),
     readWorkflow("production-classroom-bootstrap.yml"),
+    readWorkflow("load-test-bootstrap.yml"),
   ]);
   return {
     ci,
@@ -700,6 +744,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     bootstrapFunctionRepair,
     productionContentImport,
     productionClassroomBootstrap,
+    loadTestBootstrap,
   };
 }
 
@@ -715,6 +760,7 @@ async function main() {
   validateProductionClassroomBootstrapConfiguration(
     configuration.productionClassroomBootstrap,
   );
+  validateLoadTestBootstrapConfiguration(configuration.loadTestBootstrap);
   process.stdout.write("Deployment workflow boundaries passed.\n");
 }
 

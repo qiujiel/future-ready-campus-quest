@@ -1,5 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
 import { readDedicatedLoadConfiguration } from "../../scripts/load-project-guard.mjs";
+import {
+  createLoadFixture,
+  deleteLoadFixture,
+  launchLoadQuest,
+} from "../../scripts/load-test-fixture.mjs";
 
 const studentCount = 30;
 const groupCount = 5;
@@ -17,18 +21,10 @@ async function timed(action) {
 }
 
 async function liveRun() {
-  const {
-    apiUrl,
-    anonKey,
-    serviceKey,
-    teacherToken,
-    cohortId,
-    joinToken,
-    contentVersionId,
-  } = readDedicatedLoadConfiguration(process.env);
-  const admin = createClient(apiUrl, serviceKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
+  const configuration = readDedicatedLoadConfiguration(process.env);
+  const { apiUrl, publishableKey } = configuration;
+  const fixture = await createLoadFixture(configuration);
+  const { admin, teacherToken, cohortId, groupCodes } = fixture;
   const joinLatencies = [];
   const responseLatencies = [];
   const studentIds = [];
@@ -47,16 +43,13 @@ async function liveRun() {
           const response = await fetch(`${apiUrl}/functions/v1/join-cohort`, {
             method: "POST",
             headers: {
-              apikey: anonKey,
+              apikey: publishableKey,
               Origin: "http://127.0.0.1:4173",
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              joinToken,
-              groupNumber: Math.floor(index / studentsPerGroup) + 1,
-              realName: `Load Learner ${index + 1}`,
-              nickname: `Load ${index + 1}`,
-              privacyConfirmed: true,
+              joinCode: groupCodes[Math.floor(index / studentsPerGroup)],
+              displayName: `Load Learner ${index + 1}`,
               requestKey: crypto.randomUUID(),
             }),
           });
@@ -65,93 +58,108 @@ async function liveRun() {
         });
         joinLatencies.push(joined.duration);
         studentIds.push(joined.value.identity.studentId);
-        const attemptId = crypto.randomUUID();
-        const attempt = await admin.from("quest_attempts").insert({
-          id: attemptId,
-          student_id: joined.value.identity.studentId,
-          cohort_id: cohortId,
-          content_version_id: contentVersionId,
-          current_phase: "diagnostic",
-          phase_deadline_at: new Date(Date.now() + 30 * 60_000).toISOString(),
-        });
-        if (attempt.error) throw attempt.error;
         return {
-          attemptId,
+          studentId: joined.value.identity.studentId,
           accessToken: joined.value.accessToken,
         };
       }),
     );
 
-    const completions = await Promise.all(sessions.map(async (session) => {
-      let sequence = 0;
-      for (let step = 0; step < 40; step += 1) {
-        const itemResponse = await fetch(
-          `${apiUrl}/functions/v1/get-next-item`,
-          {
-            method: "POST",
-            headers: {
-              apikey: anonKey,
-              Authorization: `Bearer ${session.accessToken}`,
-              Origin: "http://127.0.0.1:4173",
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ attemptId: session.attemptId }),
-          },
-        );
-        requireAuthorized(itemResponse, "item");
-        const { item } = await itemResponse.json();
-        if (!item) break;
-        sequence += 1;
-        const optionIds = item.interaction.options?.map((option) => option.id)
-          ?? item.interaction.prompts?.map((prompt) => prompt.id)
-          ?? ["A"];
-        const submitted = await timed(async () => {
-          const response = await fetch(
-            `${apiUrl}/functions/v1/submit-response`,
+    await launchLoadQuest(configuration, fixture);
+    const attempts = await admin
+      .from("quest_attempts")
+      .select("id,student_id")
+      .eq("cohort_id", cohortId)
+      .eq("status", "active");
+    if (attempts.error || attempts.data?.length !== studentCount) {
+      throw new Error("load attempts unavailable");
+    }
+    const attemptByStudent = new Map(
+      attempts.data.map((attempt) => [
+        String(attempt.student_id),
+        String(attempt.id),
+      ]),
+    );
+    const launchedSessions = sessions.map((session) => ({
+      ...session,
+      attemptId: attemptByStudent.get(session.studentId),
+    }));
+    if (launchedSessions.some((session) => !session.attemptId)) {
+      throw new Error("load attempt mapping failed");
+    }
+
+    const completions = await Promise.all(
+      launchedSessions.map(async (session) => {
+        let sequence = 0;
+        for (let step = 0; step < 40; step += 1) {
+          const itemResponse = await fetch(
+            `${apiUrl}/functions/v1/get-next-item`,
             {
               method: "POST",
               headers: {
-                apikey: anonKey,
+                apikey: publishableKey,
                 Authorization: `Bearer ${session.accessToken}`,
                 Origin: "http://127.0.0.1:4173",
                 "Content-Type": "application/json",
               },
-              body: JSON.stringify({
-                attemptId: session.attemptId,
-                assignmentId: item.assignmentId,
-                idempotencyKey: crypto.randomUUID(),
-                selectedOptionIds: optionIds.slice(0, 1),
-                clientSequence: sequence,
-                confidence: "somewhat_sure",
-              }),
+              body: JSON.stringify({ attemptId: session.attemptId }),
             },
           );
-          requireAuthorized(response, "response");
-          return response.json();
-        });
-        responseLatencies.push(submitted.duration);
-      }
-      const completionResponse = await fetch(
-        `${apiUrl}/functions/v1/complete-quest`,
-        {
-          method: "POST",
-          headers: {
-            apikey: anonKey,
-            Authorization: `Bearer ${session.accessToken}`,
-            Origin: "http://127.0.0.1:4173",
-            "Content-Type": "application/json",
+          requireAuthorized(itemResponse, "item");
+          const { item } = await itemResponse.json();
+          if (!item) break;
+          sequence += 1;
+          const optionIds = item.interaction.options?.map((option) => option.id)
+            ?? item.interaction.prompts?.map((prompt) => prompt.id)
+            ?? ["A"];
+          const submitted = await timed(async () => {
+            const response = await fetch(
+              `${apiUrl}/functions/v1/submit-response`,
+              {
+                method: "POST",
+                headers: {
+                  apikey: publishableKey,
+                  Authorization: `Bearer ${session.accessToken}`,
+                  Origin: "http://127.0.0.1:4173",
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  attemptId: session.attemptId,
+                  assignmentId: item.assignmentId,
+                  idempotencyKey: crypto.randomUUID(),
+                  selectedOptionIds: optionIds.slice(0, 1),
+                  clientSequence: sequence,
+                  confidence: "somewhat_sure",
+                }),
+              },
+            );
+            requireAuthorized(response, "response");
+            return response.json();
+          });
+          responseLatencies.push(submitted.duration);
+        }
+        const completionResponse = await fetch(
+          `${apiUrl}/functions/v1/complete-quest`,
+          {
+            method: "POST",
+            headers: {
+              apikey: publishableKey,
+              Authorization: `Bearer ${session.accessToken}`,
+              Origin: "http://127.0.0.1:4173",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              action: "complete",
+              attemptId: session.attemptId,
+              idempotencyKey: crypto.randomUUID(),
+              reflectionChoice: "apply",
+            }),
           },
-          body: JSON.stringify({
-            action: "complete",
-            attemptId: session.attemptId,
-            idempotencyKey: crypto.randomUUID(),
-            reflectionChoice: "apply",
-          }),
-        },
-      );
-      requireAuthorized(completionResponse, "completion");
-      return completionResponse.json();
-    }));
+        );
+        requireAuthorized(completionResponse, "completion");
+        return completionResponse.json();
+      }),
+    );
 
     const dashboard = await timed(async () => {
       const response = await fetch(
@@ -159,7 +167,7 @@ async function liveRun() {
         {
           method: "POST",
           headers: {
-            apikey: anonKey,
+            apikey: publishableKey,
             Authorization: `Bearer ${teacherToken}`,
             Origin: "http://127.0.0.1:4173",
             "Content-Type": "application/json",
@@ -175,7 +183,7 @@ async function liveRun() {
       {
         method: "POST",
         headers: {
-          apikey: anonKey,
+          apikey: publishableKey,
           Origin: "http://127.0.0.1:4173",
           "Content-Type": "application/json",
         },
@@ -231,9 +239,7 @@ async function liveRun() {
     }
     process.stdout.write(`${JSON.stringify(metrics, null, 2)}\n`);
   } finally {
-    for (const studentId of studentIds) {
-      await admin.auth.admin.deleteUser(studentId);
-    }
+    await deleteLoadFixture(fixture, studentIds);
   }
 }
 

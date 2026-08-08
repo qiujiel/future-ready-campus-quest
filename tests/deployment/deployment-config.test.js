@@ -211,6 +211,7 @@ function validConfiguration() {
     pages: {
       jobs: {
         package: {
+          environment: "load-test",
           permissions: { contents: "read" },
           steps: [
             { uses: pinnedCheckout },
@@ -224,6 +225,11 @@ function validConfiguration() {
               env: {
                 LOAD_SUPABASE_PROJECT_REF:
                   "${{ vars.LOAD_SUPABASE_PROJECT_REF }}",
+                LOAD_SUPABASE_URL: "${{ secrets.LOAD_SUPABASE_URL }}",
+                LOAD_SUPABASE_PUBLISHABLE_KEY:
+                  "${{ secrets.LOAD_SUPABASE_PUBLISHABLE_KEY }}",
+                LOAD_SUPABASE_SECRET_KEY:
+                  "${{ secrets.LOAD_SUPABASE_SECRET_KEY }}",
               },
               run: "pnpm test:load:live",
             },
@@ -1002,6 +1008,32 @@ describe("deployment workflow boundaries", () => {
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /live load.*project ref/i,
+    );
+  });
+
+  it("requires the live load gate to use the protected load-test environment", () => {
+    const configuration = validConfiguration();
+    delete configuration.pages.jobs.package.environment;
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /load-test environment/i,
+    );
+  });
+
+  it("rejects static classroom credentials and legacy service-role keys in the live load gate", () => {
+    const configuration = validConfiguration();
+    const liveLoad = configuration.pages.jobs.package.steps.find((step) =>
+      step.run === "pnpm test:load:live"
+    );
+    delete liveLoad.env.LOAD_SUPABASE_SECRET_KEY;
+    liveLoad.env.LOAD_SUPABASE_SERVICE_ROLE_KEY =
+      "${{ secrets.LOAD_SUPABASE_SERVICE_ROLE_KEY }}";
+    liveLoad.env.LOAD_TEACHER_ACCESS_TOKEN =
+      "${{ secrets.LOAD_TEACHER_ACCESS_TOKEN }}";
+    liveLoad.env.LOAD_JOIN_TOKEN = "${{ secrets.LOAD_JOIN_TOKEN }}";
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /ephemeral load fixture.*modern secret key/i,
     );
   });
 
