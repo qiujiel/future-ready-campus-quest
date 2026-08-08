@@ -184,6 +184,14 @@ password, and preserves the existing synthetic-user role, opaque browser
 session, RLS, recovery, replay, and cleanup boundaries. The 1.5-second p95 join
 requirement remains unchanged.
 
+For this pre-publication Function-only correction, dispatch
+`production-join-latency-fix.yml` from its exact reviewed `main` SHA. The job
+proves migrations and Function source are unchanged from the reviewed fix,
+targets only production `ghohuwwjxgjqnbsauvzq`, deploys only `join-cohort`,
+receives no database password or application key, and reruns backend readiness.
+If readiness fails, keep Pages unpublished and redeploy the prior immutable
+`join-cohort` source. Remove this one-time workflow after hosted verification.
+
 For the pre-publication forward fix only, dispatch
 `production-classroom-nat-fix.yml` from the exact reviewed `main` SHA. The job is
 hard-coded to production `ghohuwwjxgjqnbsauvzq`, rejects the dedicated load
