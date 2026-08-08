@@ -137,7 +137,7 @@ The student:
 
 The `join-cohort` Edge Function:
 
-1. Validates the join token, cohort state, origin, group capacity, and request rate.
+1. Detects a completed idempotent replay or validates the join token, cohort state, origin, group capacity, and request rate through one trusted preparation RPC.
 2. Normalises and validates names.
 3. Creates a synthetic internal email identity and one-time magic-link hash in one Admin API request; no email is sent and no student password is created.
 4. Uses a separate unprivileged Supabase Auth client inside the function to exchange that hash for a standard access/refresh session.

@@ -15,6 +15,11 @@ const MIGRATIONS = [
     name: "concurrent_join_locking",
     file: "20260808000200_concurrent_join_locking.sql",
   },
+  {
+    version: "20260808000300",
+    name: "combined_join_preparation",
+    file: "20260808000300_combined_join_preparation.sql",
+  },
 ];
 
 function required(environment, name) {
@@ -88,10 +93,14 @@ export async function applyProductionNatFix(configuration, baseDirectory) {
 
   const verification = await query(configuration, `
     select
-      2 = (
+      3 = (
         select count(*)
         from supabase_migrations.schema_migrations
-        where version in ('20260808000100', '20260808000200')
+        where version in (
+          '20260808000100',
+          '20260808000200',
+          '20260808000300'
+        )
       ) as "migrationsRecorded",
       position(
         'count(*) >= 45' in pg_get_functiondef(
@@ -117,7 +126,17 @@ export async function applyProductionNatFix(configuration, baseDirectory) {
         'for update of groups' in pg_get_functiondef(
           'public.complete_student_code_join(text,uuid,uuid,text)'::regprocedure
         )
-      ) > 0 as "groupCapacityLockReady";
+      ) > 0 as "groupCapacityLockReady",
+      position(
+        'find_completed_student_code_join' in pg_get_functiondef(
+          'public.prepare_student_code_join(text,uuid,text)'::regprocedure
+        )
+      ) > 0
+      and position(
+        'preflight_student_code_join' in pg_get_functiondef(
+          'public.prepare_student_code_join(text,uuid,text)'::regprocedure
+        )
+      ) > 0 as "combinedPreparationReady";
   `, true);
   const row = Array.isArray(verification) ? verification[0] : null;
   if (
@@ -126,7 +145,8 @@ export async function applyProductionNatFix(configuration, baseDirectory) {
     row?.windowLimitReady !== true ||
     row?.atomicRateLockReady !== true ||
     row?.sharedWindowLockReady !== true ||
-    row?.groupCapacityLockReady !== true
+    row?.groupCapacityLockReady !== true ||
+    row?.combinedPreparationReady !== true
   ) {
     throw new Error("NAT_FIX_VERIFICATION_FAILED");
   }
@@ -136,6 +156,7 @@ export async function applyProductionNatFix(configuration, baseDirectory) {
     sharedNetworkLimit: 45,
     windowLimit: 90,
     concurrentWindowLocking: true,
+    combinedJoinPreparation: true,
   };
 }
 

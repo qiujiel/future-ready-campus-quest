@@ -57,17 +57,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Prove schema immutability and exact Function change scope
+      - name: Prove exact migration and Function change scope
         run: |
-          baseline=ca83d90f6f468f9e7684a9df13a7384509afc07e
-          git diff --exit-code "$baseline" "$GITHUB_SHA" -- supabase/migrations
-          changed="$(git diff --name-only "$baseline" "$GITHUB_SHA" -- supabase/functions | sort)"
-          expected="$(printf '%s\n' \
+          baseline=74ca35cf7745a4b559884903c554955caf14efbb
+          changed_migrations="$(git diff --name-only "$baseline" "$GITHUB_SHA" -- supabase/migrations)"
+          test "$changed_migrations" = "supabase/migrations/20260808000300_combined_join_preparation.sql"
+          changed_functions="$(git diff --name-only "$baseline" "$GITHUB_SHA" -- supabase/functions | sort)"
+          expected_functions="$(printf '%s\n' \
             supabase/functions/_shared/join-core.ts \
-            supabase/functions/_shared/session-core.ts \
             supabase/functions/join-cohort/index.ts \
             | sort)"
-          test "$changed" = "$expected"
+          test "$changed_functions" = "$expected_functions"
 
       - name: Set up pnpm
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa

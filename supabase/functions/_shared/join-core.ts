@@ -54,11 +54,14 @@ export interface CompleteJoinInput {
 }
 
 export interface JoinDependencies {
+  prepareJoin(
+    codeHash: string,
+    requestKey: string,
+  ): Promise<{ completed: StoredJoin | null; groupNumber: number }>;
   findCompletedJoin(
     codeHash: string,
     requestKey: string,
   ): Promise<StoredJoin | null>;
-  preflightJoin(codeHash: string): Promise<{ groupNumber: number }>;
   createSyntheticUser(): Promise<SyntheticUser>;
   signInNewUser(user: SyntheticUser): Promise<SessionTokens>;
   issueReplacementSession(studentId: string): Promise<SessionTokens>;
@@ -222,19 +225,17 @@ export async function joinStudent(
 ): Promise<JoinCohortOutput> {
   const normalized = parseInput(input);
   const codeHash = await hashJoinToken(normalized.joinCode);
-  const completed = await dependencies.findCompletedJoin(
+  const prepared = await dependencies.prepareJoin(
     codeHash,
     normalized.requestKey,
   );
 
-  if (completed) {
+  if (prepared.completed) {
     const session = await dependencies.issueReplacementSession(
-      completed.identity.studentId,
+      prepared.completed.identity.studentId,
     );
-    return { identity: completed.identity, ...session };
+    return { identity: prepared.completed.identity, ...session };
   }
-
-  const resolved = await dependencies.preflightJoin(codeHash);
 
   let syntheticUser: SyntheticUser | undefined;
   let initialSession: SessionTokens | undefined;
@@ -247,7 +248,7 @@ export async function joinStudent(
         codeHash,
         requestKey: normalized.requestKey,
         studentId: syntheticUser.studentId,
-        groupNumber: resolved.groupNumber,
+        groupNumber: prepared.groupNumber,
         displayName: normalized.displayName,
       }),
     ]);

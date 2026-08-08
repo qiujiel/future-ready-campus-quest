@@ -67,4 +67,16 @@ describe("production classroom NAT join fix", () => {
     expect(script).not.toContain("'FOR SHARE OF codes, windows'");
     expect(script).not.toContain("'FOR UPDATE OF groups'");
   });
+
+  it("includes and verifies the combined join-preparation migration", async () => {
+    const script = await readFile(resolve(
+      root,
+      "scripts/production-classroom-nat-fix.mjs",
+    ), "utf8");
+
+    expect(script).toContain("20260808000300_combined_join_preparation.sql");
+    expect(script).toContain("prepare_student_code_join(text,uuid,text)");
+    expect(script).toContain('3 = (');
+    expect(script).toContain('combinedPreparationReady');
+  });
 });
