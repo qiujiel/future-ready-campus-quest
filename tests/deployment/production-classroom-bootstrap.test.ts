@@ -334,6 +334,26 @@ describe("production classroom bootstrap adapters", () => {
     });
   });
 
+  it("confirms an existing teacher role without an update-style write", async () => {
+    const methods: string[] = [];
+    const recordingFetch: typeof fetch = async (input, init) => {
+      const method = init?.method ?? "GET";
+      methods.push(method);
+      const url = String(input);
+      if (url.includes("/rest/v1/user_roles") && method === "GET") {
+        return jsonResponse([{ role: "teacher" }]);
+      }
+      return jsonResponse([]);
+    };
+    const adapters = createProductionBootstrapDependencies(
+      validConfiguration,
+      recordingFetch,
+    );
+
+    await expect(adapters.ensureTeacherRole(TEACHER_ID)).resolves.toBeUndefined();
+    expect(methods).toEqual(["GET"]);
+  });
+
   it("rejects a classroom with an active join window", async () => {
     const seenUrls: string[] = [];
     const recordingFetch: typeof fetch = async (input) => {

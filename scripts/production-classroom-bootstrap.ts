@@ -314,11 +314,20 @@ export function createProductionBootstrapDependencies(
     },
 
     async ensureTeacherRole(teacherId) {
-      const result = await admin.from("user_roles").upsert(
-        { user_id: teacherId, role: "teacher" },
-        { onConflict: "user_id" },
-      );
-      if (result.error) throw new Error("BOOTSTRAP_ACCOUNT_FAILED");
+      const existing = await admin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", teacherId)
+        .limit(1);
+      if (existing.error) throw new Error("BOOTSTRAP_ACCOUNT_FAILED");
+      const role = existing.data?.[0]?.role;
+      if (role === "teacher") return;
+      if (role !== undefined) throw new Error("BOOTSTRAP_ACCOUNT_FAILED");
+      const inserted = await admin.from("user_roles").insert({
+        user_id: teacherId,
+        role: "teacher",
+      });
+      if (inserted.error) throw new Error("BOOTSTRAP_ACCOUNT_FAILED");
     },
 
     async findSmokeCohort(teacherId) {
