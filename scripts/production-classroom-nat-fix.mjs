@@ -109,12 +109,12 @@ export async function applyProductionNatFix(configuration, baseDirectory) {
         )
       ) > 0 as "atomicRateLockReady",
       position(
-        'FOR SHARE OF codes, windows' in pg_get_functiondef(
+        'for share of codes, windows' in pg_get_functiondef(
           'public.complete_student_code_join(text,uuid,uuid,text)'::regprocedure
         )
       ) > 0 as "sharedWindowLockReady",
       position(
-        'FOR UPDATE OF groups' in pg_get_functiondef(
+        'for update of groups' in pg_get_functiondef(
           'public.complete_student_code_join(text,uuid,uuid,text)'::regprocedure
         )
       ) > 0 as "groupCapacityLockReady";

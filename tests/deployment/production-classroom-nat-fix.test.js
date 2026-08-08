@@ -55,4 +55,16 @@ describe("production classroom NAT join fix", () => {
       validateProductionClassroomNatFixConfiguration(workflow)
     ).not.toThrow();
   });
+
+  it("matches PostgreSQL's normalized lowercase lock clauses", async () => {
+    const script = await readFile(resolve(
+      root,
+      "scripts/production-classroom-nat-fix.mjs",
+    ), "utf8");
+
+    expect(script).toContain("'for share of codes, windows'");
+    expect(script).toContain("'for update of groups'");
+    expect(script).not.toContain("'FOR SHARE OF codes, windows'");
+    expect(script).not.toContain("'FOR UPDATE OF groups'");
+  });
 });
