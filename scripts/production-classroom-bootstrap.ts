@@ -18,6 +18,34 @@ export interface BootstrapReceipt {
   groupCapacity: 6;
 }
 
+export interface BootstrapUser {
+  id: string;
+  bootstrapAuthorizationId?: string;
+}
+
+export interface BootstrapCohort {
+  id: string;
+  teacherId: string;
+  title: string;
+  groupCount: number;
+  groupCapacity: number;
+  archivedAt: string | null;
+}
+
+export interface BootstrapDependencies {
+  updateRetention(days: 90, approver: "course-owner"): Promise<90>;
+  findTeacherByEmail(email: string): Promise<BootstrapUser | null>;
+  createTeacher(input: {
+    email: string;
+    password: string;
+    authorizationId: string;
+  }): Promise<BootstrapUser>;
+  ensureTeacherRole(teacherId: string): Promise<void>;
+  findSmokeCohort(teacherId: string): Promise<BootstrapCohort | null>;
+  createSmokeCohort(teacherId: string): Promise<BootstrapCohort>;
+  verifyClosedClassroom(teacherId: string, cohortId: string): Promise<void>;
+}
+
 const PRODUCTION_PROJECT_REF = "ghohuwwjxgjqnbsauvzq";
 const LOAD_PROJECT_REF = "vadyhuipwbtgbzpeisbn";
 const PRODUCTION_URL = `https://${PRODUCTION_PROJECT_REF}.supabase.co`;
@@ -68,4 +96,91 @@ export function assertBootstrapConfiguration(
   ) {
     throw new Error("Teacher credential policy validation failed.");
   }
+}
+
+export async function bootstrapProductionClassroom(
+  configuration: BootstrapConfiguration,
+  dependencies: BootstrapDependencies,
+): Promise<BootstrapReceipt> {
+  assertBootstrapConfiguration(configuration);
+
+  try {
+    const retentionDays = await dependencies.updateRetention(90, "course-owner");
+    if (retentionDays !== 90) throw new Error("unexpected retention receipt");
+  } catch {
+    throw new Error("BOOTSTRAP_RETENTION_FAILED");
+  }
+
+  let teacher: BootstrapUser;
+  try {
+    const existingTeacher = await dependencies.findTeacherByEmail(
+      configuration.teacherEmail,
+    );
+    if (existingTeacher) {
+      if (
+        existingTeacher.bootstrapAuthorizationId !==
+          configuration.authorizationId
+      ) {
+        throw new Error("BOOTSTRAP_ACCOUNT_CONFLICT");
+      }
+      teacher = existingTeacher;
+    } else {
+      teacher = await dependencies.createTeacher({
+        email: configuration.teacherEmail,
+        password: configuration.teacherPassword,
+        authorizationId: configuration.authorizationId,
+      });
+      if (
+        teacher.bootstrapAuthorizationId !== configuration.authorizationId
+      ) {
+        throw new Error("BOOTSTRAP_ACCOUNT_FAILED");
+      }
+    }
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "BOOTSTRAP_ACCOUNT_CONFLICT"
+    ) {
+      throw error;
+    }
+    throw new Error("BOOTSTRAP_ACCOUNT_FAILED");
+  }
+
+  try {
+    await dependencies.ensureTeacherRole(teacher.id);
+  } catch {
+    throw new Error("BOOTSTRAP_ACCOUNT_FAILED");
+  }
+
+  let cohort: BootstrapCohort;
+  try {
+    cohort =
+      (await dependencies.findSmokeCohort(teacher.id)) ??
+      (await dependencies.createSmokeCohort(teacher.id));
+  } catch {
+    throw new Error("BOOTSTRAP_COHORT_FAILED");
+  }
+  if (
+    cohort.teacherId !== teacher.id ||
+    cohort.title !== "Production Classroom" ||
+    cohort.groupCount !== 5 ||
+    cohort.groupCapacity !== 6 ||
+    cohort.archivedAt !== null
+  ) {
+    throw new Error("BOOTSTRAP_COHORT_INVALID");
+  }
+
+  try {
+    await dependencies.verifyClosedClassroom(teacher.id, cohort.id);
+  } catch {
+    throw new Error("BOOTSTRAP_VERIFICATION_FAILED");
+  }
+
+  return {
+    teacherId: teacher.id,
+    cohortId: cohort.id,
+    retentionDays: 90,
+    groupCount: 5,
+    groupCapacity: 6,
+  };
 }
