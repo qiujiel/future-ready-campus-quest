@@ -88,3 +88,27 @@ describe("production classroom bootstrap workflow", () => {
       .toThrow(/environment printing/i);
   });
 });
+
+describe("production classroom bootstrap documentation", () => {
+  it("records the exact secure operation and retirement procedure", async () => {
+    const documentation = await Promise.all([
+      "docs/operations/backend-release.md",
+      "docs/operations/release-checklist.md",
+    ].map((path) => readFile(resolve(process.cwd(), path), "utf8")));
+    const combined = documentation.join("\n");
+
+    for (const required of [
+      "PRODUCTION_TEACHER_EMAIL",
+      "PRODUCTION_TEACHER_PASSWORD",
+      "90",
+      "course-owner-2026-08-08",
+      "production-classroom-bootstrap.yml",
+      "PRODUCTION_SMOKE_TEACHER_ID",
+      "PRODUCTION_SMOKE_COHORT_ID",
+      "rotate",
+      "remove the one-time workflow",
+    ]) {
+      expect(combined).toContain(required);
+    }
+  });
+});
