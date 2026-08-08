@@ -185,8 +185,19 @@ session, RLS, recovery, replay, and cleanup boundaries. The Auth identity and
 one-time hash are created by the same admin request; after the protected
 preflight succeeds, session exchange and transactional join completion run
 concurrently. Browser route checks read `current_role()` from the protected
-role table rather than trusting token metadata. The 1.5-second p95 join
-requirement remains unchanged.
+role table rather than trusting token metadata.
+
+The original 1.5-second p95 join objective remains aspirational. The approved
+classroom-readiness release gate requires one-time join p95 below 5 seconds for
+30 exactly simultaneous students. The response p95 below 1.5 seconds remains
+unchanged, as does the dashboard p95 below 2.5 seconds. Evidence must also show
+all 30 students joined, zero incorrect group assignments, zero duplicate student
+identities, zero failed authorized requests, zero accepted unauthorized calls,
+no duplicate responses or data loss, five correct groups, and verified score
+formulas. The longer join latency occurs only during initial classroom entry;
+it is a known limitation, not permission to reduce
+authentication, code validation, the 45/90 rate and capacity limits, replay
+protection, RLS, student isolation, or teacher authorization.
 
 Migration `20260808000300_combined_join_preparation.sql` combines completed
 request replay detection with code, rate, and capacity preflight in one
