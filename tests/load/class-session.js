@@ -4,6 +4,7 @@ import {
   deleteLoadFixture,
   launchLoadQuest,
 } from "../../scripts/load-test-fixture.mjs";
+import { parseJoinServerTiming } from "./server-timing.js";
 
 const studentCount = 30;
 const groupCount = 5;
@@ -26,6 +27,13 @@ async function liveRun() {
   const fixture = await createLoadFixture(configuration);
   const { admin, teacherToken, cohortId, groupCodes } = fixture;
   const joinLatencies = [];
+  const joinStageLatencies = {
+    find: [],
+    preflight: [],
+    create: [],
+    sign: [],
+    complete: [],
+  };
   const responseLatencies = [];
   const studentIds = [];
   let authorizedFailures = 0;
@@ -54,6 +62,12 @@ async function liveRun() {
             }),
           });
           requireAuthorized(response, "join");
+          const stageTimings = parseJoinServerTiming(
+            response.headers.get("server-timing"),
+          );
+          for (const [stage, duration] of Object.entries(stageTimings)) {
+            joinStageLatencies[stage].push(duration);
+          }
           return response.json();
         });
         joinLatencies.push(joined.duration);
@@ -214,6 +228,11 @@ async function liveRun() {
       authorizedFailures,
       unauthorizedAccepted: unauthorizedDashboard.ok ? 1 : 0,
       p95JoinMs: percentile(joinLatencies, 95),
+      p95JoinFindMs: percentile(joinStageLatencies.find, 95),
+      p95JoinPreflightMs: percentile(joinStageLatencies.preflight, 95),
+      p95JoinCreateMs: percentile(joinStageLatencies.create, 95),
+      p95JoinSignMs: percentile(joinStageLatencies.sign, 95),
+      p95JoinCompleteMs: percentile(joinStageLatencies.complete, 95),
       p95ResponseMs: percentile(responseLatencies, 95),
       p95DashboardMs: dashboard.duration,
       duplicateResponses: keys.length - new Set(keys).size,
