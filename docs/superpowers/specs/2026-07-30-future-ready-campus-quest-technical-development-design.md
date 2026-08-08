@@ -139,10 +139,10 @@ The `join-cohort` Edge Function:
 
 1. Validates the join token, cohort state, origin, group capacity, and request rate.
 2. Normalises and validates names.
-3. Creates a synthetic internal email identity using the Admin API with email confirmation enabled and a server-generated 32-byte random password.
-4. Uses a separate unprivileged Supabase Auth client inside the function to sign in that internal identity and obtain a standard access/refresh session; the plaintext credential is never persisted or logged.
-5. Returns the session to the requesting browser over HTTPS, where the frontend calls the standard Supabase session setter.
-6. Creates the learner profile and group membership transactionally.
+3. Creates a synthetic internal email identity and one-time magic-link hash in one Admin API request; no email is sent and no student password is created.
+4. Uses a separate unprivileged Supabase Auth client inside the function to exchange that hash for a standard access/refresh session.
+5. Exchanges the session and creates the learner profile and group membership transactionally in parallel after the protected preflight succeeds.
+6. Returns the session to the requesting browser over HTTPS, where the frontend calls the standard Supabase session setter.
 7. Assigns the first joined member as the temporary group-identity editor; the teacher or current editor can transfer that role.
 8. Deletes or disables the Auth identity if the database transaction fails.
 9. Records an audit event without logging the real name.
@@ -162,7 +162,7 @@ The teacher does not see or distribute a password or PIN.
 
 ### 4.4 Teacher authentication
 
-Teacher accounts are manually provisioned and use a normal verified email identity with a strong password or institutional OAuth. Teacher authorisation is stored in non-user-editable app metadata and a protected role table. Teacher actions require a fresh server-verified user and teacher-role check.
+Teacher accounts are manually provisioned and use a normal verified email identity with a strong password or institutional OAuth. Teacher authorisation is stored in a protected role table. Browser route checks and trusted teacher actions read that authoritative database role; token metadata is not treated as an authorisation decision.
 
 ## 5. Data model
 

@@ -2,6 +2,33 @@ import {
   AuthGatewayError,
   throwAuthGatewayError,
 } from "../../src/shared/api/authGateway";
+import { readAuthenticatedRole } from "../../src/shared/api/role";
+
+it("reads the authoritative role from the protected database function", async () => {
+  const calls: unknown[] = [];
+  const client = {
+    async rpc(name: string) {
+      calls.push(name);
+      return { data: "student", error: null };
+    },
+  };
+
+  await expect(readAuthenticatedRole(client)).resolves.toBe("student");
+  expect(calls).toEqual(["current_role"]);
+});
+
+it("rejects absent and unrecognized authoritative roles", async () => {
+  await expect(readAuthenticatedRole({
+    async rpc() {
+      return { data: "administrator", error: null };
+    },
+  })).resolves.toBeNull();
+  await expect(readAuthenticatedRole({
+    async rpc() {
+      return { data: null, error: { message: "not authenticated" } };
+    },
+  })).resolves.toBeNull();
+});
 
 it("preserves a neutral join boundary code from an Edge Function response", async () => {
   const context = {

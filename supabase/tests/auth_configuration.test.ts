@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { selectSupabaseKeys } from "../functions/_shared/auth-configuration";
-import { issueInitialStudentSession } from "../functions/_shared/session-core";
+import {
+  createInitialStudentIdentity,
+  issueInitialStudentSession,
+} from "../functions/_shared/session-core";
 
 describe("Edge Function Supabase key selection", () => {
   it("prefers modern hosted keys over disabled legacy keys", () => {
@@ -34,6 +37,38 @@ describe("Edge Function Supabase key selection", () => {
 });
 
 describe("initial synthetic student sessions", () => {
+  it("creates the Auth identity and one-time hash in a single admin request", async () => {
+    const generated: unknown[] = [];
+    const admin = {
+      auth: {
+        admin: {
+          async generateLink(input: unknown) {
+            generated.push(input);
+            return {
+              data: {
+                properties: { hashed_token: "one-time-hash" },
+                user: { id: "20000000-0000-4000-8000-000000000001" },
+              },
+              error: null,
+            };
+          },
+        },
+      },
+    };
+
+    await expect(
+      createInitialStudentIdentity(admin, "synthetic@students.invalid"),
+    ).resolves.toEqual({
+      studentId: "20000000-0000-4000-8000-000000000001",
+      internalEmail: "synthetic@students.invalid",
+      initialTokenHash: "one-time-hash",
+    });
+    expect(generated).toEqual([{
+      type: "magiclink",
+      email: "synthetic@students.invalid",
+    }]);
+  });
+
   it("exchanges a one-time magic-link hash without a password login", async () => {
     const generated: unknown[] = [];
     const verified: unknown[] = [];
@@ -43,7 +78,10 @@ describe("initial synthetic student sessions", () => {
           async generateLink(input: unknown) {
             generated.push(input);
             return {
-              data: { properties: { hashed_token: "one-time-hash" } },
+              data: {
+                properties: { hashed_token: "one-time-hash" },
+                user: { id: "20000000-0000-4000-8000-000000000001" },
+              },
               error: null,
             };
           },

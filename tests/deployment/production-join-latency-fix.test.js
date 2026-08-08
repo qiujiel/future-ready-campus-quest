@@ -9,7 +9,7 @@ import {
 const root = resolve(import.meta.dirname, "../..");
 const productionRef = "ghohuwwjxgjqnbsauvzq";
 const loadRef = "vadyhuipwbtgbzpeisbn";
-const reviewedBaseline = "d456c2dc3f04386597d73d71124bb7a4c5ae1329";
+const reviewedBaseline = "ca83d90f6f468f9e7684a9df13a7384509afc07e";
 
 describe("production join-latency Function fix", () => {
   it("deploys only the reviewed join Function to the exact production target", async () => {
@@ -26,6 +26,11 @@ describe("production join-latency Function fix", () => {
     expect(serialized).toContain(productionRef);
     expect(serialized).toContain(loadRef);
     expect(serialized).toContain(reviewedBaseline);
+    expect(serialized).toContain("supabase/functions/join-cohort/index.ts");
+    expect(serialized).toContain("supabase/functions/_shared/join-core.ts");
+    expect(serialized).toContain("supabase/functions/_shared/session-core.ts");
+    expect(serialized).toContain("git diff --exit-code");
+    expect(serialized).toContain("-- supabase/migrations");
     expect(serialized).toContain("functions deploy join-cohort");
     expect(serialized).toContain("SUPABASE_ACCESS_TOKEN");
     expect(serialized).toContain("PRODUCTION_READINESS_SECRET");

@@ -10,7 +10,10 @@ interface MagicLinkAdminClient {
         type: "magiclink";
         email: string;
       }): Promise<{
-        data: { properties?: { hashed_token?: string } | null };
+        data: {
+          properties?: { hashed_token?: string } | null;
+          user?: { id?: string } | null;
+        };
         error: unknown;
       }>;
     };
@@ -34,18 +37,36 @@ interface OtpPublicClient {
   };
 }
 
-export async function issueInitialStudentSession(
+export interface InitialStudentIdentity {
+  studentId: string;
+  internalEmail: string;
+  initialTokenHash: string;
+}
+
+export async function createInitialStudentIdentity(
   admin: MagicLinkAdminClient,
-  publicClient: OtpPublicClient,
   internalEmail: string,
-): Promise<StudentSessionTokens> {
+): Promise<InitialStudentIdentity> {
   const link = await admin.auth.admin.generateLink({
     type: "magiclink",
     email: internalEmail,
   });
   const tokenHash = link.data.properties?.hashed_token;
-  if (link.error || !tokenHash) throw new Error("AUTH_LINK_FAILED");
+  const studentId = link.data.user?.id;
+  if (link.error || !tokenHash || !studentId) {
+    throw new Error("AUTH_CREATE_FAILED");
+  }
+  return {
+    studentId,
+    internalEmail,
+    initialTokenHash: tokenHash,
+  };
+}
 
+export async function exchangeInitialStudentSession(
+  publicClient: OtpPublicClient,
+  tokenHash: string,
+): Promise<StudentSessionTokens> {
   const verified = await publicClient.auth.verifyOtp({
     token_hash: tokenHash,
     type: "email",
@@ -56,4 +77,16 @@ export async function issueInitialStudentSession(
     accessToken: session.access_token,
     refreshToken: session.refresh_token,
   };
+}
+
+export async function issueInitialStudentSession(
+  admin: MagicLinkAdminClient,
+  publicClient: OtpPublicClient,
+  internalEmail: string,
+): Promise<StudentSessionTokens> {
+  const identity = await createInitialStudentIdentity(admin, internalEmail);
+  return exchangeInitialStudentSession(
+    publicClient,
+    identity.initialTokenHash,
+  );
 }

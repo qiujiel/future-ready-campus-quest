@@ -17,6 +17,12 @@ test.beforeEach(async ({ page }) => {
         created_at: "2030-01-01T00:00:00.000Z",
       }),
     }));
+  await page.route("**/rest/v1/rpc/current_role", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify("teacher"),
+    }));
   await page.route("**/functions/v1/teacher-dashboard", (route) =>
     route.fulfill({
       status: 200,

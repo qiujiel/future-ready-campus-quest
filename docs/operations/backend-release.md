@@ -181,7 +181,11 @@ exposed password hashing plus password login as a join-latency bottleneck. New
 student identities now receive their initial session through a server-side,
 one-time magic-link hash exchange. This sends no email, stores no student
 password, and preserves the existing synthetic-user role, opaque browser
-session, RLS, recovery, replay, and cleanup boundaries. The 1.5-second p95 join
+session, RLS, recovery, replay, and cleanup boundaries. The Auth identity and
+one-time hash are created by the same admin request; after the protected
+preflight succeeds, session exchange and transactional join completion run
+concurrently. Browser route checks read `current_role()` from the protected
+role table rather than trusting token metadata. The 1.5-second p95 join
 requirement remains unchanged.
 
 For this pre-publication Function-only correction, dispatch

@@ -8,6 +8,7 @@ import type {
   TeacherCohortListItem,
 } from "./contracts";
 import { getSupabaseClient } from "./supabase";
+import { readAuthenticatedRole } from "./role";
 
 export interface CreateCohortRequest {
   title: string;
@@ -79,16 +80,13 @@ export const supabaseAuthGateway: AuthGateway = {
     if (result.error || !result.data.user) {
       throw new Error("Sign-in was not accepted.");
     }
-    if (result.data.user.app_metadata.role !== "teacher") {
+    if (await readAuthenticatedRole(client) !== "teacher") {
       await client.auth.signOut();
       throw new Error("Sign-in was not accepted.");
     }
   },
   async getCurrentRole() {
-    const result = await getSupabaseClient().auth.getUser();
-    if (result.error || !result.data.user) return null;
-    const role = result.data.user.app_metadata.role;
-    return role === "teacher" || role === "student" ? role : null;
+    return readAuthenticatedRole(getSupabaseClient());
   },
   async signOut() {
     const result = await getSupabaseClient().auth.signOut();

@@ -8,6 +8,7 @@ import { JoinPage } from "../features/join/JoinPage";
 import { RecoveryPage } from "../features/join/RecoveryPage";
 import { QuestEntryPage } from "../features/quest/QuestEntryPage";
 import { getSupabaseClient } from "../shared/api/supabase";
+import { readAuthenticatedRole } from "../shared/api/role";
 import { App } from "./App";
 
 function ProtectedRouteBoundary() {
@@ -15,8 +16,8 @@ function ProtectedRouteBoundary() {
 }
 
 async function requireRole(role: "teacher" | "student") {
-  const result = await getSupabaseClient().auth.getUser();
-  if (result.error || result.data.user?.app_metadata.role !== role) {
+  const currentRole = await readAuthenticatedRole(getSupabaseClient());
+  if (currentRole !== role) {
     throw redirect(role === "teacher" ? "/teacher/sign-in" : "/");
   }
   return null;

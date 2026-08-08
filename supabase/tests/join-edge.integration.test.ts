@@ -149,6 +149,9 @@ it("completes a valid join against real Auth and database boundaries", async () 
       password: teacherPassword,
     });
     if (teacherSession.error) throw teacherSession.error;
+    const teacherRole = await teacherClient.rpc("current_role");
+    expect(teacherRole.error).toBeNull();
+    expect(teacherRole.data).toBe("teacher");
     const opened = await teacherClient.functions.invoke("manage-join-window", {
       body: {
         action: "open",
@@ -238,6 +241,10 @@ it("completes a valid join against real Auth and database boundaries", async () 
       refresh_token: String(payload.refreshToken),
     });
     if (studentSession.error) throw studentSession.error;
+    expect(studentSession.data.user?.app_metadata.role).toBeUndefined();
+    const studentRole = await studentClient.rpc("current_role");
+    expect(studentRole.error).toBeNull();
+    expect(studentRole.data).toBe("student");
     const deniedReadiness = await studentClient.functions.invoke(
       "teacher-dashboard",
       { body: { cohortId, view: "readiness" } },

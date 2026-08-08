@@ -4,7 +4,10 @@ import {
   issueSessionForExistingUser,
   publicAuthClient,
 } from "../_shared/auth.ts";
-import { issueInitialStudentSession } from "../_shared/session-core.ts";
+import {
+  createInitialStudentIdentity,
+  exchangeInitialStudentSession,
+} from "../_shared/session-core.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import {
   type CompleteJoinInput,
@@ -96,24 +99,16 @@ function dependencies(
     async createSyntheticUser(): Promise<SyntheticUser> {
       return measured("create", async () => {
         const internalEmail = `${crypto.randomUUID()}@students.invalid`;
-        const result = await admin.auth.admin.createUser({
-          email: internalEmail,
-          email_confirm: true,
-          app_metadata: { role: "student" },
-        });
-        if (result.error || !result.data.user) {
-          throw new Error("AUTH_CREATE_FAILED");
-        }
-        return {
-          studentId: result.data.user.id,
-          internalEmail,
-        };
+        return createInitialStudentIdentity(admin, internalEmail);
       });
     },
     async signInNewUser(user): Promise<SessionTokens> {
       return measured(
         "sign",
-        () => issueInitialStudentSession(admin, publicClient, user.internalEmail),
+        () => exchangeInitialStudentSession(
+          publicClient,
+          user.initialTokenHash,
+        ),
       );
     },
     async issueReplacementSession(studentId): Promise<SessionTokens> {
