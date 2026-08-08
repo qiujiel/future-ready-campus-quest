@@ -51,6 +51,7 @@ function createDependencies(capacity = 6): JoinDependencies & {
       return {
         studentId,
         internalEmail: `${studentId}@students.invalid`,
+        initialTokenHash: "one-time-hash",
       };
     },
     async signInNewUser(): Promise<SessionTokens> {
@@ -187,6 +188,51 @@ it("runs the trusted join preflight before creating an Auth user", async () => {
     status: 410,
   });
   expect(dependencies.createdUsers).toBe(0);
+});
+
+it("exchanges the session while the trusted completion is running", async () => {
+  const dependencies = createDependencies();
+  let completeStarted = false;
+  let sessionStarted = false;
+  let releaseSession = () => {};
+  dependencies.signInNewUser = async () =>
+    await new Promise<SessionTokens>((resolve) => {
+      sessionStarted = true;
+      releaseSession = () => resolve({
+        accessToken: "initial-access-token",
+        refreshToken: "initial-refresh-token",
+      });
+    });
+  const complete = dependencies.completeJoin.bind(dependencies);
+  dependencies.completeJoin = async (input) => {
+    completeStarted = true;
+    return await complete(input);
+  };
+
+  const pending = joinStudent(baseInput, dependencies);
+  await vi.waitFor(() => expect(sessionStarted).toBe(true));
+  await Promise.resolve();
+  try {
+    expect(completeStarted).toBe(true);
+  } finally {
+    releaseSession();
+  }
+  await expect(pending).resolves.toMatchObject({
+    accessToken: "initial-access-token",
+  });
+});
+
+it("keeps a completed identity when initial session exchange fails", async () => {
+  const dependencies = createDependencies();
+  dependencies.signInNewUser = async () => {
+    throw new Error("session exchange unavailable");
+  };
+
+  await expect(joinStudent(baseInput, dependencies)).resolves.toMatchObject({
+    accessToken: "replacement-access-token",
+  });
+  expect(dependencies.deletedUsers).toBe(0);
+  expect(dependencies.stored.size).toBe(1);
 });
 
 it("returns the safe invalid-code error from the trusted boundary", async () => {

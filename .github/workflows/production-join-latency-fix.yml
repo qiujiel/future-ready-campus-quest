@@ -57,11 +57,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Prove database and Function source match the reviewed fix
-        run: >-
-          git diff --exit-code
-          d456c2dc3f04386597d73d71124bb7a4c5ae1329
-          "$GITHUB_SHA" -- supabase/migrations supabase/functions
+      - name: Prove schema immutability and exact Function change scope
+        run: |
+          baseline=ca83d90f6f468f9e7684a9df13a7384509afc07e
+          git diff --exit-code "$baseline" "$GITHUB_SHA" -- supabase/migrations
+          changed="$(git diff --name-only "$baseline" "$GITHUB_SHA" -- supabase/functions | sort)"
+          expected="$(printf '%s\n' \
+            supabase/functions/_shared/join-core.ts \
+            supabase/functions/_shared/session-core.ts \
+            supabase/functions/join-cohort/index.ts \
+            | sort)"
+          test "$changed" = "$expected"
 
       - name: Set up pnpm
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa

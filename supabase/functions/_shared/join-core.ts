@@ -42,6 +42,7 @@ export interface StoredJoin {
 export interface SyntheticUser {
   studentId: string;
   internalEmail: string;
+  initialTokenHash: string;
 }
 
 export interface CompleteJoinInput {
@@ -237,30 +238,45 @@ export async function joinStudent(
 
   let syntheticUser: SyntheticUser | undefined;
   let initialSession: SessionTokens | undefined;
+  let completedIdentity: StudentIdentity | undefined;
   try {
     syntheticUser = await dependencies.createSyntheticUser();
-    initialSession = await dependencies.signInNewUser(syntheticUser);
-    const identity = await dependencies.completeJoin({
-      codeHash,
-      requestKey: normalized.requestKey,
-      studentId: syntheticUser.studentId,
-      groupNumber: resolved.groupNumber,
-      displayName: normalized.displayName,
-    });
+    const [sessionResult, identityResult] = await Promise.allSettled([
+      dependencies.signInNewUser(syntheticUser),
+      dependencies.completeJoin({
+        codeHash,
+        requestKey: normalized.requestKey,
+        studentId: syntheticUser.studentId,
+        groupNumber: resolved.groupNumber,
+        displayName: normalized.displayName,
+      }),
+    ]);
+    if (sessionResult.status === "fulfilled") {
+      initialSession = sessionResult.value;
+    }
+    if (identityResult.status === "rejected") {
+      throw identityResult.reason;
+    }
+    completedIdentity = identityResult.value;
 
-    if (identity.studentId !== syntheticUser.studentId) {
+    if (completedIdentity.studentId !== syntheticUser.studentId) {
       await deleteSyntheticUserSafely(syntheticUser.studentId, dependencies);
       const replacementSession = await dependencies.issueReplacementSession(
-        identity.studentId,
+        completedIdentity.studentId,
       );
-      return { identity, ...replacementSession };
+      return { identity: completedIdentity, ...replacementSession };
     }
 
-    return { identity, ...initialSession };
+    const session = initialSession ??
+      await dependencies.issueReplacementSession(completedIdentity.studentId);
+    return { identity: completedIdentity, ...session };
   } catch (error) {
+    if (completedIdentity) {
+      if (error instanceof JoinBoundaryError) throw error;
+      throw new JoinBoundaryError("JOIN_NOT_AVAILABLE", 409);
+    }
     if (
       syntheticUser &&
-      initialSession &&
       !(error instanceof JoinBoundaryError)
     ) {
       try {
@@ -270,7 +286,11 @@ export async function joinStudent(
         );
         if (reconciled) {
           if (reconciled.identity.studentId === syntheticUser.studentId) {
-            return { identity: reconciled.identity, ...initialSession };
+            const session = initialSession ??
+              await dependencies.issueReplacementSession(
+                reconciled.identity.studentId,
+              );
+            return { identity: reconciled.identity, ...session };
           }
           await deleteSyntheticUserSafely(syntheticUser.studentId, dependencies);
           const replacement = await dependencies.issueReplacementSession(

@@ -14,7 +14,7 @@ The homepage Student action opens `/join`. The form contains only a student name
 
 Each open join window has one opaque, classroom-friendly code per group. Codes use an unambiguous uppercase alphabet and contain enough entropy to resist guessing during a 15-minute window. A code is derived in the trusted Edge Function from the join-window request key, group number, and `JOIN_TOKEN_SIGNING_SECRET`; only its SHA-256 hash is stored. The teacher can recover the displayed codes after refreshing because the trusted function can deterministically re-derive them. Students submit the code to `join-cohort`; the function hashes it and resolves the active cohort and group on the server. Existing rate limiting applies by code and client address. Codes are invalid after the window closes or expires, and a teacher can disable an individual group code.
 
-The existing synthetic-auth-user implementation remains the selected alternative to Supabase anonymous auth. It already creates a unique confirmed internal student user, never returns internal credentials to the student, stores the session through the Supabase client, and keeps teacher authentication separate. The generated email and password remain server-only.
+The existing synthetic-auth-user implementation remains the selected alternative to Supabase anonymous auth. It creates a unique internal student user and one-time magic-link hash in one trusted Admin API request, sends no email, creates no student password, never returns internal identity data to the student, stores the exchanged session through the Supabase client, and keeps teacher authentication separate. The protected database role table is authoritative for student and teacher route access.
 
 ## Cohort readiness and controls
 
@@ -51,4 +51,3 @@ Hosted verification uses clean current Chrome and Safari sessions against the fi
 - Production writes occur only after the exact project reference and migration/content artifacts are verified.
 - Existing production data is not deleted. Student removal and reset preserve history.
 - Backup and rollback evidence is checked before the first production schema write.
-

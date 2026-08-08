@@ -17,6 +17,12 @@ test("student and anonymous sessions cannot enter teacher routes", async ({
         created_at: "2030-01-01T00:00:00.000Z",
       }),
     }));
+  await page.route("**/rest/v1/rpc/current_role", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify("student"),
+    }));
   await page.goto(
     "/#/teacher/cohorts/d3000000-0000-4000-8000-000000000001",
   );
@@ -39,6 +45,12 @@ test("cross-cohort denial is neutral and reveals no private fields", async ({
         aud: "authenticated",
         created_at: "2030-01-01T00:00:00.000Z",
       }),
+    }));
+  await page.route("**/rest/v1/rpc/current_role", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify("teacher"),
     }));
   await page.route("**/functions/v1/teacher-dashboard", (route) =>
     route.fulfill({
