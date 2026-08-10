@@ -5,6 +5,8 @@ import type {
   ManageJoinWindowInput,
   RecoverStudentInput,
   RecoverStudentOutput,
+  StudentLoginInput,
+  StudentLoginOutput,
   TeacherCohortListItem,
 } from "./contracts";
 import { getSupabaseClient } from "./supabase";
@@ -13,7 +15,6 @@ import { readAuthenticatedRole } from "./role";
 export interface CreateCohortRequest {
   title: string;
   groupCount: number;
-  groupCapacity: number;
   requestKey: string;
 }
 
@@ -23,12 +24,13 @@ export interface AuthGateway {
   signOut?(): Promise<void>;
   listCohorts?(): Promise<TeacherCohortListItem[]>;
   createCohort(input: CreateCohortRequest): Promise<{ cohortId: string }>;
-  openJoinWindow?(
+  openJoinWindow(
     cohortId: string,
     requestKey: string,
   ): Promise<JoinWindowReceipt>;
   closeJoinWindow?(cohortId: string, requestKey: string): Promise<void>;
   joinCohort(input: JoinCohortInput): Promise<JoinCohortOutput>;
+  loginStudent(input: StudentLoginInput): Promise<StudentLoginOutput>;
   recoverStudent(input: RecoverStudentInput): Promise<RecoverStudentOutput>;
 }
 
@@ -111,7 +113,6 @@ export const supabaseAuthGateway: AuthGateway = {
       action: "create-cohort",
       title: input.title,
       groupCount: input.groupCount,
-      groupCapacity: input.groupCapacity,
       requestKey: input.requestKey,
     });
     const cohortValue = data.cohort;
@@ -158,6 +159,25 @@ export const supabaseAuthGateway: AuthGateway = {
       await throwAuthGatewayError(result.error.context, "JOIN_NOT_ACCEPTED");
     }
     const output = result.data as JoinCohortOutput;
+    const session = await client.auth.setSession({
+      access_token: output.accessToken,
+      refresh_token: output.refreshToken,
+    });
+    if (session.error) throw new Error("The student session could not be saved.");
+    return output;
+  },
+  async loginStudent(input) {
+    const client = getSupabaseClient();
+    const result = await client.functions.invoke("student-login", {
+      body: input,
+    });
+    if (result.error) {
+      await throwAuthGatewayError(
+        result.error.context,
+        "STUDENT_LOGIN_NOT_ACCEPTED",
+      );
+    }
+    const output = result.data as StudentLoginOutput;
     const session = await client.auth.setSession({
       access_token: output.accessToken,
       refresh_token: output.refreshToken,

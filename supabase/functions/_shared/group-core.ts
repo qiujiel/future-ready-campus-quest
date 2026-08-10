@@ -12,12 +12,6 @@ const commandSchema = z.discriminatedUnion("action", [
     requestKey: z.uuid(),
   }),
   z.object({
-    action: z.literal("transfer-editor"),
-    groupId: z.uuid(),
-    nextEditorId: z.uuid(),
-    requestKey: z.uuid(),
-  }),
-  z.object({
     action: z.literal("lock"),
     groupId: z.uuid(),
     requestKey: z.uuid(),
@@ -51,7 +45,7 @@ export interface GroupIdentityDependencies {
 }
 
 export async function executeGroupIdentityCommand(
-  command: GroupIdentityCommand,
+  command: unknown,
   dependencies: GroupIdentityDependencies,
 ): Promise<PublicGroupIdentity> {
   const parsed = commandSchema.safeParse(command);

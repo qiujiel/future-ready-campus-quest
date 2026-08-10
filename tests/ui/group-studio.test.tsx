@@ -18,20 +18,14 @@ const members = [
 
 function gateway(): GroupStudioGateway & {
   renameCalls: string[];
-  transferCalls: string[];
   uploadCalls: File[];
 } {
   return {
     renameCalls: [],
-    transferCalls: [],
     uploadCalls: [],
     async rename(_groupId, displayName) {
       this.renameCalls.push(displayName);
       return { ...group, displayName };
-    },
-    async transferEditor(_groupId, studentId) {
-      this.transferCalls.push(studentId);
-      return group;
     },
     async uploadImage(_groupId, file, onProgress) {
       this.uploadCalls.push(file);
@@ -46,7 +40,7 @@ function gateway(): GroupStudioGateway & {
 }
 
 describe("Group Studio", () => {
-  it("lets the first-member editor rename the group and transfer editing", async () => {
+  it("lets the group leader rename the group without student transfer controls", async () => {
     const api = gateway();
     render(
       <GroupStudio
@@ -58,20 +52,17 @@ describe("Group Studio", () => {
       />,
     );
 
-    expect(screen.getByText(/you are the first explorer here/i)).toBeVisible();
+    expect(screen.getByText(/you are the group leader/i)).toBeVisible();
     fireEvent.change(screen.getByLabelText(/group name/i), {
       target: { value: "Future Makers" },
     });
     fireEvent.click(screen.getByRole("button", { name: /save group name/i }));
     await waitFor(() => expect(api.renameCalls).toEqual(["Future Makers"]));
-
-    fireEvent.change(screen.getByLabelText(/next group editor/i), {
-      target: { value: "student-2" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /transfer editing/i }));
-    await waitFor(() => expect(api.transferCalls).toEqual(["student-2"]));
-    expect(screen.queryByLabelText(/group name/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/group editor is shaping this space/i)).toBeVisible();
+    expect(screen.getByLabelText(/group name/i)).toBeVisible();
+    expect(screen.queryByLabelText(/next group editor/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /transfer editing/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("validates image type, previews valid images, and reports upload progress", async () => {
@@ -159,7 +150,7 @@ describe("Group Studio", () => {
     expect(screen.getByText("Bright Comet")).toBeVisible();
     expect(screen.getByText(/Silver Fern/)).toBeVisible();
     expect(screen.queryByLabelText(/group name/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/group editor is shaping this space/i)).toBeVisible();
+    expect(screen.getByText(/group leader is shaping this space/i)).toBeVisible();
   });
 
   it("explains a teacher lock and a missing-session recovery action", () => {

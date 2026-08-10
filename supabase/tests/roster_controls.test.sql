@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(16);
+select plan(25);
 
 select has_column(
   'public',
@@ -96,6 +96,159 @@ select student_id, cohort_id, group_id, 'Explorer ' || row_number() over ()::tex
 from public.student_private_profiles
 where cohort_id = 'a3000000-0000-4000-8000-000000000001';
 
+update public.groups
+set identity_editor_id = 'a2000000-0000-4000-8000-000000000001'
+where cohort_id = 'a3000000-0000-4000-8000-000000000001'
+  and group_number = 1;
+
+update public.groups
+set identity_editor_id = 'a2000000-0000-4000-8000-000000000003'
+where cohort_id = 'a3000000-0000-4000-8000-000000000001'
+  and group_number = 2;
+
+insert into private.group_identity_receipts (
+  actor_user_id,
+  request_key,
+  input_payload,
+  group_id,
+  group_number,
+  display_name,
+  image_object_path,
+  locked_at
+)
+select
+  'a2000000-0000-4000-8000-000000000003',
+  'a6000000-0000-4000-8000-000000000017',
+  jsonb_build_object(
+    'action', 'transfer-editor',
+    'group_id', groups.id,
+    'display_name', null,
+    'next_editor_id', 'a2000000-0000-4000-8000-000000000004'::uuid
+  ),
+  groups.id,
+  groups.group_number,
+  groups.display_name,
+  groups.image_object_path,
+  groups.identity_locked_at
+from public.groups as groups
+where groups.cohort_id = 'a3000000-0000-4000-8000-000000000001'
+  and groups.group_number = 2;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'a2000000-0000-4000-8000-000000000002', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+
+select throws_ok(
+  $$select * from public.manage_group_identity(
+      'rename',
+      (select id from public.groups where cohort_id = 'a3000000-0000-4000-8000-000000000001' and group_number = 1),
+      'Member rename denied',
+      null,
+      'a6000000-0000-4000-8000-000000000011'
+    )$$,
+  '42501',
+  'GROUP_ACTION_DENIED',
+  'an ordinary member cannot rename the group at the database boundary'
+);
+
+select throws_ok(
+  $$select * from public.authorize_group_media_upload(
+      (select id from public.groups where cohort_id = 'a3000000-0000-4000-8000-000000000001' and group_number = 1),
+      'image/png',
+      1024,
+      'a6000000-0000-4000-8000-000000000012'
+    )$$,
+  '42501',
+  'MEDIA_ACTION_DENIED',
+  'an ordinary member cannot upload group media at the database boundary'
+);
+
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'a2000000-0000-4000-8000-000000000003', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+
+select throws_ok(
+  $$select * from public.manage_group_identity(
+      'transfer-editor',
+      (select id from public.groups where cohort_id = 'a3000000-0000-4000-8000-000000000001' and group_number = 2),
+      null,
+      'a2000000-0000-4000-8000-000000000004',
+      'a6000000-0000-4000-8000-000000000016'
+    )$$,
+  '42501',
+  'GROUP_ACTION_DENIED',
+  'the current group leader cannot transfer leadership at the database boundary'
+);
+
+select throws_ok(
+  $$select * from public.manage_group_identity(
+      'transfer-editor',
+      (select id from public.groups where cohort_id = 'a3000000-0000-4000-8000-000000000001' and group_number = 2),
+      null,
+      'a2000000-0000-4000-8000-000000000004',
+      'a6000000-0000-4000-8000-000000000017'
+    )$$,
+  '42501',
+  'GROUP_ACTION_DENIED',
+  'a pre-migration student transfer receipt cannot bypass teacher-only authorization'
+);
+
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'a1000000-0000-4000-8000-000000000001', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+
+select is(
+  (select group_id from public.manage_group_identity(
+      'transfer-editor',
+      (select id from public.groups where cohort_id = 'a3000000-0000-4000-8000-000000000001' and group_number = 1),
+      null,
+      'a2000000-0000-4000-8000-000000000002',
+      'a6000000-0000-4000-8000-000000000013'
+    )),
+  (select id from public.groups where cohort_id = 'a3000000-0000-4000-8000-000000000001' and group_number = 1),
+  'the teacher can assign an active student in the same group as leader'
+);
+
+select is(
+  (select identity_editor_id from public.groups where cohort_id = 'a3000000-0000-4000-8000-000000000001' and group_number = 1),
+  'a2000000-0000-4000-8000-000000000002'::uuid,
+  'the group stores exactly one leader after teacher assignment'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from public.audit_events
+    where actor_user_id = 'a1000000-0000-4000-8000-000000000001'
+      and cohort_id = 'a3000000-0000-4000-8000-000000000001'
+      and event_type = 'group_identity.transfer-editor'
+      and entity_id = (
+        select id from public.groups
+        where cohort_id = 'a3000000-0000-4000-8000-000000000001'
+          and group_number = 1
+      )
+  ),
+  1,
+  'teacher leader assignment is recorded once in the cohort audit'
+);
+
+select throws_ok(
+  $$select * from public.manage_group_identity(
+      'transfer-editor',
+      (select id from public.groups where cohort_id = 'a3000000-0000-4000-8000-000000000001' and group_number = 1),
+      null,
+      'a2000000-0000-4000-8000-000000000003',
+      'a6000000-0000-4000-8000-000000000014'
+    )$$,
+  '22023',
+  'GROUP_MEMBER_INVALID',
+  'the teacher cannot assign a student from another group as leader'
+);
+
+reset role;
+
 insert into content.content_versions (
   id, version_key, payload_digest, item_count, concept_count
 )
@@ -134,6 +287,19 @@ select is(
   ) ->> 'affected')::integer,
   1,
   'the owner can soft-remove an incorrect roster entry'
+);
+
+select throws_ok(
+  $$select * from public.manage_group_identity(
+      'transfer-editor',
+      (select id from public.groups where cohort_id = 'a3000000-0000-4000-8000-000000000001' and group_number = 2),
+      null,
+      'a2000000-0000-4000-8000-000000000004',
+      'a6000000-0000-4000-8000-000000000015'
+    )$$,
+  '22023',
+  'GROUP_MEMBER_INVALID',
+  'the teacher cannot assign a removed student as leader'
 );
 
 reset role;

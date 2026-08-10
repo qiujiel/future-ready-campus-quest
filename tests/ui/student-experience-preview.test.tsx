@@ -16,6 +16,12 @@ async function enterCampusMap() {
   fireEvent.change(screen.getByLabelText(/your name/i), {
     target: { value: "Synthetic Learner" },
   });
+  fireEvent.change(screen.getByLabelText(/^create a 4-digit passcode$/i), {
+    target: { value: "4826" },
+  });
+  fireEvent.change(screen.getByLabelText(/^confirm passcode$/i), {
+    target: { value: "4826" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "Join Group" }));
 
   fireEvent.click(

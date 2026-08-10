@@ -17,10 +17,7 @@ import {
   MediaBoundaryError,
   validateIncomingUpload,
 } from "../_shared/media-core.ts";
-import type {
-  GroupIdentityCommand,
-  PublicGroupIdentity,
-} from "../../../src/shared/api/contracts.ts";
+import type { PublicGroupIdentity } from "../../../src/shared/api/contracts.ts";
 
 const mediaCommandSchema = z.discriminatedUnion("action", [
   z.object({
@@ -111,10 +108,7 @@ function dependencies(client: SupabaseClient): GroupIdentityDependencies {
         p_group_id: command.groupId,
         p_display_name:
           command.action === "rename" ? command.displayName : null,
-        p_next_editor_id:
-          command.action === "transfer-editor"
-            ? command.nextEditorId
-            : null,
+        p_next_editor_id: null,
         p_request_key: command.requestKey,
       });
       if (result.error) mapGroupError(result.error.message);
@@ -303,7 +297,7 @@ Deno.serve(async (request) => {
       return jsonResponse(result, 200, headers);
     }
     const group = await executeGroupIdentityCommand(
-      body as GroupIdentityCommand,
+      body,
       dependencies(client),
     );
     return jsonResponse({ group }, 200, headers);

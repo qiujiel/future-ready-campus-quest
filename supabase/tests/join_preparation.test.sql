@@ -80,14 +80,18 @@ where cohort_id = 'e2000000-0000-4000-8000-000000000001'
   and group_number = 1;
 
 select results_eq(
-  $$select completed, group_number::integer
+  $$select completed, cohort_id, group_number::integer
     from public.prepare_student_code_join(
       repeat('b', 64),
       'e4000000-0000-4000-8000-000000000002',
       repeat('c', 64)
     )$$,
-  $$values (false, 1)$$,
-  'a new request receives its group from the protected preflight'
+  $$values (
+    false,
+    'e2000000-0000-4000-8000-000000000001'::uuid,
+    1
+  )$$,
+  'a new request receives its class and group from the protected preflight'
 );
 
 select is(

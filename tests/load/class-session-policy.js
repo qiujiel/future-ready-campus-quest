@@ -46,7 +46,7 @@ export function classroomLoadGateFailures(metrics) {
     [
       "p95JoinMs",
       Number.isFinite(metrics.p95JoinMs) &&
-        metrics.p95JoinMs < CLASSROOM_JOIN_P95_LIMIT_MS,
+        metrics.p95JoinMs <= CLASSROOM_JOIN_P95_LIMIT_MS,
     ],
     [
       "p95ResponseMs",
@@ -66,6 +66,16 @@ export function classroomLoadGateFailures(metrics) {
     [
       "studentsWithVerifiedFormula",
       metrics.studentsWithVerifiedFormula === classroomStudentCount,
+    ],
+    ["returningLogins", metrics.returningLogins === 5],
+    ["failedReturningLogins", metrics.failedReturningLogins === 0],
+    [
+      "returningIdentityMismatches",
+      metrics.returningIdentityMismatches === 0,
+    ],
+    [
+      "authIdentitiesCreatedByLogin",
+      metrics.authIdentitiesCreatedByLogin === 0,
     ],
   ].filter(([, passed]) => !passed).map(([field]) => field);
 }

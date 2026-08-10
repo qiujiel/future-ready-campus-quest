@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
@@ -12,6 +14,75 @@ import { validateProductionClassroomBootstrapConfiguration } from
 
 const PINNED_ACTION = /^[^@\s]+@[0-9a-f]{40}$/;
 const GITLEAKS_ACTION = "gitleaks/gitleaks-action@v2";
+export const REQUIRED_BACKEND_SECRETS = Object.freeze([
+  "SUPABASE_ACCESS_TOKEN",
+  "PRODUCTION_SUPABASE_DB_PASSWORD",
+  "PRODUCTION_SUPABASE_SECRET_KEY",
+  "PRODUCTION_READINESS_SECRET",
+  "ALLOWED_FRONTEND_ORIGINS",
+  "FRONTEND_APP_URL",
+  "JOIN_TOKEN_SIGNING_SECRET",
+  "RECOVERY_TOKEN_SIGNING_SECRET",
+  "STUDENT_LOGIN_SIGNING_SECRET",
+]);
+export const REQUIRED_PAGES_VARIABLES = Object.freeze([
+  "VITE_SUPABASE_URL",
+  "VITE_SUPABASE_PUBLISHABLE_KEY",
+  "VITE_BASE_PATH",
+  "LOAD_SUPABASE_PROJECT_REF",
+  "PRODUCTION_SUPABASE_PROJECT_REF",
+  "PRODUCTION_FRONTEND_ORIGIN",
+  "PRODUCTION_CONTENT_VERSION",
+  "PRODUCTION_SMOKE_TEACHER_ID",
+  "PRODUCTION_SMOKE_COHORT_ID",
+]);
+export const REQUIRED_PAGES_SECRETS = Object.freeze([
+  "LOAD_SUPABASE_URL",
+  "LOAD_SUPABASE_PUBLISHABLE_KEY",
+  "LOAD_SUPABASE_SECRET_KEY",
+  "PRODUCTION_READINESS_SECRET",
+]);
+const REQUIRED_PRODUCTION_FUNCTIONS = Object.freeze([
+  "complete-quest",
+  "export-cohort",
+  "get-next-item",
+  "join-cohort",
+  "manage-group-identity",
+  "manage-join-window",
+  "production-readiness",
+  "recover-student",
+  "student-login",
+  "submit-response",
+  "teacher-controls",
+  "teacher-dashboard",
+]);
+const PRODUCTION_FUNCTION_DEPLOYMENT_ENTRYPOINT =
+  "node scripts/deploy-production-functions.mjs";
+const CANONICAL_BACKEND_WORKFLOW_SHA256 =
+  "f1cbc04d3db761b1733525c29e11f266497d1ce6079e8888f5e6ed5dd877f6bf";
+export const CANONICAL_PRODUCTION_FUNCTION_DEPLOYMENT_SCRIPT = [
+  'import { spawnSync } from "node:child_process";',
+  "",
+  "const PRODUCTION_FUNCTIONS = Object.freeze([",
+  ...REQUIRED_PRODUCTION_FUNCTIONS.map((name) => `  "${name}",`),
+  "]);",
+  "",
+  "const projectRef = process.env.PRODUCTION_SUPABASE_PROJECT_REF;",
+  "if (!projectRef) {",
+  '  throw new Error("Missing PRODUCTION_SUPABASE_PROJECT_REF.");',
+  "}",
+  "",
+  "for (const functionName of PRODUCTION_FUNCTIONS) {",
+  "  const result = spawnSync(",
+  '    "pnpm",',
+  '    ["exec", "supabase", "functions", "deploy", functionName, "--project-ref", projectRef],',
+  '    { stdio: "inherit" },',
+  "  );",
+  "  if (result.error) throw result.error;",
+  "  if (result.status !== 0) process.exit(result.status ?? 1);",
+  "}",
+  "",
+].join("\n");
 const RELEASE_INPUT_DEFINITIONS = {
   release_mode: {
     description: "Release authorization mode",
@@ -196,11 +267,64 @@ function requireEdgeReadyWait(job, label) {
     !/Origin:/.test(runs) ||
     !/join-cohort/.test(runs) ||
     !/recover-student/.test(runs) ||
+    !/student-login/.test(runs) ||
     !/response_code[\s\S]*405|405[\s\S]*response_code/.test(runs)
   ) {
     fail(
-      `${label} Edge readiness must require the join and recovery 405 responses`,
+      `${label} Edge readiness must require join and recovery plus student login 405 responses`,
     );
+  }
+}
+
+export function validateProductionFunctionDeploymentScript(script) {
+  if (script !== CANONICAL_PRODUCTION_FUNCTION_DEPLOYMENT_SCRIPT) {
+    fail("exact production Function deployment script is not canonical");
+  }
+}
+
+export function validateCanonicalBackendWorkflowSource(source) {
+  if (typeof source !== "string" || source.length === 0) {
+    fail("canonical backend workflow source is required");
+  }
+  const digest = createHash("sha256").update(source).digest("hex");
+  if (digest !== CANONICAL_BACKEND_WORKFLOW_SHA256) {
+    fail("canonical backend workflow source is required");
+  }
+}
+
+function requireExactProductionFunctionSet(job) {
+  const runs = (job?.steps ?? []).map((step) => String(step?.run ?? ""));
+  const deploymentSteps = runs.filter(
+    (run) => run.trim() === PRODUCTION_FUNCTION_DEPLOYMENT_ENTRYPOINT,
+  );
+  const hasUnexpectedDeploy = runs.some((run) =>
+    run.trim() !== PRODUCTION_FUNCTION_DEPLOYMENT_ENTRYPOINT &&
+    /\bdeploy\b/i.test(run.replace(/\\\s*\n/g, "").replace(/["']/g, ""))
+  );
+  if (deploymentSteps.length !== 1 || hasUnexpectedDeploy) {
+    fail(
+      "exact production Function deployment loop requires one deploy command",
+    );
+  }
+
+  const script = readFileSync(
+    resolve(process.cwd(), "scripts", "deploy-production-functions.mjs"),
+    "utf8",
+  );
+  validateProductionFunctionDeploymentScript(script);
+}
+
+function requireStudentLoginSecretIsolation({ backend, pages }) {
+  const backendSerialized = JSON.stringify(backend ?? {});
+  if (!backendSerialized.includes("STUDENT_LOGIN_SIGNING_SECRET")) {
+    fail("backend release requires the student login signing secret");
+  }
+  if (
+    JSON.stringify(pages ?? {}).includes(
+      "${{ secrets.STUDENT_LOGIN_SIGNING_SECRET }}",
+    )
+  ) {
+    fail("Pages must not receive the student login signing secret");
   }
 }
 
@@ -438,7 +562,7 @@ function requireBootstrapPreflightOrder(job) {
   );
   const secretsIndex = indexOfRun((run) => run.includes("supabase secrets set"));
   const functionsIndex = indexOfRun((run) =>
-    run.includes("supabase functions deploy")
+    run.includes(PRODUCTION_FUNCTION_DEPLOYMENT_ENTRYPOINT)
   );
   const requiredIndices = [
     linkIndex,
@@ -535,7 +659,9 @@ function requireBackendReleaseIdentity(workflow, job) {
     fail("backend release must use the canonical fail-closed identity script");
   }
 
-  const productionMutation = /\b(?:pnpm exec )?supabase\s+(?:db\s+push|secrets\s+set|functions\s+deploy)\b/;
+  const productionMutation = new RegExp(
+    `\\b(?:pnpm exec )?supabase\\s+(?:db\\s+push|secrets\\s+set|functions\\s+deploy)\\b|${PRODUCTION_FUNCTION_DEPLOYMENT_ENTRYPOINT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+  );
   const mutationSteps = steps.filter((step) =>
     productionMutation.test(String(step?.run ?? ""))
   );
@@ -679,6 +805,56 @@ export function validateLoadTestBootstrapConfiguration(workflow) {
   ) {
     fail("load-test bootstrap must not receive production or load application keys");
   }
+
+  const secretFile = "/tmp/campus-quest-load-functions.env";
+  const expectedSecretConfiguration = [
+    "set +x",
+    "umask 077",
+    'JOIN_TOKEN_SIGNING_SECRET="$(openssl rand -hex 32)"',
+    'RECOVERY_TOKEN_SIGNING_SECRET="$(openssl rand -hex 32)"',
+    'STUDENT_LOGIN_SIGNING_SECRET="$(openssl rand -hex 32)"',
+    'PRODUCTION_READINESS_SECRET="$(openssl rand -hex 32)"',
+    'test "$STUDENT_LOGIN_SIGNING_SECRET" != "$JOIN_TOKEN_SIGNING_SECRET"',
+    'test "$STUDENT_LOGIN_SIGNING_SECRET" != "$RECOVERY_TOKEN_SIGNING_SECRET"',
+    'test "$STUDENT_LOGIN_SIGNING_SECRET" != "$PRODUCTION_READINESS_SECRET"',
+    "printf '%s\\n' \\",
+    "  \"ALLOWED_FRONTEND_ORIGINS=http://127.0.0.1:4173\" \\",
+    "  \"FRONTEND_APP_URL=http://127.0.0.1:4173\" \\",
+    "  \"JOIN_TOKEN_SIGNING_SECRET=$JOIN_TOKEN_SIGNING_SECRET\" \\",
+    "  \"RECOVERY_TOKEN_SIGNING_SECRET=$RECOVERY_TOKEN_SIGNING_SECRET\" \\",
+    "  \"STUDENT_LOGIN_SIGNING_SECRET=$STUDENT_LOGIN_SIGNING_SECRET\" \\",
+    "  \"PRODUCTION_READINESS_SECRET=$PRODUCTION_READINESS_SECRET\" \\",
+    `  > ${secretFile}`,
+    `chmod 600 ${secretFile}`,
+    "pnpm exec supabase secrets set \\",
+    "  --project-ref \"$LOAD_SUPABASE_PROJECT_REF\" \\",
+    `  --env-file ${secretFile}`,
+  ].join("\n");
+  const steps = job?.steps ?? [];
+  const secretSteps = steps.filter((step) =>
+    String(step?.run ?? "").includes("supabase secrets set")
+  );
+  const secretStep = secretSteps[0];
+  const cleanupSteps = steps.filter((step) =>
+    String(step?.run ?? "").trim() === `rm -f ${secretFile}`
+  );
+  const cleanupStep = cleanupSteps[0];
+  const fileReferences = steps.filter((step) =>
+    String(step?.run ?? "").includes(secretFile)
+  );
+  if (
+    secretSteps.length !== 1 ||
+    String(secretStep?.run ?? "").trim() !== expectedSecretConfiguration ||
+    !isDeepStrictEqual(secretStep?.env, {
+      SUPABASE_ACCESS_TOKEN: "${{ secrets.SUPABASE_ACCESS_TOKEN }}",
+    }) ||
+    cleanupSteps.length !== 1 ||
+    cleanupStep?.if !== "always()" ||
+    steps.at(-1) !== cleanupStep ||
+    fileReferences.length !== 2
+  ) {
+    fail("load-test bootstrap requires canonical synthetic Function secret handling");
+  }
   requireContentsReadOnly(job, "load-test bootstrap");
   requirePinnedActions([workflow]);
 }
@@ -746,7 +922,13 @@ export function validateProductionJoinLatencyFixConfiguration(workflow) {
   requirePinnedActions([workflow]);
 }
 
-export function validateDeploymentConfiguration({ ci, backend, pages, rollback }) {
+export function validateDeploymentConfiguration({
+  ci,
+  backend,
+  backendSource,
+  pages,
+  rollback,
+}) {
   const backendJob = backend?.jobs?.release;
   const authorizationJob = backend?.jobs?.validate_release_authorization;
   const packageJob = pages?.jobs?.package;
@@ -755,12 +937,15 @@ export function validateDeploymentConfiguration({ ci, backend, pages, rollback }
   const rollbackPrepare = rollback?.jobs?.prepare;
   const rollbackDeploy = rollback?.jobs?.deploy;
 
+  validateCanonicalBackendWorkflowSource(backendSource);
   requireCiSecretScan(ci);
+  requireStudentLoginSecretIsolation({ backend, pages });
   requireInputs(backend, ["expected_sha", "production_project_ref"]);
   requireReleaseAuthorizationGate(backend, authorizationJob, backendJob);
   requireEnvironment(backendJob, "production-backend");
   requireContentsReadOnly(backendJob, "backend release");
   requireBackendReleaseIdentity(backend, backendJob);
+  requireExactProductionFunctionSet(backendJob);
   requireBootstrapPreflightOrder(backendJob);
   requireRun(backendJob, /migration list/, "backend migration list is missing");
   requireRun(
@@ -771,7 +956,6 @@ export function validateDeploymentConfiguration({ ci, backend, pages, rollback }
   requireProductionFunctionConfigurationValidation(backendJob);
   requireModernProductionFunctionCredentials(backendJob);
   requireRun(backendJob, /secrets set/, "Edge Function secret deployment is missing");
-  requireRun(backendJob, /functions deploy/, "Edge Function deployment is missing");
   requireEdgeReadyWait(backendJob, "backend release");
   requireFrozenDenoCheck(backendJob, "backend release");
 
@@ -826,7 +1010,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     load(await readFile(resolve(workflowDirectory, name), "utf8"));
   const [
     ci,
-    backend,
+    backendSource,
     pages,
     rollback,
     bootstrapFunctionRepair,
@@ -837,7 +1021,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     productionJoinLatencyFix,
   ] = await Promise.all([
     readWorkflow("ci.yml"),
-    readWorkflow("backend-production.yml"),
+    readFile(resolve(workflowDirectory, "backend-production.yml"), "utf8"),
     readWorkflow("pages.yml"),
     readWorkflow("pages-rollback.yml"),
     readWorkflow("bootstrap-function-repair.yml"),
@@ -849,7 +1033,8 @@ export async function loadDeploymentConfiguration(baseDirectory) {
   ]);
   return {
     ci,
-    backend,
+    backend: load(backendSource),
+    backendSource,
     pages,
     rollback,
     bootstrapFunctionRepair,

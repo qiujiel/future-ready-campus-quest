@@ -1,6 +1,13 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  CANONICAL_PRODUCTION_FUNCTION_DEPLOYMENT_SCRIPT,
+  REQUIRED_BACKEND_SECRETS,
+  REQUIRED_PAGES_SECRETS,
+  REQUIRED_PAGES_VARIABLES,
   validateDeploymentConfiguration,
+  validateProductionFunctionDeploymentScript,
 } from "../../scripts/deployment-config.mjs";
 
 const pinnedCheckout =
@@ -10,6 +17,10 @@ const pinnedSetupNode =
 const productionProjectRef = "ghohuwwjxgjqnbsauvzq";
 const loadProjectRef = "vadyhuipwbtgbzpeisbn";
 const productionUrl = `https://${productionProjectRef}.supabase.co`;
+const canonicalBackendSource = readFileSync(
+  resolve(process.cwd(), ".github", "workflows", "backend-production.yml"),
+  "utf8",
+);
 const identityScript = [
   "if ! printf '%s' \"$EXPECTED_SHA\" | grep -Eq '^[0-9a-f]{40}$'; then",
   "  echo \"expected_sha must be a full lowercase commit SHA\" >&2",
@@ -41,6 +52,7 @@ const identityStep = (configuration) =>
 
 function validConfiguration() {
   return {
+    backendSource: canonicalBackendSource,
     ci: {
       permissions: { contents: "read", "pull-requests": "read" },
       jobs: {
@@ -189,17 +201,22 @@ function validConfiguration() {
               env: {
                 PRODUCTION_SUPABASE_SECRET_KEY:
                   "${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}",
+                STUDENT_LOGIN_SIGNING_SECRET:
+                  "${{ secrets.STUDENT_LOGIN_SIGNING_SECRET }}",
               },
               run: [
                 "node scripts/production-function-config.mjs",
                 '"FRCQ_SUPABASE_PUBLISHABLE_KEY=$PRODUCTION_SUPABASE_PUBLISHABLE_KEY"',
                 '"FRCQ_SUPABASE_SECRET_KEY=$PRODUCTION_SUPABASE_SECRET_KEY"',
+                '"STUDENT_LOGIN_SIGNING_SECRET=$STUDENT_LOGIN_SIGNING_SECRET"',
                 "supabase secrets set --env-file /tmp/functions.env",
               ].join("\n"),
             },
-            { run: "supabase functions deploy --project-ref \"$PRODUCTION_SUPABASE_PROJECT_REF\"" },
             {
-              run: "for readiness_function in join-cohort recover-student; do response_code=$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Origin: http://127.0.0.1:4173' http://127.0.0.1/functions/v1/$readiness_function); if [ \"$response_code\" = \"405\" ]; then break; fi; done",
+              run: "node scripts/deploy-production-functions.mjs",
+            },
+            {
+              run: "for readiness_function in join-cohort recover-student student-login; do response_code=$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Origin: http://127.0.0.1:4173' http://127.0.0.1/functions/v1/$readiness_function); if [ \"$response_code\" = \"405\" ]; then break; fi; done",
             },
             {
               run: "deno check --frozen --config supabase/functions/deno.json --lock supabase/functions/deno.lock supabase/functions/*/index.ts",
@@ -216,7 +233,7 @@ function validConfiguration() {
           steps: [
             { uses: pinnedCheckout },
             {
-              run: "for readiness_function in join-cohort recover-student; do response_code=$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Origin: http://127.0.0.1:4173' http://127.0.0.1/functions/v1/$readiness_function); if [ \"$response_code\" = \"405\" ]; then break; fi; done",
+              run: "for readiness_function in join-cohort recover-student student-login; do response_code=$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Origin: http://127.0.0.1:4173' http://127.0.0.1/functions/v1/$readiness_function); if [ \"$response_code\" = \"405\" ]; then break; fi; done",
             },
             {
               run: "deno check --frozen --config supabase/functions/deno.json --lock supabase/functions/deno.lock supabase/functions/*/index.ts",
@@ -328,6 +345,192 @@ function validConfiguration() {
 }
 
 describe("deployment workflow boundaries", () => {
+  it("keeps the student login signer in backend encrypted secrets only", () => {
+    expect(REQUIRED_BACKEND_SECRETS).toContain(
+      "STUDENT_LOGIN_SIGNING_SECRET",
+    );
+    expect(REQUIRED_PAGES_VARIABLES).not.toContain(
+      "STUDENT_LOGIN_SIGNING_SECRET",
+    );
+    expect(REQUIRED_PAGES_SECRETS).not.toContain(
+      "STUDENT_LOGIN_SIGNING_SECRET",
+    );
+  });
+
+  it("deploys the reviewed Function entrypoint only after ordered migrations and secret configuration", () => {
+    const configuration = validConfiguration();
+    const steps = configuration.backend.jobs.release.steps;
+    const migrationIndex = steps.findIndex((step) =>
+      String(step.run ?? "").includes("supabase db push --linked") &&
+      !String(step.run ?? "").includes("--dry-run")
+    );
+    const secretIndex = steps.findIndex((step) =>
+      String(step.run ?? "").includes("supabase secrets set")
+    );
+    const deployIndex = steps.findIndex((step) =>
+      String(step.run ?? "").includes(
+        "node scripts/deploy-production-functions.mjs",
+      )
+    );
+
+    expect(String(steps[deployIndex]?.run).trim()).toBe(
+      "node scripts/deploy-production-functions.mjs",
+    );
+    expect(migrationIndex).toBeLessThan(secretIndex);
+    expect(secretIndex).toBeLessThan(deployIndex);
+  });
+
+  it("accepts the canonical production Function deployment entrypoint", () => {
+    expect(() => validateDeploymentConfiguration(validConfiguration())).not.toThrow();
+  });
+
+  it.each([undefined, ""])(
+    "rejects a missing or empty raw backend workflow source: %s",
+    (backendSource) => {
+      const configuration = validConfiguration();
+      configuration.backendSource = backendSource;
+
+      expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+        /canonical backend workflow source/i,
+      );
+    },
+  );
+
+  it.each([
+    [
+      "appends an unreviewed Function",
+      (script) => script.replace(
+        '  "teacher-dashboard",',
+        '  "teacher-dashboard",\n  "unreviewed-function",',
+      ),
+    ],
+    [
+      "lists a Function twice",
+      (script) => script.replace(
+        '  "teacher-dashboard",',
+        '  "teacher-dashboard",\n  "teacher-dashboard",',
+      ),
+    ],
+    [
+      "omits a reviewed Function",
+      (script) => script.replace('  "student-login",\n', ""),
+    ],
+    [
+      "uses an indirect executable",
+      (script) => script.replace('    "pnpm",', "    process.env.DEPLOY_BIN,"),
+    ],
+    [
+      "uses a wildcard Function name",
+      (script) => script.replace("functionName,", '"*",'),
+    ],
+  ])("rejects a deployment script that %s", (_description, mutateScript) => {
+    expect(() => validateProductionFunctionDeploymentScript(
+      mutateScript(CANONICAL_PRODUCTION_FUNCTION_DEPLOYMENT_SCRIPT),
+    )).toThrow(
+      /exact production Function deployment script/i,
+    );
+  });
+
+  it("rejects an indirect secondary Function deploy command in another step", () => {
+    const configuration = validConfiguration();
+    configuration.backend.jobs.release.steps.push({
+      run: '"$DEPLOY_BIN" functions deploy unreviewed-function --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"',
+    });
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /exact production Function deployment loop/i,
+    );
+  });
+
+  it("rejects an indirect secondary deploy split by a shell continuation", () => {
+    const configuration = validConfiguration();
+    configuration.backend.jobs.release.steps.push({
+      run: '"$DEPLOY_BIN" functions \\\n  deploy unreviewed-function --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"',
+    });
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /exact production Function deployment loop/i,
+    );
+  });
+
+  it("rejects an indirect secondary deploy with quoted command words", () => {
+    const configuration = validConfiguration();
+    configuration.backend.jobs.release.steps.push({
+      run: '"$DEPLOY_BIN" "functions" "deploy" unreviewed-function --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"',
+    });
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /exact production Function deployment loop/i,
+    );
+  });
+
+  it.each([
+    '"$DEPLOY_BIN" functions de"ploy" unreviewed-function',
+    '"$DEPLOY_BIN" functions de\\\nploy unreviewed-function',
+  ])("rejects an unreviewed deploy assembled with shell syntax: %s", (run) => {
+    const configuration = validConfiguration();
+    configuration.backend.jobs.release.steps.push({ run });
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /exact production Function deployment loop/i,
+    );
+  });
+
+  it.each([
+    {
+      env: { BIN: "pnpm", ACTION: "deploy" },
+      run: '"$BIN" exec supabase functions "$ACTION" unreviewed-function --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"',
+    },
+    {
+      env: { BIN: "pnpm", ACTION_LEFT: "de", ACTION_RIGHT: "ploy" },
+      run: '"$BIN" exec supabase functions "${ACTION_LEFT}${ACTION_RIGHT}" unreviewed-function --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"',
+    },
+  ])("rejects a variable-only secondary deploy command", (step) => {
+    const configuration = validConfiguration();
+    configuration.backend.jobs.release.steps.push(step);
+    configuration.backendSource = "unreviewed backend workflow source";
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /canonical backend workflow/i,
+    );
+  });
+
+  it.each([
+    "node scripts/deploy-production-functions.mjs --again",
+    "node scripts/de\"ploy\"-production-functions.mjs",
+    "node scripts/deploy-production-functions.mjs\nnode scripts/deploy-production-functions.mjs",
+  ])("rejects a non-canonical deployment entrypoint: %s", (run) => {
+    const configuration = validConfiguration();
+    const deployStep = configuration.backend.jobs.release.steps.find((step) =>
+      String(step.run ?? "").includes(
+        "node scripts/deploy-production-functions.mjs",
+      ),
+    );
+    deployStep.run = run;
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /exact production Function deployment loop/i,
+    );
+  });
+
+  it("rejects a Pages job that receives the student login signing secret", () => {
+    const configuration = validConfiguration();
+    configuration.pages.jobs.package.env = {
+      STUDENT_LOGIN_SIGNING_SECRET:
+        "${{ secrets.STUDENT_LOGIN_SIGNING_SECRET }}",
+    };
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /Pages.*student login signing secret/i,
+    );
+  });
+
+  it("never gives the Pages workflow the student login signing secret", () => {
+    expect(JSON.stringify(validConfiguration().pages)).not.toContain(
+      "STUDENT_LOGIN_SIGNING_SECRET",
+    );
+  });
+
   it("accepts separated, least-privilege, immutable release workflows", () => {
     expect(() => validateDeploymentConfiguration(validConfiguration())).not
       .toThrow();
@@ -785,7 +988,7 @@ describe("deployment workflow boundaries", () => {
     ["migration dry-run", "db push --dry-run"],
     ["migration apply", "db push --linked"],
     ["Function secrets", "supabase secrets set"],
-    ["Function deployment", "supabase functions deploy"],
+    ["Function deployment", "node scripts/deploy-production-functions.mjs"],
   ])("rejects bootstrap preflight after %s", (_label, marker) => {
     const configuration = validConfiguration();
     const steps = configuration.backend.jobs.release.steps;

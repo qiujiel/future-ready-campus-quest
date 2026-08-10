@@ -45,6 +45,19 @@ it("fails when a seeded answer-key marker reaches a fixture bundle", async () =>
   ]);
 });
 
+it.each([
+  ["student-login-signing-secret", "STUDENT_LOGIN_SIGNING_SECRET"],
+  ["student-passcode-hash", "passcodeHash"],
+  ["student-passcode-salt", "passcodeSalt"],
+])("fails when %s reaches a fixture bundle", async (marker, contents) => {
+  const directory = await temporaryBundle();
+  await writeFile(join(directory, "app.js"), contents);
+
+  await expect(scanBundle(directory)).resolves.toEqual([
+    expect.objectContaining({ marker, path: "app.js" }),
+  ]);
+});
+
 it("measures compressed JavaScript for the public budget gate", async () => {
   const directory = await temporaryBundle();
   await writeFile(join(directory, "app.js"), "const publicShell = true;");

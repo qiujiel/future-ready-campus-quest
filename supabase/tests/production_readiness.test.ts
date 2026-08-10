@@ -1,12 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
   APPLICATION_FUNCTION_NAMES,
+  PUBLIC_FUNCTION_NAMES,
   probeFunctionBoundaries,
   readinessSecretMatches,
 } from "../functions/production-readiness/core";
 
 describe("production readiness authorization", () => {
   const configured = "configured-readiness-secret-at-least-32-bytes";
+
+  it("includes returning student login in the exact public boundary set", () => {
+    expect(APPLICATION_FUNCTION_NAMES).toContain("student-login");
+    expect(PUBLIC_FUNCTION_NAMES).toEqual([
+      "join-cohort",
+      "recover-student",
+      "student-login",
+    ]);
+  });
 
   it("accepts only the exact dedicated readiness secret", async () => {
     await expect(readinessSecretMatches(configured, configured)).resolves
@@ -23,7 +33,11 @@ describe("production readiness authorization", () => {
   });
 
   it("probes deployed boundaries with the modern publishable key", async () => {
-    const publicFunctions = new Set(["join-cohort", "recover-student"]);
+    const publicFunctions = new Set([
+      "join-cohort",
+      "recover-student",
+      "student-login",
+    ]);
     const fetcher = vi.fn(async (url: string | URL | Request) => {
       const name = String(url).split("/").at(-1) ?? "";
       return new Response(null, {
@@ -36,7 +50,7 @@ describe("production readiness authorization", () => {
       publishableKey: "modern-publishable-key",
       frontendOrigin: "https://school.example",
       fetcher,
-    })).resolves.toEqual({ edgeFunctionsReady: 10 });
+    })).resolves.toEqual({ edgeFunctionsReady: 11 });
     expect(fetcher).toHaveBeenCalledTimes(APPLICATION_FUNCTION_NAMES.length);
     expect(fetcher).toHaveBeenCalledWith(
       "https://abcdefghijklmnopqrst.supabase.co/functions/v1/teacher-controls",
@@ -59,7 +73,7 @@ describe("production readiness authorization", () => {
       publishableKey: "modern-publishable-key",
       frontendOrigin: "https://school.example",
       fetcher,
-    })).resolves.toEqual({ edgeFunctionsReady: 10 });
+    })).resolves.toEqual({ edgeFunctionsReady: 11 });
   });
 
   it("rejects a missing or incorrectly configured function boundary", async () => {

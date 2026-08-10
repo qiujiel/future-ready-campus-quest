@@ -15,6 +15,7 @@ function functionEnvironment(overrides = {}) {
       "https://qiujiel.github.io/future-ready-campus-quest",
     JOIN_TOKEN_SIGNING_SECRET: "j".repeat(32),
     RECOVERY_TOKEN_SIGNING_SECRET: "r".repeat(32),
+    STUDENT_LOGIN_SIGNING_SECRET: "s".repeat(32),
     PRODUCTION_READINESS_SECRET: "p".repeat(32),
     ...overrides,
   };
@@ -43,10 +44,12 @@ function environment(overrides = {}) {
 function readinessReport(overrides = {}) {
   return {
     requiredMigrationsPresent: true,
-    latestGateDMigration: "20260806000700",
+    latestGateDMigration: "20260810001000",
     requiredFunctionsPresent: true,
+    studentLoginObjectsPresent: true,
+    studentLoginSecurityReady: true,
     cleanupScheduleReady: true,
-    edgeFunctionsReady: 10,
+    edgeFunctionsReady: 11,
     openJoinWindows: 0,
     openRecoveryTokens: 0,
     contentVersion: {
@@ -119,7 +122,7 @@ describe("production Edge Function configuration", () => {
       frontendAppUrl:
         "https://qiujiel.github.io/future-ready-campus-quest",
       allowedOriginCount: 1,
-      secretCount: 3,
+      secretCount: 4,
     });
   });
 
@@ -181,7 +184,24 @@ describe("production Edge Function configuration", () => {
 
     expect(result).not.toContain(environment.JOIN_TOKEN_SIGNING_SECRET);
     expect(result).not.toContain(environment.RECOVERY_TOKEN_SIGNING_SECRET);
+    expect(result).not.toContain(environment.STUDENT_LOGIN_SIGNING_SECRET);
     expect(result).not.toContain(environment.PRODUCTION_READINESS_SECRET);
+  });
+
+  it("requires a distinct strong student login signing secret", () => {
+    expect(() =>
+      readFunctionConfiguration(
+        functionEnvironment({ STUDENT_LOGIN_SIGNING_SECRET: "too-short" }),
+      )
+    ).toThrow(/STUDENT_LOGIN_SIGNING_SECRET.*32 bytes/i);
+
+    expect(() =>
+      readFunctionConfiguration(
+        functionEnvironment({
+          STUDENT_LOGIN_SIGNING_SECRET: "j".repeat(32),
+        }),
+      )
+    ).toThrow(/must not be reused/i);
   });
 });
 
@@ -190,9 +210,9 @@ describe("production readiness report", () => {
     const configuration = readPreflightConfiguration(environment());
 
     expect(evaluateReadinessReport(readinessReport(), configuration)).toEqual({
-      latestGateDMigration: "20260806000700",
+      latestGateDMigration: "20260810001000",
       cleanupScheduleReady: true,
-      edgeFunctionsReady: 10,
+      edgeFunctionsReady: 11,
       contentVersion: {
         versionKey: "approved-v1",
         itemCount: 24,
@@ -220,15 +240,50 @@ describe("production readiness report", () => {
     ).toThrow(/required Gate D migrations.*required Gate D functions/i);
   });
 
+  it("rejects a database report that predates the security-readiness migration", () => {
+    const configuration = readPreflightConfiguration(environment(), {
+      backendOnly: true,
+    });
+
+    expect(() => evaluateReadinessReport(
+      readinessReport({ latestGateDMigration: "20260810000900" }),
+      configuration,
+    )).toThrow(/required Gate D migrations/i);
+  });
+
+  it("rejects a database report missing the student-login RPCs or private objects", () => {
+    const configuration = readPreflightConfiguration(environment(), {
+      backendOnly: true,
+    });
+
+    expect(() => evaluateReadinessReport(
+      readinessReport({
+        studentLoginObjectsPresent: false,
+      }),
+      configuration,
+    )).toThrow(/student-login RPCs or private objects/i);
+  });
+
+  it("rejects student-login ownership, RLS, search-path, or ACL drift", () => {
+    const configuration = readPreflightConfiguration(environment(), {
+      backendOnly: true,
+    });
+
+    expect(() => evaluateReadinessReport(
+      readinessReport({ studentLoginSecurityReady: false }),
+      configuration,
+    )).toThrow(/student-login runtime security/i);
+  });
+
   it("omits classroom fixtures from backend-only evidence", () => {
     const configuration = readPreflightConfiguration(environment(), {
       backendOnly: true,
     });
 
     expect(evaluateReadinessReport(readinessReport(), configuration)).toEqual({
-      latestGateDMigration: "20260806000700",
+      latestGateDMigration: "20260810001000",
       cleanupScheduleReady: true,
-      edgeFunctionsReady: 10,
+      edgeFunctionsReady: 11,
       basePath: "/campus-quest/",
     });
   });

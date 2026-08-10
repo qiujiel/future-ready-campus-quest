@@ -48,6 +48,12 @@ function confirmation(command: TeacherControlCommand | null) {
         consequence:
           "A short-lived, single-use recovery link will be created for this student only.",
       };
+    case "transfer-editor":
+      return {
+        title: "Confirm make group leader",
+        consequence:
+          "The selected student will become the sole group-information editor for this group.",
+      };
     default:
       return {
         title: "Confirm roster control",
@@ -139,7 +145,12 @@ export function ClassroomReadiness({
                         </Button>
                       ) : null}
                     </td>
-                    <td>{student.displayName}</td>
+                    <td>
+                      {student.displayName}
+                      {student.isGroupLeader ? (
+                        <> <strong>Group leader</strong></>
+                      ) : null}
+                    </td>
                     <td>
                       <time dateTime={student.joinedAt}>
                         {new Date(student.joinedAt).toLocaleTimeString()}
@@ -153,6 +164,20 @@ export function ClassroomReadiness({
                     <td>{statusLabel(student.activityStatus)}</td>
                     <td><code>{student.studentId}</code></td>
                     <td>
+                      {!student.isGroupLeader ? (
+                        <Button
+                          variant="secondary"
+                          aria-label={`Make ${student.displayName} group leader`}
+                          onClick={() => setPending({
+                            action: "transfer-editor",
+                            cohortId: report.cohortId,
+                            groupId: group.groupId,
+                            studentId: student.studentId,
+                          })}
+                        >
+                          Make group leader
+                        </Button>
+                      ) : null}
                       {student.activityStatus === "joined" ? (
                         <>
                           <label>

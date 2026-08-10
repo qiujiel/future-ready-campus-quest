@@ -30,7 +30,24 @@ const previewAuthGateway: AuthGateway = {
   async createCohort() {
     return { cohortId: "preview-cohort" };
   },
+  async openJoinWindow() {
+    throw new Error("Preview class creation is not available.");
+  },
   async joinCohort(input) {
+    return {
+      identity: {
+        studentId: "preview-student",
+        cohortId: "preview-cohort",
+        groupId: syntheticGroup.groupId,
+        groupNumber: 2,
+        nickname: input.displayName,
+        isGroupIdentityEditor: true,
+      },
+      accessToken: "preview-only",
+      refreshToken: "preview-only",
+    };
+  },
+  async loginStudent(input) {
     return {
       identity: {
         studentId: "preview-student",
@@ -52,9 +69,6 @@ const previewAuthGateway: AuthGateway = {
 const previewGroupGateway: GroupStudioGateway = {
   async rename(_groupId, displayName) {
     return { ...syntheticGroup, displayName };
-  },
-  async transferEditor() {
-    return syntheticGroup;
   },
   async uploadImage(_groupId, _file, onProgress) {
     onProgress(100);
@@ -139,7 +153,7 @@ export function StudentExperiencePreview() {
         </p>
         <JoinPage
           gateway={previewAuthGateway}
-          joinToken="synthetic-preview-token-with-sufficient-entropy"
+          classAccessId="40000000-0000-4000-8000-000000000099"
           onJoined={(joined) => {
             setIdentity(joined.identity);
             setStep("studio");

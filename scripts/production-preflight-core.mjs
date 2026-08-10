@@ -1,5 +1,5 @@
 const DEDICATED_LOAD_PROJECT_REF = "vadyhuipwbtgbzpeisbn";
-const REQUIRED_GATE_D_MIGRATION = "20260806000700";
+const REQUIRED_GATE_D_MIGRATION = "20260810001000";
 
 function required(environment, name) {
   const value = environment[name]?.trim();
@@ -81,6 +81,7 @@ export function readProductionFunctionConfiguration(environment) {
   const secretNames = [
     "JOIN_TOKEN_SIGNING_SECRET",
     "RECOVERY_TOKEN_SIGNING_SECRET",
+    "STUDENT_LOGIN_SIGNING_SECRET",
     "PRODUCTION_READINESS_SECRET",
   ];
   const protectedSecrets = secretNames.map((name) => {
@@ -171,10 +172,16 @@ export function evaluateReadinessReport(report, configuration) {
   if (report?.requiredFunctionsPresent !== true) {
     failures.push("required Gate D functions are missing");
   }
+  if (report?.studentLoginObjectsPresent !== true) {
+    failures.push("student-login RPCs or private objects are missing");
+  }
+  if (report?.studentLoginSecurityReady !== true) {
+    failures.push("student-login runtime security is not ready");
+  }
   if (report?.cleanupScheduleReady !== true) {
     failures.push("required cleanup schedule is missing or altered");
   }
-  if (Number(report?.edgeFunctionsReady) !== 10) {
+  if (Number(report?.edgeFunctionsReady) !== 11) {
     failures.push("required Edge Function boundaries are not ready");
   }
 
@@ -207,7 +214,7 @@ export function evaluateReadinessReport(report, configuration) {
   const evidence = {
     latestGateDMigration: REQUIRED_GATE_D_MIGRATION,
     cleanupScheduleReady: true,
-    edgeFunctionsReady: 10,
+    edgeFunctionsReady: 11,
   };
   if (!configuration.backendOnly) {
     evidence.contentVersion = report.contentVersion;

@@ -4,6 +4,7 @@ import {
   issueSessionForExistingUser,
   publicAuthClient,
 } from "../_shared/auth.ts";
+import { trustedClientAddress } from "../_shared/client-address.ts";
 import {
   createInitialStudentIdentity,
   exchangeInitialStudentSession,
@@ -18,6 +19,11 @@ import {
   type StoredJoin,
   type SyntheticUser,
 } from "../_shared/join-core.ts";
+import {
+  deriveStudentNameLookupHash,
+  hashStudentPasscode,
+  normalizeStudentName,
+} from "../_shared/student-credentials-core.ts";
 import { RequestOriginError } from "../_shared/cors.ts";
 import { jsonResponse, readJson } from "../_shared/http.ts";
 import type {
@@ -56,6 +62,12 @@ function safeRpcError(error: { message: string }): never {
   if (error.message.includes("GROUP_FULL")) {
     throw new JoinBoundaryError("GROUP_FULL", 409);
   }
+  if (error.message.includes("STUDENT_RECOVERY_REQUIRED")) {
+    throw new JoinBoundaryError("STUDENT_RECOVERY_REQUIRED", 409);
+  }
+  if (error.message.includes("STUDENT_NAME_NOT_AVAILABLE")) {
+    throw new JoinBoundaryError("STUDENT_NAME_NOT_AVAILABLE", 409);
+  }
   throw new Error("JOIN_RPC_REJECTED");
 }
 
@@ -63,6 +75,7 @@ function dependencies(
   admin: SupabaseClient,
   publicClient: SupabaseClient,
   rateKeyHash: string,
+  credentialSecret: string,
   timings: Record<string, number>,
 ): JoinDependencies {
   async function measured<T>(name: string, action: () => Promise<T>): Promise<T> {
@@ -75,7 +88,7 @@ function dependencies(
   }
 
   return {
-    async prepareJoin(codeHash, requestKey) {
+    async prepareJoin(codeHash, requestKey, classAccessId) {
       return measured("preflight", async () => {
         const result = await admin.rpc("prepare_student_code_join", {
           p_code_hash: codeHash,
@@ -85,12 +98,41 @@ function dependencies(
         if (result.error) safeRpcError(result.error);
         const row = result.data?.[0] as Record<string, unknown> | undefined;
         if (!row) throw new Error("JOIN_PREPARE_MISSING");
+
+        const cohortId = typeof row.cohort_id === "string"
+          ? row.cohort_id
+          : "";
+        if (!cohortId) throw new Error("JOIN_PREPARE_SCOPE_MISSING");
+        const classScope = await admin
+          .from("cohorts")
+          .select("id")
+          .eq("id", cohortId)
+          .eq("student_access_id", classAccessId)
+          .maybeSingle();
+        if (classScope.error) throw new Error("JOIN_SCOPE_CHECK_FAILED");
+        if (!classScope.data) {
+          throw new JoinBoundaryError("INVALID_JOIN_CODE", 404);
+        }
+
         return {
           completed: row.completed
             ? { identity: mapIdentity(row) }
             : null,
           groupNumber: Number(row.group_number),
         };
+      });
+    },
+    async createCredential(classAccessId, displayName, passcode) {
+      return measured("credential", async () => {
+        const [nameLookupHash, storedPasscode] = await Promise.all([
+          deriveStudentNameLookupHash(
+            classAccessId,
+            normalizeStudentName(displayName),
+            credentialSecret,
+          ),
+          hashStudentPasscode(passcode),
+        ]);
+        return { nameLookupHash, passcode: storedPasscode };
       });
     },
     async findCompletedJoin(codeHash, requestKey): Promise<StoredJoin | null> {
@@ -129,6 +171,12 @@ function dependencies(
           p_request_key: input.requestKey,
           p_student_id: input.studentId,
           p_display_name: input.displayName,
+          p_student_access_id: input.classAccessId,
+          p_name_lookup_hash: input.nameLookupHash,
+          p_passcode_salt: input.passcodeSalt,
+          p_passcode_hash: input.passcodeHash,
+          p_passcode_iterations: input.passcodeIterations,
+          p_wants_leader: input.wantsLeader,
         });
         if (result.error) safeRpcError(result.error);
         const row = result.data?.[0] as Record<string, unknown> | undefined;
@@ -167,16 +215,22 @@ Deno.serve(async (request) => {
     if (!rateSecret || rateSecret.length < 32) {
       throw new Error("Join signing is not configured.");
     }
-    const clientAddress =
-      request.headers.get("cf-connecting-ip") ??
-      request.headers.get("x-real-ip") ??
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-      "unknown";
+    const credentialSecret = Deno.env.get("STUDENT_LOGIN_SIGNING_SECRET");
+    if (!credentialSecret || credentialSecret.length < 32) {
+      throw new Error("Student login signing is not configured.");
+    }
+    const clientAddress = trustedClientAddress(request.headers);
     const rateKeyHash = await hashJoinToken(`${rateSecret}\0${clientAddress}`);
     const timings: Record<string, number> = {};
     const result = await joinStudent(
       input,
-      dependencies(adminClient(), publicAuthClient(), rateKeyHash, timings),
+      dependencies(
+        adminClient(),
+        publicAuthClient(),
+        rateKeyHash,
+        credentialSecret,
+        timings,
+      ),
     );
     if (Deno.env.get("FRONTEND_APP_URL")?.includes("127.0.0.1")) {
       headers["Server-Timing"] = Object.entries(timings)

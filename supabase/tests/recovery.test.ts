@@ -190,6 +190,29 @@ it("denies an ordinary member from changing the group identity", async () => {
   ).rejects.toMatchObject({ code: "GROUP_ACTION_DENIED", status: 403 });
 });
 
+it("rejects student leader transfer commands before invoking the database", async () => {
+  const execute = vi.fn(async () => ({
+    groupId: "60000000-0000-4000-8000-000000000001",
+    groupNumber: 1,
+    displayName: "Group 1",
+    imageObjectPath: null,
+    lockedAt: null,
+  }));
+
+  await expect(
+    executeGroupIdentityCommand(
+      {
+        action: "transfer-editor",
+        groupId: "60000000-0000-4000-8000-000000000001",
+        nextEditorId: "20000000-0000-4000-8000-000000000002",
+        requestKey: "50000000-0000-4000-8000-000000000002",
+      },
+      { execute },
+    ),
+  ).rejects.toMatchObject({ code: "INVALID_GROUP_ACTION", status: 400 });
+  expect(execute).not.toHaveBeenCalled();
+});
+
 it("allows only a teacher to lock group identity editing", async () => {
   const command = {
     action: "lock" as const,

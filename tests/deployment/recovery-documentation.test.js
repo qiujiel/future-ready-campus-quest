@@ -125,6 +125,7 @@ const assertRunbookPolicy = (runbook) => {
     "archive creation/completion time",
     "quiesced recovery point",
     "approved full 40-character source SHA",
+    "20260810001000",
     "obtain a new",
     "Obtain separate approval to create",
     "After separate restore approval",
@@ -263,11 +264,13 @@ const assertBackendReleasePolicy = (backend) => {
     "attests that no write occurred after the recovery",
     "Any later plan change",
     "separately designed and validated evidence method",
+    "20260810001000_exact_login_acl_readiness.sql",
+    "owner-plus-service join/login RPC ACL allowlists",
   ]);
   assertPatterns(backend, [
     /only accepted recovery path[\s\S]*verified Free-plan encrypted logical/is,
     /Before approving\s+`production-backend`[\s\S]*compares all four inputs/is,
-    /one-time join p95 below 5\s+seconds[\s\S]*response p95 below 1\.5 seconds/is,
+    /one-time join p95 at or below 5\s+seconds[\s\S]*response p95 below 1\.5 seconds/is,
     /zero incorrect group assignments[\s\S]*zero duplicate student\s+identities/is,
   ]);
   rejectPatterns(backend, [
@@ -391,10 +394,11 @@ const assertChecklistPolicy = (checklist) => {
     "Independent reviewer signature/time",
     "Any unchecked item means **HOLD**",
     "No operator, owner, approver, or reviewer may waive",
-    "one-time join p95 below 5 seconds",
+    "one-time join p95 at or below 5 seconds",
     "response p95 below 1.5 seconds",
     "zero incorrect group assignments",
     "zero duplicate student identities",
+    "20260810001000_exact_login_acl_readiness.sql",
   ]);
 
   for (const label of remoteApprovalLabels) {
@@ -439,6 +443,7 @@ const assertReadinessReviewPolicy = (review) => {
     "smoke teacher/cohort fixtures",
     "Free-plan pause/availability",
     "complete every item and signature",
+    "20260810001000",
   ]);
 };
 

@@ -17,6 +17,7 @@ export interface LocalClassroomConfiguration {
   cohortTitle?: string;
   groupCount?: number;
   groupCapacity?: number;
+  allowSyntheticContent?: boolean;
 }
 
 export function assertLocalSupabaseUrl(value: string): URL {
@@ -53,10 +54,15 @@ export async function bootstrapLocalClassroom(
     throw new Error("Local teacher credentials are incomplete.");
   }
 
-  const bank = validateContentBank(configuration.bank, { production: true });
+  const bank = validateContentBank(configuration.bank, {
+    production: !configuration.allowSyntheticContent,
+  });
   const content = await importProtectedContent(bank, {
     supabaseUrl: configuration.supabaseUrl,
     secretKey: configuration.serviceRoleKey,
+    ...(configuration.allowSyntheticContent
+      ? { allowSyntheticContent: true }
+      : {}),
   });
   const admin = createClient(
     configuration.supabaseUrl,
@@ -150,12 +156,14 @@ async function main() {
       "protected-content/generated/question-bank.json",
   );
   const bank = JSON.parse(await readFile(bankPath, "utf8")) as unknown;
+  const allowSyntheticContent = process.env.LOCAL_SYNTHETIC_CONTENT === "1";
   const receipt = await bootstrapLocalClassroom({
     supabaseUrl: process.env.SUPABASE_URL ?? "",
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
     teacherEmail: process.env.LOCAL_TEACHER_EMAIL ?? "",
     teacherPassword: process.env.LOCAL_TEACHER_PASSWORD ?? "",
-    bank: validateContentBank(bank, { production: true }),
+    bank: validateContentBank(bank, { production: !allowSyntheticContent }),
+    allowSyntheticContent,
   });
   console.log(JSON.stringify(receipt));
 }

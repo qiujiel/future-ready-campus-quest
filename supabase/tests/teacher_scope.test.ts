@@ -5,9 +5,75 @@ import {
   type TeacherDashboardRepository,
 } from "../functions/_shared/teacher-dashboard-core";
 import type { TeacherDashboardSummary } from "../../src/shared/api/contracts";
+import {
+  buildStudentClassUrl,
+  loadTeacherStudentAccessId,
+} from "../functions/_shared/teacher-class-access";
 
 const cohortId = "c1000000-0000-4000-8000-000000000001";
 const teacherId = "c2000000-0000-4000-8000-000000000001";
+const studentAccessId = "c3000000-0000-4000-8000-000000000099";
+
+it("loads the opaque class access id and never places the internal cohort id in the student URL", async () => {
+  const client = {
+    from(table: string) {
+      return {
+        select(columns: string) {
+          return {
+            eq(column: string, value: string) {
+              return {
+                async maybeSingle() {
+                  if (
+                    table !== "cohorts" ||
+                    columns !== "student_access_id" ||
+                    column !== "id" ||
+                    value !== cohortId
+                  ) {
+                    return { data: null, error: { code: "WRONG_SCOPE" } };
+                  }
+                  return {
+                    data: { student_access_id: studentAccessId },
+                    error: null,
+                  };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+
+  const loaded = await loadTeacherStudentAccessId(client, cohortId);
+  const url = buildStudentClassUrl("https://campus.example/course", loaded);
+
+  expect(url).toBe(`https://campus.example/course/#/class/${studentAccessId}`);
+  expect(url).not.toContain(cohortId);
+});
+
+it("rejects a missing or unauthorized class access id neutrally", async () => {
+  const client = {
+    from() {
+      return {
+        select() {
+          return {
+            eq() {
+              return {
+                async maybeSingle() {
+                  return { data: null, error: { code: "PGRST116" } };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+
+  await expect(loadTeacherStudentAccessId(client, cohortId)).rejects.toThrow(
+    "CLASS_ACCESS_NOT_AVAILABLE",
+  );
+});
 
 function summary(): TeacherDashboardSummary {
   return {
@@ -147,13 +213,13 @@ it("derives only enabled group codes and removes trusted join-window fields", as
       ],
     },
     "test-signing-secret-with-at-least-32-characters",
-    "https://campus.example/#/join",
+    `https://campus.example/#/class/${studentAccessId}`,
   );
 
   expect(result.joining).toEqual({
     open: true,
     expiresAt: "2030-01-01T09:15:00.000Z",
-    studentUrl: "https://campus.example/#/join",
+    studentUrl: `https://campus.example/#/class/${studentAccessId}`,
   });
   expect(result.groups[0]?.joinCode).toMatch(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/);
   expect(result.groups[1]?.joinCode).toBeNull();
@@ -191,7 +257,7 @@ it("does not expose group codes after joining closes", async () => {
       ],
     },
     "test-signing-secret-with-at-least-32-characters",
-    "https://campus.example/#/join",
+    `https://campus.example/#/class/${studentAccessId}`,
   );
 
   expect(result.joining.open).toBe(false);

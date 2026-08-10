@@ -17,8 +17,11 @@ export type LearningPhase =
   | "reflection";
 
 export interface JoinCohortInput {
+  classAccessId: string;
   joinCode: string;
   displayName: string;
+  passcode: string;
+  wantsLeader: boolean;
   requestKey: string;
 }
 
@@ -40,6 +43,17 @@ export interface JoinCohortOutput extends SessionTokens {
   identity: StudentIdentity;
 }
 
+export interface StudentLoginInput {
+  classAccessId: string;
+  displayName: string;
+  passcode: string;
+  requestKey: string;
+}
+
+export interface StudentLoginOutput extends SessionTokens {
+  identity: StudentIdentity;
+}
+
 export interface PublicGroupIdentity {
   groupId: string;
   groupNumber: number;
@@ -52,7 +66,6 @@ export interface CreateCohortInput {
   action: "create-cohort";
   title: string;
   groupCount: number;
-  groupCapacity: number;
   requestKey: string;
 }
 
@@ -109,12 +122,6 @@ export type GroupIdentityCommand =
       action: "rename";
       groupId: string;
       displayName: string;
-      requestKey: string;
-    }
-  | {
-      action: "transfer-editor";
-      groupId: string;
-      nextEditorId: string;
       requestKey: string;
     }
   | {
@@ -267,6 +274,7 @@ export type TeacherStudentActivityStatus =
 export interface TeacherRosterStudent {
   studentId: string;
   displayName: string;
+  isGroupLeader: boolean;
   joinedAt: string;
   lastActiveAt: string | null;
   activityStatus: TeacherStudentActivityStatus;

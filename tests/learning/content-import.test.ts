@@ -7,7 +7,10 @@ import {
   convertProtectedBlueprint,
   parseQuestionBlock,
 } from "../../scripts/convert-protected-blueprint";
-import { assertImportConfiguration } from "../../scripts/import-protected-content";
+import {
+  assertImportConfiguration,
+  prepareLocalSyntheticContent,
+} from "../../scripts/import-protected-content";
 
 describe("protected content schema", () => {
   it("accepts exactly three synthetic items for every C1-C8 concept", () => {
@@ -175,6 +178,42 @@ describe("protected import safeguards", () => {
         secretKey: "synthetic-local-service-role-key",
       }),
     ).toBe("local");
+  });
+
+  it("permits synthetic content only for an explicitly local import", () => {
+    expect(() =>
+      assertImportConfiguration({
+        supabaseUrl: "http://127.0.0.1:54321",
+        secretKey: "synthetic-local-service-role-key",
+        allowSyntheticContent: true,
+      }),
+    ).not.toThrow();
+
+    const hostedProjectRef = "abcdefghijklmnopqrst";
+    expect(() =>
+      assertImportConfiguration({
+        supabaseUrl: `https://${hostedProjectRef}.supabase.co`,
+        secretKey: "synthetic-hosted-service-role-key",
+        confirmedProjectRef: hostedProjectRef,
+        allowSyntheticContent: true,
+      }),
+    ).toThrow(/synthetic content.*local/i);
+  });
+
+  it("maps local-only synthetic provenance to a database-supported source", () => {
+    const bank = validateContentBank(syntheticBank, { production: false });
+    const prepared = prepareLocalSyntheticContent(bank);
+
+    expect(
+      bank.items.every((item) =>
+        item.sourceRefs.every(({ document }) => document === "public-synthetic")
+      ),
+    ).toBe(true);
+    expect(
+      prepared.items.every((item) =>
+        item.sourceRefs.every(({ document }) => document === "overview-ict")
+      ),
+    ).toBe(true);
   });
 
   it("requires a privileged Supabase secret key", () => {

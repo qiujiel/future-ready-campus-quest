@@ -77,16 +77,24 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
+          set +x
+          umask 077
           JOIN_TOKEN_SIGNING_SECRET="$(openssl rand -hex 32)"
           RECOVERY_TOKEN_SIGNING_SECRET="$(openssl rand -hex 32)"
+          STUDENT_LOGIN_SIGNING_SECRET="$(openssl rand -hex 32)"
           PRODUCTION_READINESS_SECRET="$(openssl rand -hex 32)"
+          test "$STUDENT_LOGIN_SIGNING_SECRET" != "$JOIN_TOKEN_SIGNING_SECRET"
+          test "$STUDENT_LOGIN_SIGNING_SECRET" != "$RECOVERY_TOKEN_SIGNING_SECRET"
+          test "$STUDENT_LOGIN_SIGNING_SECRET" != "$PRODUCTION_READINESS_SECRET"
           printf '%s\n' \
             "ALLOWED_FRONTEND_ORIGINS=http://127.0.0.1:4173" \
             "FRONTEND_APP_URL=http://127.0.0.1:4173" \
             "JOIN_TOKEN_SIGNING_SECRET=$JOIN_TOKEN_SIGNING_SECRET" \
             "RECOVERY_TOKEN_SIGNING_SECRET=$RECOVERY_TOKEN_SIGNING_SECRET" \
+            "STUDENT_LOGIN_SIGNING_SECRET=$STUDENT_LOGIN_SIGNING_SECRET" \
             "PRODUCTION_READINESS_SECRET=$PRODUCTION_READINESS_SECRET" \
             > /tmp/campus-quest-load-functions.env
+          chmod 600 /tmp/campus-quest-load-functions.env
           pnpm exec supabase secrets set \
             --project-ref "$LOAD_SUPABASE_PROJECT_REF" \
             --env-file /tmp/campus-quest-load-functions.env

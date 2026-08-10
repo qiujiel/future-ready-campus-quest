@@ -12,6 +12,10 @@ import {
   TeacherControlBoundaryError,
 } from "../_shared/teacher-controls-core.ts";
 import { jsonResponse, readJson } from "../_shared/http.ts";
+import {
+  buildStudentClassUrl,
+  loadTeacherStudentAccessId,
+} from "../_shared/teacher-class-access.ts";
 import type {
   TeacherControlCommand,
 } from "../../../src/shared/api/contracts.ts";
@@ -123,22 +127,15 @@ Deno.serve(async (request) => {
       if (!secret || secret.length < 32) throw new Error("CONFIGURATION");
       const rawToken = await deriveEdgeToken(input.requestKey, secret);
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-      const result = await client.rpc("open_cohort_join_window", {
-        p_cohort_id: input.cohortId,
-        p_token_hash: await hashEdgeToken(rawToken),
-        p_expires_at: expiresAt,
-        p_request_key: input.requestKey,
-      });
-      if (result.error) throw new Error("CONTROL_NOT_AVAILABLE");
-      const joinWindowId = typeof result.data?.id === "string"
-        ? result.data.id
-        : "";
-      const groups = await client
-        .from("groups")
-        .select("id,group_number")
-        .eq("cohort_id", input.cohortId)
-        .order("group_number");
-      if (!joinWindowId || groups.error || !groups.data) {
+      const [studentAccessId, groups] = await Promise.all([
+        loadTeacherStudentAccessId(client, input.cohortId),
+        client
+          .from("groups")
+          .select("id,group_number")
+          .eq("cohort_id", input.cohortId)
+          .order("group_number"),
+      ]);
+      if (groups.error || !groups.data) {
         throw new Error("CONTROL_NOT_AVAILABLE");
       }
       const generated = await createGroupJoinCodes(
@@ -149,19 +146,25 @@ Deno.serve(async (request) => {
         input.requestKey,
         secret,
       );
-      const configured = await client.rpc("configure_cohort_group_join_codes", {
+      const studentUrl = buildStudentClassUrl(
+        frontendAppUrl(),
+        studentAccessId,
+      );
+      const result = await client.rpc("open_cohort_join_window_with_codes", {
         p_cohort_id: input.cohortId,
-        p_join_window_id: joinWindowId,
+        p_token_hash: await hashEdgeToken(rawToken),
+        p_expires_at: expiresAt,
+        p_request_key: input.requestKey,
         p_codes: generated.persistence,
       });
-      if (configured.error || configured.data !== true) {
-        throw new Error("CONTROL_NOT_AVAILABLE");
-      }
-      const studentUrl = `${frontendAppUrl()}/#/join`;
+      if (result.error) throw new Error("CONTROL_NOT_AVAILABLE");
+      const persistedExpiry = typeof result.data?.expires_at === "string"
+        ? result.data.expires_at
+        : expiresAt;
       return jsonResponse({
         affected: 0,
         actionState: "open",
-        expiresAt,
+        expiresAt: persistedExpiry,
         joinUrl: studentUrl,
         studentUrl,
         groups: generated.receipts,

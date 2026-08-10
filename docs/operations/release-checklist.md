@@ -34,6 +34,9 @@ Release record:
   group codes, and students per run; no static load token or fixture ID exists.
 - [ ] `github-pages` contains no Supabase secret.
 - [ ] Public `VITE_*` values contain no service-role or private credential.
+- [ ] `STUDENT_LOGIN_SIGNING_SECRET` is an independently generated encrypted
+  `production-backend` secret of at least 32 characters, distinct from join,
+  recovery, and readiness secrets, and absent from every Pages/frontend scope.
 - [ ] Environment verification completed at `________________` by
   `________________` and `________________`.
 
@@ -108,10 +111,13 @@ it was not required. A blank or assumed `N/A` leaves the item unchecked.
 - [ ] Dedicated-project live-load evidence reports all 30 students in five
   teams of six and zero incorrect group assignments. It must also report zero duplicate student identities,
   zero duplicate responses, zero authorized failures, zero accepted unauthorized
-  calls, one-time join p95 below 5 seconds, response p95 below 1.5 seconds, and
+  calls, one-time join p95 at or below 5 seconds, response p95 below 1.5 seconds, and
   dashboard p95 below 2.5 seconds. Record the measured initial-join latency as
   a known limitation; do not weaken authentication, validation, rate/capacity
   controls, replay protection, RLS, isolation, or teacher authorization.
+- [ ] After joining closes, five returning name/passcode logins restore the
+  same five student/group identities with zero failures and create zero new
+  Auth users.
 - [ ] The installed join preflight permits 45 shared-network attempts per minute
   for one 30-student class while retaining the 90-request join-window cap.
 - [ ] Release action references are reviewed full commit SHAs.
@@ -126,10 +132,11 @@ it was not required. A blank or assumed `N/A` leaves the item unchecked.
   evidence.
 - [ ] `supabase migration list` is captured before mutation.
 - [ ] Migration dry-run contains only reviewed forward migrations, in timestamp
-  order, through `20260806000700`.
+  order, including `20260810000100_simplified_student_login.sql` through
+  `20260810001000_exact_login_acl_readiness.sql`.
 - [ ] `production-backend` approval was granted by `________________` at
   `________________`.
-- [ ] Migration push, five custom secret updates, and all eleven function deploys
+- [ ] Migration push, eight custom secret updates, and the exact twelve Function deploys
   succeeded in the same workflow run.
 - [ ] Backend preflight confirms Auth health, required migration history/RPCs,
   the exact active cleanup schedule, function boundaries, and the exact
@@ -185,10 +192,24 @@ it was not required. A blank or assumed `N/A` leaves the item unchecked.
   checks pass without recording names, answers, or tokens.
 - [ ] One shared student URL accepts display name plus short group code, and no
   student can start until the teacher launches the cohort quest.
+- [ ] Teacher setup asks only for class name and 1–20 groups; every group uses
+  the same class URL, receives a distinct time-limited code, and retains the
+  internal 20-student capacity control.
+- [ ] A first-time student creates one account with name, group code, matching
+  four-digit passcode, and leader choice; only the first successful leader
+  claim can edit group information.
+- [ ] After browser-session loss and joining closure, the same student restores
+  the same group and saved progress with name/passcode; no passcode or derived
+  credential appears in responses, exports, logs, storage, or the public bundle.
 - [ ] Teacher roster move, remove, reset, and recovery controls pass with
   confirmation, ownership enforcement, session revocation, and audit evidence.
 - [ ] Joining remains closed until the teacher intentionally opens the class.
 - [ ] Observation owner and end time: `________________` / `________________`.
+
+- [ ] If acceptance fails: joining is closed; the failed artifact/run evidence
+  is retained; Pages and Functions roll back to the recorded compatible commit
+  before any separately approved database restore; artifact commit/manifest
+  digests are reverified throughout.
 
 ## Decision
 
