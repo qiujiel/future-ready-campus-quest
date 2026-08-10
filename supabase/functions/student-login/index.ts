@@ -4,6 +4,7 @@ import {
   issueSessionForExistingUser,
   publicAuthClient,
 } from "../_shared/auth.ts";
+import { trustedClientAddress } from "../_shared/client-address.ts";
 import { corsHeaders, RequestOriginError } from "../_shared/cors.ts";
 import { jsonResponse, readJson } from "../_shared/http.ts";
 import {
@@ -183,11 +184,7 @@ Deno.serve(async (request) => {
     if (!signingSecret || signingSecret.length < 32) {
       throw new Error("Student login signing is not configured.");
     }
-    const clientAddress =
-      request.headers.get("cf-connecting-ip") ??
-      request.headers.get("x-real-ip") ??
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-      "unknown";
+    const clientAddress = trustedClientAddress(request.headers);
     const result = await loginStudent(
       await readJson(request) as StudentLoginInput,
       dependencies(

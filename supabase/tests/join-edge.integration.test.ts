@@ -108,6 +108,53 @@ function seedCredentiallessProfiles(input: {
   );
 }
 
+function studentLoginRateKeyHash(requestKey: string): string {
+  if (!/^[a-f0-9-]{36}$/i.test(requestKey)) {
+    throw new Error("Invalid login-attempt integration fixture UUID");
+  }
+  return execFileSync(
+    "docker",
+    [
+      "exec",
+      process.env.TEST_SUPABASE_DB_CONTAINER ??
+        "supabase_db_future-ready-campus-quest",
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      "-tA",
+      "-c",
+      `select rate_key_hash from private.student_login_attempts where id = '${requestKey}'`,
+    ],
+    { encoding: "utf8" },
+  ).trim();
+}
+
+function clearIntegrationGroupLeader(groupId: string) {
+  if (!/^[a-f0-9-]{36}$/i.test(groupId)) {
+    throw new Error("Invalid leaderless integration fixture UUID");
+  }
+  execFileSync(
+    "docker",
+    [
+      "exec",
+      process.env.TEST_SUPABASE_DB_CONTAINER ??
+        "supabase_db_future-ready-campus-quest",
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-c",
+      `update public.groups set identity_editor_id = null where id = '${groupId}'`,
+    ],
+    { stdio: ["ignore", "ignore", "pipe"] },
+  );
+}
+
 it("rejects an unknown group code before creating a synthetic Auth user", async () => {
   const before = await authUserCount();
   const response = await fetch(`${apiUrl}/functions/v1/join-cohort`, {
@@ -281,7 +328,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
         joinCode,
         displayName: "Synthetic Integration Learner",
         passcode: studentPasscode,
-        wantsLeader: true,
+        wantsLeader: false,
         requestKey: crypto.randomUUID(),
       }),
     });
@@ -290,7 +337,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
     expect(payload.identity).toMatchObject({
       cohortId,
       groupNumber: 1,
-      isGroupIdentityEditor: true,
+      isGroupIdentityEditor: false,
     });
     expect(payload.identity).not.toHaveProperty("realName");
     studentId = payload.identity.studentId;
@@ -322,7 +369,6 @@ it("completes a valid join against real Auth and database boundaries", async () 
           studentId,
           displayName: "Synthetic Integration Learner",
           activityStatus: "joined",
-          isGroupLeader: true,
         },
       ],
     });
@@ -440,6 +486,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
         (group: { groupNumber: number }) => group.groupNumber === 2,
       ).students[0],
     ).toMatchObject({ studentId, displayName: "Synthetic Integration Learner" });
+    clearIntegrationGroupLeader(targetGroupId);
 
     const launched = await teacherClient.functions.invoke("teacher-controls", {
       body: {
@@ -484,6 +531,8 @@ it("completes a valid join against real Auth and database boundaries", async () 
       displayName: string,
       passcode: string,
       requestedClassAccessId = classAccessId,
+      extraHeaders: Record<string, string> = {},
+      requestKey = crypto.randomUUID(),
     ) =>
       await fetch(`${apiUrl}/functions/v1/student-login`, {
         method: "POST",
@@ -491,14 +540,73 @@ it("completes a valid join against real Auth and database boundaries", async () 
           Origin: allowedOrigin,
           apikey: anonKey,
           "Content-Type": "application/json",
+          ...extraHeaders,
         },
         body: JSON.stringify({
           classAccessId: requestedClassAccessId,
           displayName,
           passcode,
-          requestKey: crypto.randomUUID(),
+          requestKey,
         }),
       });
+
+    const firstSpoofedRequestKey = crypto.randomUUID();
+    const firstSpoofed = await loginRequest(
+      "Spoofed Address One",
+      "4826",
+      classAccessId,
+      {
+        "x-real-ip": "198.51.100.10",
+        "x-forwarded-for": "203.0.113.7, 192.0.2.9",
+      },
+      firstSpoofedRequestKey,
+    );
+    expect(firstSpoofed.status).toBe(401);
+    const secondSpoofedRequestKey = crypto.randomUUID();
+    const secondSpoofed = await loginRequest(
+      "Spoofed Address Two",
+      "4826",
+      classAccessId,
+      {
+        "x-real-ip": "192.0.2.44",
+        "x-forwarded-for": "198.51.100.77",
+      },
+      secondSpoofedRequestKey,
+    );
+    expect(secondSpoofed.status).toBe(401);
+    expect(studentLoginRateKeyHash(secondSpoofedRequestKey)).toBe(
+      studentLoginRateKeyHash(firstSpoofedRequestKey),
+    );
+
+    const expandedIpv6RequestKey = crypto.randomUUID();
+    const expandedIpv6 = await loginRequest(
+      "Gateway Address Expanded",
+      "4826",
+      classAccessId,
+      {
+        "cf-connecting-ip":
+          "2001:0DB8:0000:0000:0000:0000:0000:0001",
+        "x-real-ip": "198.51.100.100",
+      },
+      expandedIpv6RequestKey,
+    );
+    expect(expandedIpv6.status).toBe(401);
+    const compressedIpv6RequestKey = crypto.randomUUID();
+    const compressedIpv6 = await loginRequest(
+      "Gateway Address Compressed",
+      "4826",
+      classAccessId,
+      { "cf-connecting-ip": "2001:db8::1" },
+      compressedIpv6RequestKey,
+    );
+    expect(compressedIpv6.status).toBe(401);
+    expect(studentLoginRateKeyHash(compressedIpv6RequestKey)).toBe(
+      studentLoginRateKeyHash(expandedIpv6RequestKey),
+    );
+    expect(studentLoginRateKeyHash(compressedIpv6RequestKey)).not.toBe(
+      studentLoginRateKeyHash(firstSpoofedRequestKey),
+    );
+
     const wrongName = await loginRequest("Unknown Integration Learner", "4826");
     const wrongNameBody = await wrongName.text();
     expect(wrongName.status).toBe(401);
@@ -539,6 +647,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
       cohortId,
       groupId: targetGroupId,
       groupNumber: 2,
+      isGroupIdentityEditor: false,
     });
     expect(JSON.stringify(returningPayload)).not.toContain(studentPasscode);
     expect(JSON.stringify(returningPayload)).not.toContain(

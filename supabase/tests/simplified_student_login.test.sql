@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(50);
+select plan(51);
 
 select has_column(
   'public',
@@ -675,6 +675,18 @@ select results_eq(
        'Explorer 1'::text
      ) $$,
   'the trusted identity RPC returns one active student in its own class'
+);
+
+select results_eq(
+  $$ select student_id, is_group_identity_editor
+     from public.load_student_login_identity(
+       '30000000-0000-4000-8000-000000000021'
+     ) $$,
+  $$ values (
+       '30000000-0000-4000-8000-000000000021'::uuid,
+       false
+     ) $$,
+  'the trusted identity RPC returns false when the group has no leader'
 );
 
 update public.student_private_profiles

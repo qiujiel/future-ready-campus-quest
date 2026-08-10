@@ -4,6 +4,7 @@ import {
   issueSessionForExistingUser,
   publicAuthClient,
 } from "../_shared/auth.ts";
+import { trustedClientAddress } from "../_shared/client-address.ts";
 import {
   createInitialStudentIdentity,
   exchangeInitialStudentSession,
@@ -218,11 +219,7 @@ Deno.serve(async (request) => {
     if (!credentialSecret || credentialSecret.length < 32) {
       throw new Error("Student login signing is not configured.");
     }
-    const clientAddress =
-      request.headers.get("cf-connecting-ip") ??
-      request.headers.get("x-real-ip") ??
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-      "unknown";
+    const clientAddress = trustedClientAddress(request.headers);
     const rateKeyHash = await hashJoinToken(`${rateSecret}\0${clientAddress}`);
     const timings: Record<string, number> = {};
     const result = await joinStudent(
