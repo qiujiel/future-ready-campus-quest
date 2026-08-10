@@ -7,6 +7,7 @@ does not authorize deployment.
 | Field | Value |
 | --- | --- |
 | Release owner | `________________` |
+| Operational/privacy incident contact | `________________` |
 | Approved main commit (40 characters) | `________________` |
 | Production Supabase project ref | `ghohuwwjxgjqnbsauvzq` |
 | Dedicated load-test project ref | `vadyhuipwbtgbzpeisbn` |
@@ -19,13 +20,18 @@ does not authorize deployment.
   production project ref; the load project is not a target.
 - [ ] `release_mode` is `disposable-upgrade` and the bootstrap identifier is
   empty, or it is the separately authorized `bootstrap` path.
-- [ ] The aggregate disposable-state preflight completes before mutation and
+- [ ] For `disposable-upgrade`, the aggregate disposable-state preflight completes before mutation and
   proves the exact marked owner, closed five-group classroom, zero protected
   user/application state, zero `group-images` objects, and no query, aggregate,
   identity, or project-target error.
+- [ ] For the separately authorized `bootstrap` path, the strict empty-bootstrap
+  preflight completes before mutation.
 - [ ] Any nonzero or unverifiable result stops the release; no data is deleted
   to make the preflight pass.
 - [ ] Joining is closed and new quest starts are paused.
+- [ ] The operational/privacy incident contact is named before production and
+  can coordinate access revocation, token invalidation, artifact removal,
+  incident notes, and required school privacy notifications.
 
 ## Automated and deployment gates
 

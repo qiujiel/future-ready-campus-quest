@@ -193,7 +193,10 @@ const assertDisposablePolicy = ({ runbook, backend, checklist, readiness, github
   expect(backend).toMatch(/at or below 7 seconds/i);
 
   expect(checklist).toContain("`disposable-upgrade`");
-  expect(checklist).toMatch(/aggregate disposable-state preflight.*before mutation/is);
+  expect(checklist).toMatch(/for `disposable-upgrade`, the aggregate disposable-state preflight.*before mutation/is);
+  expect(checklist).toMatch(/for the separately authorized `bootstrap` path, the strict empty-bootstrap\s+preflight completes before mutation/i);
+  expect(checklist).toMatch(/\| Operational\/privacy incident contact \| `________________` \|/);
+  expect(checklist).toMatch(/operational\/privacy incident contact is named before production/i);
   expect(checklist).toMatch(/exact approved 40-character\s+`main` SHA/i);
   expect(checklist).toMatch(/one-time join p95 at or below 7 seconds/i);
   expect(checklist).toMatch(/6,882\.59 ms overall.*1,660\.52 ms preflight/is);
