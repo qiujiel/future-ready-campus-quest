@@ -216,6 +216,16 @@ as $$
         false
       )
       and private.student_login_acl_allowlists_ready()
+      and exists (
+        select 1
+        from pg_catalog.pg_proc as functions
+        where functions.oid = to_regprocedure(
+          'public.prepare_student_class_code_join(text,uuid,text,uuid)'
+        )
+          and functions.prosecdef
+          and functions.proconfig @> array['search_path=""']
+          and pg_catalog.pg_get_userbyid(functions.proowner) = 'postgres'
+      )
     )
   )
   from prior
