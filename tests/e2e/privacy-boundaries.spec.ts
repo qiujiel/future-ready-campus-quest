@@ -1,6 +1,16 @@
 import { expect, test, type Route } from "@playwright/test";
 import { installSupabaseSession } from "./supabase-session";
 
+const configuredSupabaseUrl = new URL(
+  process.env.VITE_SUPABASE_URL ?? "https://e2e.invalid",
+);
+
+function usesApprovedCredentialTransport(url: URL) {
+  return url.protocol === "https:" ||
+    (url.protocol === "http:" &&
+      ["127.0.0.1", "localhost", "::1"].includes(url.hostname));
+}
+
 test("student and anonymous sessions cannot enter teacher routes", async ({
   page,
 }) => {
@@ -69,16 +79,26 @@ test("cross-cohort denial is neutral and reveals no private fields", async ({
 });
 
 test("direct private Storage URLs remain unavailable", async ({ page }) => {
-  await page.route("**/storage/v1/object/group-images/**", (route) =>
-    route.fulfill({ status: 403, body: "not available" }));
-  await page.goto("/");
-  const status = await page.evaluate(async () => {
-    const response = await fetch(
-      "https://e2e.invalid/storage/v1/object/group-images/cohort/group.webp",
-    );
-    return response.status;
+  const privateObjectUrl = new URL(
+    "/storage/v1/object/group-images/cohort/group.webp",
+    configuredSupabaseUrl,
+  ).href;
+  let requestedPrivateObjectUrl: string | undefined;
+  await page.route("**/storage/v1/object/group-images/**", (route) => {
+    requestedPrivateObjectUrl = route.request().url();
+    return route.fulfill({
+      status: 403,
+      headers: { "access-control-allow-origin": "*" },
+      body: "not available",
+    });
   });
+  await page.goto("/");
+  const status = await page.evaluate(async (url) => {
+    const response = await fetch(url);
+    return response.status;
+  }, privateObjectUrl);
   expect(status).toBe(403);
+  expect(requestedPrivateObjectUrl).toBe(privateObjectUrl);
 });
 
 test("join and returning-login passcodes stay only in their approved HTTPS request bodies", async ({
@@ -100,7 +120,7 @@ test("join and returning-login passcodes stay only in their approved HTTPS reque
     const headers = JSON.stringify(request.headers());
     const body = request.postData() ?? "";
     const approvedEndpoint =
-      url.origin === "https://e2e.invalid" &&
+      url.origin === configuredSupabaseUrl.origin &&
       (url.pathname === "/functions/v1/join-cohort" ||
         url.pathname === "/functions/v1/student-login");
     if (url.href.includes(passcode) || headers.includes(passcode)) {
@@ -127,7 +147,8 @@ test("join and returning-login passcodes stay only in their approved HTTPS reque
     else audit.loginSeen = true;
     if (
       request.method() !== "POST" ||
-      url.origin !== "https://e2e.invalid" ||
+      url.origin !== configuredSupabaseUrl.origin ||
+      !usesApprovedCredentialTransport(url) ||
       url.pathname !==
         `/functions/v1/${endpoint === "join" ? "join-cohort" : "student-login"}` ||
       url.search !== "" ||
