@@ -1,5 +1,5 @@
 const DEDICATED_LOAD_PROJECT_REF = "vadyhuipwbtgbzpeisbn";
-const REQUIRED_GATE_D_MIGRATION = "20260806000700";
+const REQUIRED_GATE_D_MIGRATION = "20260810000800";
 
 function required(environment, name) {
   const value = environment[name]?.trim();
@@ -171,6 +171,9 @@ export function evaluateReadinessReport(report, configuration) {
   }
   if (report?.requiredFunctionsPresent !== true) {
     failures.push("required Gate D functions are missing");
+  }
+  if (report?.studentLoginObjectsPresent !== true) {
+    failures.push("student-login RPCs or private objects are missing");
   }
   if (report?.cleanupScheduleReady !== true) {
     failures.push("required cleanup schedule is missing or altered");

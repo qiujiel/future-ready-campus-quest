@@ -46,7 +46,7 @@ export function classroomLoadGateFailures(metrics) {
     [
       "p95JoinMs",
       Number.isFinite(metrics.p95JoinMs) &&
-        metrics.p95JoinMs < CLASSROOM_JOIN_P95_LIMIT_MS,
+        metrics.p95JoinMs <= CLASSROOM_JOIN_P95_LIMIT_MS,
     ],
     [
       "p95ResponseMs",

@@ -44,8 +44,9 @@ function environment(overrides = {}) {
 function readinessReport(overrides = {}) {
   return {
     requiredMigrationsPresent: true,
-    latestGateDMigration: "20260806000700",
+    latestGateDMigration: "20260810000800",
     requiredFunctionsPresent: true,
+    studentLoginObjectsPresent: true,
     cleanupScheduleReady: true,
     edgeFunctionsReady: 11,
     openJoinWindows: 0,
@@ -208,7 +209,7 @@ describe("production readiness report", () => {
     const configuration = readPreflightConfiguration(environment());
 
     expect(evaluateReadinessReport(readinessReport(), configuration)).toEqual({
-      latestGateDMigration: "20260806000700",
+      latestGateDMigration: "20260810000800",
       cleanupScheduleReady: true,
       edgeFunctionsReady: 11,
       contentVersion: {
@@ -238,13 +239,38 @@ describe("production readiness report", () => {
     ).toThrow(/required Gate D migrations.*required Gate D functions/i);
   });
 
+  it("rejects a database report that predates the simplified-login migration chain", () => {
+    const configuration = readPreflightConfiguration(environment(), {
+      backendOnly: true,
+    });
+
+    expect(() => evaluateReadinessReport(
+      readinessReport({ latestGateDMigration: "20260806000700" }),
+      configuration,
+    )).toThrow(/required Gate D migrations/i);
+  });
+
+  it("rejects a database report missing the student-login RPCs or private objects", () => {
+    const configuration = readPreflightConfiguration(environment(), {
+      backendOnly: true,
+    });
+
+    expect(() => evaluateReadinessReport(
+      readinessReport({
+        latestGateDMigration: "20260806000700",
+        studentLoginObjectsPresent: false,
+      }),
+      configuration,
+    )).toThrow(/student-login RPCs or private objects/i);
+  });
+
   it("omits classroom fixtures from backend-only evidence", () => {
     const configuration = readPreflightConfiguration(environment(), {
       backendOnly: true,
     });
 
     expect(evaluateReadinessReport(readinessReport(), configuration)).toEqual({
-      latestGateDMigration: "20260806000700",
+      latestGateDMigration: "20260810000800",
       cleanupScheduleReady: true,
       edgeFunctionsReady: 11,
       basePath: "/campus-quest/",

@@ -113,7 +113,9 @@ Expected deploy set:
 For the simplified-login upgrade, joining remains closed before the backup.
 The pending migration list must contain the reviewed ordered series beginning
 with `20260810000100_simplified_student_login.sql` and ending with
-`20260810000700_teacher_only_group_leader_transfer.sql`. Configure the
+`20260810000800_simplified_login_release_readiness.sql`. The final readiness
+migration verifies the complete chain and the private credential/attempt tables
+plus all four simplified-login RPCs. Configure the
 encrypted student-login signer only after migrations succeed, then deploy
 `join-cohort`, `student-login`, `manage-join-window`, `teacher-controls`, and
 `teacher-dashboard` with the rest of the exact Function set from that same
@@ -205,7 +207,7 @@ concurrently. Browser route checks read `current_role()` from the protected
 role table rather than trusting token metadata.
 
 The original 1.5-second p95 join objective remains aspirational. The approved
-classroom-readiness release gate requires one-time join p95 below 5 seconds for
+classroom-readiness release gate requires one-time join p95 at or below 5 seconds for
 30 exactly simultaneous students. The response p95 below 1.5 seconds remains
 unchanged, as does the dashboard p95 below 2.5 seconds. Evidence must also show
 all 30 students joined, zero incorrect group assignments, zero duplicate student

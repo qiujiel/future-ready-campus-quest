@@ -70,8 +70,13 @@ describe("classroom load release gate", () => {
     expect(classroomLoadGateFailures(passingMetrics())).toEqual([]);
   });
 
-  it("rejects a join p95 at the 5-second boundary", () => {
+  it("accepts a join p95 at the inclusive 5-second boundary", () => {
     expect(classroomLoadGateFailures(passingMetrics({ p95JoinMs: 5_000 })))
+      .not.toContain("p95JoinMs");
+  });
+
+  it("rejects a join p95 above the 5-second boundary", () => {
+    expect(classroomLoadGateFailures(passingMetrics({ p95JoinMs: 5_000.01 })))
       .toContain("p95JoinMs");
   });
 

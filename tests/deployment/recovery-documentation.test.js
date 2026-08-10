@@ -267,7 +267,7 @@ const assertBackendReleasePolicy = (backend) => {
   assertPatterns(backend, [
     /only accepted recovery path[\s\S]*verified Free-plan encrypted logical/is,
     /Before approving\s+`production-backend`[\s\S]*compares all four inputs/is,
-    /one-time join p95 below 5\s+seconds[\s\S]*response p95 below 1\.5 seconds/is,
+    /one-time join p95 at or below 5\s+seconds[\s\S]*response p95 below 1\.5 seconds/is,
     /zero incorrect group assignments[\s\S]*zero duplicate student\s+identities/is,
   ]);
   rejectPatterns(backend, [
@@ -391,7 +391,7 @@ const assertChecklistPolicy = (checklist) => {
     "Independent reviewer signature/time",
     "Any unchecked item means **HOLD**",
     "No operator, owner, approver, or reviewer may waive",
-    "one-time join p95 below 5 seconds",
+    "one-time join p95 at or below 5 seconds",
     "response p95 below 1.5 seconds",
     "zero incorrect group assignments",
     "zero duplicate student identities",

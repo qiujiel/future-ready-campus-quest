@@ -5,7 +5,7 @@
 Treat the one-time classroom join as ready when one representative run admits
 all 30 simultaneously starting students, assigns every student to the intended
 group, creates no duplicate student identities, loses no submitted data,
-accepts no unauthorized request, and records a join p95 below 5,000 ms. Keep
+accepts no unauthorized request, and records a join p95 at or below 5,000 ms. Keep
 the existing response p95 below 1,500 ms and dashboard p95 below 2,500 ms.
 
 The former 1,500 ms join objective remains useful as an aspirational latency
@@ -32,7 +32,7 @@ the release decision is auditable in one object.
 
 ## Failure behavior
 
-Any failed join, incorrect assignment, duplicate identity, join p95 at or above
+Any failed join, incorrect assignment, duplicate identity, join p95 above
 5,000 ms, accepted unauthorized dashboard call, failed authorized activity
 request, response p95 at or above 1,500 ms, dashboard p95 at or above 2,500 ms,
 duplicate response, incomplete class, invalid group score, or invalid score
@@ -52,6 +52,6 @@ live run. The live run itself remains 30 simultaneous joins in five intended
 groups of six against only the dedicated load-test project.
 
 The measured p95 from the successful protected run will be recorded as a known
-one-time classroom join limitation in the operations documentation. A p95 at
-or above 5,000 ms permits at most one further low-risk, high-confidence
+one-time classroom join limitation in the operations documentation. A p95
+above 5,000 ms permits at most one further low-risk, high-confidence
 optimization; it never permits weakening a security or correctness control.

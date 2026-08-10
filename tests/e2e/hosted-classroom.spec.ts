@@ -3,6 +3,17 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 const enabled = process.env.LOCAL_CLASSROOM_E2E === "1";
 const teacherEmail = process.env.LOCAL_TEACHER_EMAIL ?? "";
 const teacherPassword = process.env.LOCAL_TEACHER_PASSWORD ?? "";
+const apiUrl = process.env.TEST_SUPABASE_URL ?? "";
+const publishableKey = process.env.TEST_SUPABASE_ANON_KEY ?? "";
+
+type StudentState = {
+  studentId: string;
+  cohortId: string;
+  groupId: string;
+  attemptId: string | null;
+  lastAcceptedSequence: number | null;
+  acceptedSequences: number[];
+};
 
 test.skip(!enabled, "requires the explicit local full-stack classroom fixture");
 
@@ -65,12 +76,187 @@ async function answerCurrentItem(page: Page) {
   await page.getByRole("button", { name: "Continue campus route" }).click();
 }
 
+async function readStudentState(
+  page: Page,
+  apiUrl: string,
+  publishableKey: string,
+): Promise<StudentState> {
+  return page.evaluate(async ({ apiUrl, publishableKey }) => {
+    const session = Object.values(localStorage)
+      .map((value) => {
+        try {
+          return JSON.parse(value) as { access_token?: unknown };
+        } catch {
+          return null;
+        }
+      })
+      .find((value) => typeof value?.access_token === "string");
+    const accessToken = session?.access_token;
+    if (typeof accessToken !== "string") {
+      throw new Error("STUDENT_SESSION_NOT_AVAILABLE");
+    }
+    const headers = {
+      apikey: publishableKey,
+      Authorization: `Bearer ${accessToken}`,
+    };
+    const [profileResponse, attemptsResponse] = await Promise.all([
+      fetch(
+        `${apiUrl}/rest/v1/student_private_profiles?select=student_id,cohort_id,group_id&limit=2`,
+        { headers },
+      ),
+      fetch(
+        `${apiUrl}/rest/v1/quest_attempts?select=id,last_accepted_sequence&order=started_at.desc&limit=2`,
+        { headers },
+      ),
+    ]);
+    if (!profileResponse.ok || !attemptsResponse.ok) {
+      throw new Error("STUDENT_STATE_NOT_AVAILABLE");
+    }
+    const profiles = await profileResponse.json() as Array<Record<string, unknown>>;
+    const attempts = await attemptsResponse.json() as Array<Record<string, unknown>>;
+    const profile = profiles[0];
+    const attempt = attempts[0];
+    if (
+      profiles.length !== 1 ||
+      typeof profile?.student_id !== "string" ||
+      typeof profile.cohort_id !== "string" ||
+      typeof profile.group_id !== "string"
+    ) {
+      throw new Error("STUDENT_STATE_NOT_AVAILABLE");
+    }
+    if (
+      attempt &&
+      (typeof attempt.id !== "string" ||
+        !Number.isInteger(attempt.last_accepted_sequence))
+    ) {
+      throw new Error("STUDENT_STATE_NOT_AVAILABLE");
+    }
+    const acceptedResponse = attempt
+      ? await fetch(
+        `${apiUrl}/rest/v1/student_responses?attempt_id=eq.${encodeURIComponent(attempt.id as string)}&select=client_sequence&order=client_sequence`,
+        { headers },
+      )
+      : null;
+    if (acceptedResponse && !acceptedResponse.ok) {
+      throw new Error("STUDENT_STATE_NOT_AVAILABLE");
+    }
+    const acceptedResponses = acceptedResponse
+      ? await acceptedResponse.json() as Array<Record<string, unknown>>
+      : [];
+    const acceptedSequences = acceptedResponses.map((response) => {
+      if (!Number.isInteger(response.client_sequence)) {
+        throw new Error("STUDENT_STATE_NOT_AVAILABLE");
+      }
+      return response.client_sequence as number;
+    });
+    return {
+      studentId: profile.student_id,
+      cohortId: profile.cohort_id,
+      groupId: profile.group_id,
+      attemptId: typeof attempt?.id === "string" ? attempt.id : null,
+      lastAcceptedSequence:
+        typeof attempt?.last_accepted_sequence === "number"
+          ? attempt.last_accepted_sequence
+          : null,
+      acceptedSequences,
+    };
+  }, { apiUrl, publishableKey });
+}
+
+async function probeTeacherDashboard(
+  page: Page,
+  apiUrl: string,
+  publishableKey: string,
+  cohortId: string,
+) {
+  return page.evaluate(async ({ apiUrl, publishableKey, cohortId }) => {
+    const session = Object.values(localStorage)
+      .map((value) => {
+        try {
+          return JSON.parse(value) as { access_token?: unknown };
+        } catch {
+          return null;
+        }
+      })
+      .find((value) => typeof value?.access_token === "string");
+    if (typeof session?.access_token !== "string") {
+      throw new Error("STUDENT_SESSION_NOT_AVAILABLE");
+    }
+    const response = await fetch(`${apiUrl}/functions/v1/teacher-dashboard`, {
+      method: "POST",
+      headers: {
+        apikey: publishableKey,
+        Authorization: `Bearer ${session.access_token}`,
+        Origin: window.location.origin,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ cohortId }),
+    });
+    const payload = await response.json().catch(() => null) as {
+      error?: unknown;
+    } | null;
+    return {
+      status: response.status,
+      error: typeof payload?.error === "string" ? payload.error : null,
+    };
+  }, { apiUrl, publishableKey, cohortId });
+}
+
+async function attemptNonleaderGroupRename(
+  page: Page,
+  apiUrl: string,
+  publishableKey: string,
+  groupId: string,
+) {
+  return page.evaluate(async ({ apiUrl, publishableKey, groupId }) => {
+    const session = Object.values(localStorage)
+      .map((value) => {
+        try {
+          return JSON.parse(value) as { access_token?: unknown };
+        } catch {
+          return null;
+        }
+      })
+      .find((value) => typeof value?.access_token === "string");
+    if (typeof session?.access_token !== "string") {
+      throw new Error("STUDENT_SESSION_NOT_AVAILABLE");
+    }
+    const response = await fetch(
+      `${apiUrl}/functions/v1/manage-group-identity`,
+      {
+        method: "POST",
+        headers: {
+          apikey: publishableKey,
+          Authorization: `Bearer ${session.access_token}`,
+          Origin: window.location.origin,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "rename",
+          groupId,
+          displayName: "Denied rename",
+          requestKey: crypto.randomUUID(),
+        }),
+      },
+    );
+    const payload = await response.json().catch(() => null) as {
+      error?: unknown;
+    } | null;
+    return {
+      status: response.status,
+      error: typeof payload?.error === "string" ? payload.error : null,
+    };
+  }, { apiUrl, publishableKey, groupId });
+}
+
 test("runs a clean teacher and two isolated students through recoverable class entry", async ({
   browser,
 }) => {
   test.setTimeout(120_000);
   expect(teacherEmail).not.toBe("");
   expect(teacherPassword).not.toBe("");
+  expect(apiUrl).not.toBe("");
+  expect(publishableKey).not.toBe("");
   const errors: string[] = [];
   const teacherContext = await browser.newContext();
   const teacherPage = await teacherContext.newPage();
@@ -152,6 +338,17 @@ test("runs a clean teacher and two isolated students through recoverable class e
     await expect(studentPages[1].getByText(/group leader is shaping this space/i))
       .toBeVisible();
     await expect(studentPages[1].getByLabel("Group name")).toHaveCount(0);
+    const nonleaderState = await readStudentState(
+      studentPages[1],
+      apiUrl,
+      publishableKey,
+    );
+    await expect(attemptNonleaderGroupRename(
+      studentPages[1],
+      apiUrl,
+      publishableKey,
+      nonleaderState.groupId,
+    )).resolves.toEqual({ status: 403, error: "GROUP_ACTION_DENIED" });
     await studentContexts[1].close();
 
     await teacherPage.reload();
@@ -170,6 +367,16 @@ test("runs a clean teacher and two isolated students through recoverable class e
     await expect(studentPages[0].getByRole("heading", { name: "Diagnostic Gate" }))
       .toBeVisible({ timeout: 15_000 });
     await answerCurrentItem(studentPages[0]);
+    const stateBeforeContextLoss = await readStudentState(
+      studentPages[0],
+      apiUrl,
+      publishableKey,
+    );
+    expect(stateBeforeContextLoss.attemptId).not.toBeNull();
+    expect(stateBeforeContextLoss.lastAcceptedSequence).toBeGreaterThan(0);
+    expect(stateBeforeContextLoss.acceptedSequences).toEqual([
+      stateBeforeContextLoss.lastAcceptedSequence,
+    ]);
 
     await teacherPage.getByRole("button", { name: "Close joining" }).click();
     await teacherPage.getByRole("button", {
@@ -195,37 +402,23 @@ test("runs a clean teacher and two isolated students through recoverable class e
     await expect(returningPage.getByRole("heading", { name: "Diagnostic Gate" }))
       .toBeVisible();
 
+    const stateAfterReturningLogin = await readStudentState(
+      returningPage,
+      apiUrl,
+      publishableKey,
+    );
+    expect(stateAfterReturningLogin).toEqual(stateBeforeContextLoss);
+
     await returningPage.goto(teacherPage.url());
     await expect(returningPage.getByRole("heading", { name: "Teacher sign in" }))
       .toBeVisible();
 
-    const apiUrl = process.env.TEST_SUPABASE_URL ?? "";
-    const publishableKey = process.env.TEST_SUPABASE_ANON_KEY ?? "";
-    if (apiUrl && publishableKey) {
-      const denial = await returningPage.evaluate(async ({ apiUrl, publishableKey }) => {
-        const session = Object.values(localStorage)
-          .map((value) => {
-            try {
-              return JSON.parse(value);
-            } catch {
-              return null;
-            }
-          })
-          .find((value) => typeof value?.access_token === "string");
-        const response = await fetch(`${apiUrl}/functions/v1/teacher-dashboard`, {
-          method: "POST",
-          headers: {
-            apikey: publishableKey,
-            Authorization: `Bearer ${session?.access_token ?? ""}`,
-            Origin: window.location.origin,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ cohortId: crypto.randomUUID() }),
-        });
-        return response.status;
-      }, { apiUrl, publishableKey });
-      expect([401, 403, 404]).toContain(denial);
-    }
+    await expect(probeTeacherDashboard(
+      returningPage,
+      apiUrl,
+      publishableKey,
+      stateBeforeContextLoss.cohortId,
+    )).resolves.toEqual({ status: 404, error: "COHORT_NOT_AVAILABLE" });
 
     await teacherPage.reload();
     await expect(

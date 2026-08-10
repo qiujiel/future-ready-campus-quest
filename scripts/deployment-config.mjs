@@ -248,15 +248,61 @@ function requireEdgeReadyWait(job, label) {
 }
 
 function requireExactProductionFunctionSet(job) {
-  const deployStep = (job?.steps ?? []).find((step) =>
-    String(step?.run ?? "").includes("supabase functions deploy")
+  const deployCommand = /\b(?:pnpm\s+exec\s+)?supabase\s+functions\s+deploy\b/;
+  const deployCommandMatches =
+    /\b(?:pnpm\s+exec\s+)?supabase\s+functions\s+deploy\b/g;
+  const stepRuns = (job?.steps ?? []).map((step) =>
+    String(step?.run ?? "").replace(/\\\s*\n/g, " ")
   );
-  const run = String(deployStep?.run ?? "");
-  const missing = REQUIRED_PRODUCTION_FUNCTIONS.filter((name) =>
-    !new RegExp(`(^|\\s)${name}(?=\\s|;|$)`).test(run)
+  const deploySteps = (job?.steps ?? []).filter((step) =>
+    deployCommand.test(String(step?.run ?? ""))
   );
-  if (missing.length > 0) {
-    fail(`exact production Function set is missing ${missing.join(", ")}`);
+  const runs = deploySteps.map((step) => String(step.run ?? ""));
+  const deployCommandCount = runs.reduce(
+    (count, run) => count + (run.match(deployCommandMatches) ?? []).length,
+    0,
+  );
+  const deployTokenCount = stepRuns.reduce(
+    (count, run) => count + (run.match(/\bdeploy\b/g) ?? []).length,
+    0,
+  );
+  if (
+    deploySteps.length !== 1 ||
+    deployCommandCount !== 1 ||
+    deployTokenCount !== 1
+  ) {
+    fail(
+      "exact production Function deployment loop requires one deploy command",
+    );
+  }
+
+  const loop = runs[0].match(
+    /^\s*for\s+function_name\s+in\s+(?<names>[^;\n]+)\s*;\s*do\s*(?<body>[\s\S]*?)\s*done\s*;?\s*$/,
+  );
+  if (!loop?.groups) {
+    fail("exact production Function deployment loop is missing");
+  }
+
+  const functionNames = loop.groups.names.trim().split(/\s+/);
+  const hasExactFunctionSet =
+    functionNames.length === REQUIRED_PRODUCTION_FUNCTIONS.length &&
+    new Set(functionNames).size === REQUIRED_PRODUCTION_FUNCTIONS.length &&
+    REQUIRED_PRODUCTION_FUNCTIONS.every((name) => functionNames.includes(name));
+  if (!hasExactFunctionSet) {
+    fail("exact production Function set must be deployed exactly once");
+  }
+
+  const deploymentCommand = loop.groups.body
+    .trim()
+    .replace(/\\\s*\n/g, " ")
+    .replace(/\s+/g, " ");
+  if (
+    deploymentCommand !==
+      'pnpm exec supabase functions deploy "$function_name" --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"' &&
+    deploymentCommand !==
+      'supabase functions deploy "$function_name" --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"'
+  ) {
+    fail("exact production Function deployment loop is not canonical");
   }
 }
 

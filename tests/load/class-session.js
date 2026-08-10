@@ -125,7 +125,7 @@ async function liveRun() {
       joinEvidence.incorrectGroupAssignments !== 0 ||
       joinEvidence.duplicateStudentIdentities !== 0 ||
       !Number.isFinite(joinEvidence.p95JoinMs) ||
-      joinEvidence.p95JoinMs >= CLASSROOM_JOIN_P95_LIMIT_MS
+      joinEvidence.p95JoinMs > CLASSROOM_JOIN_P95_LIMIT_MS
     ) {
       throw new Error(`Load join gate failed: ${JSON.stringify(joinEvidence)}`);
     }

@@ -383,6 +383,86 @@ describe("deployment workflow boundaries", () => {
     );
   });
 
+  it.each([
+    [
+      "appends an unreviewed Function",
+      /exact production Function set/i,
+      (run) =>
+        run.replace(
+          "teacher-dashboard; do",
+          "teacher-dashboard unreviewed-function; do",
+        ),
+    ],
+    [
+      "lists a Function twice",
+      /exact production Function set/i,
+      (run) =>
+        run.replace(
+          "teacher-dashboard; do",
+          "teacher-dashboard teacher-dashboard; do",
+        ),
+    ],
+    [
+      "adds a secondary Function deploy command",
+      /exact production Function deployment loop/i,
+      (run) =>
+        `${run}\nsupabase functions deploy student-login --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"`,
+    ],
+    [
+      "uses a wildcard Function name",
+      /exact production Function deployment loop/i,
+      (run) => run.replace('"$function_name"', '"$function_name"*'),
+    ],
+    [
+      "omits the Function name",
+      /exact production Function deployment loop/i,
+      (run) => run.replace('"$function_name" ', ""),
+    ],
+  ])("rejects a backend workflow that %s", (_description, expected, mutateRun) => {
+    const configuration = validConfiguration();
+    const deployStep = configuration.backend.jobs.release.steps.find((step) =>
+      String(step.run ?? "").includes("supabase functions deploy"),
+    );
+    deployStep.run = mutateRun(deployStep.run);
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      expected,
+    );
+  });
+
+  it("rejects an indirect secondary Function deploy command in another step", () => {
+    const configuration = validConfiguration();
+    configuration.backend.jobs.release.steps.push({
+      run: '"$DEPLOY_BIN" functions deploy unreviewed-function --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"',
+    });
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /exact production Function deployment loop/i,
+    );
+  });
+
+  it("rejects an indirect secondary deploy split by a shell continuation", () => {
+    const configuration = validConfiguration();
+    configuration.backend.jobs.release.steps.push({
+      run: '"$DEPLOY_BIN" functions \\\n  deploy unreviewed-function --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"',
+    });
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /exact production Function deployment loop/i,
+    );
+  });
+
+  it("rejects an indirect secondary deploy with quoted command words", () => {
+    const configuration = validConfiguration();
+    configuration.backend.jobs.release.steps.push({
+      run: '"$DEPLOY_BIN" "functions" "deploy" unreviewed-function --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"',
+    });
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /exact production Function deployment loop/i,
+    );
+  });
+
   it("rejects a Pages job that receives the student login signing secret", () => {
     const configuration = validConfiguration();
     configuration.pages.jobs.package.env = {
