@@ -407,6 +407,9 @@ const assertChecklistPolicy = (checklist) => {
     "at most 7 seconds",
     "6,882.59 ms overall",
     "1,660.52 ms preflight",
+    "historical owner-approved policy evidence",
+    "independently measured",
+    "need not reproduce the historical measurements",
     "response p95 below 1.5 seconds",
     "dashboard p95 below 2.5 seconds",
     "new complete live-load run",
@@ -429,6 +432,8 @@ const assertChecklistPolicy = (checklist) => {
     /full approved 40-character source SHA[\s\S]*source project ref[\s\S]*2\.110\.0[\s\S]*component-completion flags/is,
     /source counts[\s\S]*target counts[\s\S]*exactly equal/is,
     /new complete live-load run[\s\S]*exact current approved `main` SHA/is,
+    /6,882\.59 ms overall[\s\S]*1,660\.52 ms preflight[\s\S]*historical owner-approved policy evidence/is,
+    /new release evidence[\s\S]*independently measured[\s\S]*new complete live-load run[\s\S]*exact current approved `main` SHA[\s\S]*one-time join p95[\s\S]*at or below 7 seconds[\s\S]*need not reproduce the historical measurements/is,
   ]);
   rejectPatterns(checklist, [
     /Backup creation time\/recovery-point time/i,
@@ -712,6 +717,9 @@ describe("Free-plan recovery operations", () => {
         "two distinct named people",
         "Any unchecked item means **HOLD**",
         "No operator, owner, approver, or reviewer may waive",
+        "historical owner-approved policy evidence",
+        "independently measured",
+        "need not reproduce the historical measurements",
         "new complete live-load run",
         "exact current approved `main` SHA",
         ...remoteApprovalLabels,
