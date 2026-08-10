@@ -82,6 +82,7 @@ declare
   v_capacity smallint;
   v_member_count integer;
   v_nickname text;
+  v_completed_student_id uuid;
 begin
   select
     codes.disabled_at,
@@ -132,12 +133,22 @@ begin
     raise exception 'GROUP_JOIN_CLOSED' using errcode = 'P0001';
   end if;
 
-  if exists (
-    select 1
-    from public.student_join_requests as requests
-    where requests.join_window_id = v_window.id
-      and requests.request_key = p_request_key
-  ) then
+  select requests.student_id
+  into v_completed_student_id
+  from public.student_join_requests as requests
+  where requests.join_window_id = v_window.id
+    and requests.request_key = p_request_key;
+
+  if found then
+    if not exists (
+      select 1
+      from private.student_login_credentials as credentials
+      where credentials.student_id = v_completed_student_id
+        and credentials.cohort_id = v_cohort_id
+    ) then
+      raise exception 'STUDENT_RECOVERY_REQUIRED' using errcode = 'P0001';
+    end if;
+
     return query
     select completed.*
     from public.find_completed_student_join(
@@ -145,6 +156,26 @@ begin
       p_request_key
     ) as completed;
     return;
+  end if;
+
+  perform pg_advisory_xact_lock(
+    hashtextextended(
+      'student-login-name:' || v_cohort_id::text || ':' || p_name_lookup_hash,
+      0
+    )
+  );
+
+  if (
+    select count(*) >= 4
+    from private.student_login_credentials as credentials
+    join public.student_private_profiles as profiles
+      on profiles.student_id = credentials.student_id
+      and profiles.cohort_id = credentials.cohort_id
+      and profiles.removed_at is null
+    where credentials.cohort_id = v_cohort_id
+      and credentials.name_lookup_hash = p_name_lookup_hash
+  ) then
+    raise exception 'STUDENT_NAME_NOT_AVAILABLE' using errcode = 'P0001';
   end if;
 
   select cohorts.group_capacity
@@ -381,6 +412,10 @@ as $$
 declare
   v_attempt private.student_login_attempts;
 begin
+  if p_succeeded is null then
+    raise exception 'STUDENT_LOGIN_NOT_ACCEPTED' using errcode = 'P0001';
+  end if;
+
   select attempts.*
   into v_attempt
   from private.student_login_attempts as attempts
@@ -430,6 +465,11 @@ revoke all on function public.begin_student_login(uuid, text, text, uuid)
   from public, anon, authenticated;
 revoke all on function public.finish_student_login(uuid, uuid, boolean)
   from public, anon, authenticated;
+revoke all on function public.complete_student_code_join(text, uuid, uuid, text)
+  from public, anon, authenticated, service_role;
+revoke all on function public.complete_student_join(
+  text, uuid, uuid, smallint, text, text
+) from public, anon, authenticated, service_role;
 
 grant execute on function public.complete_student_code_join(
   text, uuid, uuid, text, uuid, text, text, text, integer, boolean

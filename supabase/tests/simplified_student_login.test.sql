@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(39);
+select plan(44);
 
 select has_column(
   'public',
@@ -93,6 +93,12 @@ values
     '30000000-0000-4000-8000-000000000016',
     '00000000-0000-0000-0000-000000000000',
     'authenticated', 'authenticated', 'closed-join-student@example.invalid', '',
+    now(), '{}', '{}', now(), now()
+  ),
+  (
+    '30000000-0000-4000-8000-000000000017',
+    '00000000-0000-0000-0000-000000000000',
+    'authenticated', 'authenticated', 'legacy-replay-student@example.invalid', '',
     now(), '{}', '{}', now(), now()
   ),
   (
@@ -218,6 +224,20 @@ select ok(
   'only the trusted service boundary receives the new login and join RPCs'
 );
 
+select ok(
+  not has_function_privilege(
+    'service_role',
+    'public.complete_student_code_join(text,uuid,uuid,text)',
+    'execute'
+  )
+  and not has_function_privilege(
+    'service_role',
+    'public.complete_student_join(text,uuid,uuid,smallint,text,text)',
+    'execute'
+  ),
+  'legacy completion boundaries cannot create post-migration students'
+);
+
 select throws_ok(
   $$ select * from public.complete_student_code_join(
     repeat('1', 64),
@@ -318,7 +338,7 @@ select lives_ok(
   'a fourth duplicate name credential can be stored'
 );
 
-select lives_ok(
+select throws_ok(
   $$ select * from public.complete_student_code_join(
     repeat('2', 64),
     '50000000-0000-4000-8000-000000000016',
@@ -327,7 +347,20 @@ select lives_ok(
     '40000000-0000-4000-8000-000000000002',
     repeat('c', 64), 'salt-5', 'hash-5', 210000, false
   ) $$,
-  'a fifth duplicate name credential can be stored'
+  'P0001', 'STUDENT_NAME_NOT_AVAILABLE',
+  'a fifth active credential for one class and normalized name is rejected'
+);
+
+select ok(
+  not exists (
+    select 1 from public.student_private_profiles
+    where student_id = '30000000-0000-4000-8000-000000000015'
+  )
+  and not exists (
+    select 1 from private.student_login_credentials
+    where student_id = '30000000-0000-4000-8000-000000000015'
+  ),
+  'the rejected fifth duplicate leaves no partial profile or credential'
 );
 
 select is(
@@ -335,7 +368,7 @@ select is(
     select count(*) from private.student_login_credentials
     where cohort_id = '40000000-0000-4000-8000-000000000001'
   ),
-  5::bigint,
+  4::bigint,
   'credential insertion is atomic with successful profile creation'
 );
 
@@ -365,6 +398,43 @@ select results_eq(
      where student_id = '30000000-0000-4000-8000-000000000012' $$,
   $$ values (repeat('c', 64), 'hash-2'::text) $$,
   'a replay cannot replace the original private credential'
+);
+
+do $block$
+begin
+  perform *
+  from public.complete_student_code_join(
+    repeat('2', 64),
+    '50000000-0000-4000-8000-000000000017',
+    '30000000-0000-4000-8000-000000000017',
+    'Pre-migration Student'
+  );
+end
+$block$;
+
+select throws_ok(
+  $$ select * from public.complete_student_code_join(
+    repeat('2', 64),
+    '50000000-0000-4000-8000-000000000017',
+    '30000000-0000-4000-8000-000000000017',
+    'Pre-migration Student',
+    '40000000-0000-4000-8000-000000000002',
+    repeat('d', 64), 'legacy-salt', 'legacy-hash', 210000, false
+  ) $$,
+  'P0001', 'STUDENT_RECOVERY_REQUIRED',
+  'an extended replay cannot attach credentials to a pre-migration student'
+);
+
+select ok(
+  exists (
+    select 1 from public.student_private_profiles
+    where student_id = '30000000-0000-4000-8000-000000000017'
+  )
+  and not exists (
+    select 1 from private.student_login_credentials
+    where student_id = '30000000-0000-4000-8000-000000000017'
+  ),
+  'a credentialless replay remains on the teacher-issued recovery path'
 );
 
 insert into public.user_roles (user_id, role)
@@ -458,6 +528,23 @@ select lives_ok(
     true
   ) $$,
   'a matching active student can successfully finalize exactly one attempt'
+);
+
+select throws_ok(
+  $$ select public.finish_student_login(
+    (
+      select attempt_id
+      from public.begin_student_login(
+        '40000000-0000-4000-8000-000000000002',
+        repeat('6', 64), repeat('5', 64),
+        '50000000-0000-4000-8000-000000000029'
+      ) limit 1
+    ),
+    null,
+    null
+  ) $$,
+  'P0001', 'STUDENT_LOGIN_NOT_ACCEPTED',
+  'a nullable outcome cannot finalize outside the failure ledger'
 );
 
 update public.cohort_join_windows
