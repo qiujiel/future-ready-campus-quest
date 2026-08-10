@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
@@ -54,6 +56,33 @@ const REQUIRED_PRODUCTION_FUNCTIONS = Object.freeze([
   "teacher-controls",
   "teacher-dashboard",
 ]);
+const PRODUCTION_FUNCTION_DEPLOYMENT_ENTRYPOINT =
+  "node scripts/deploy-production-functions.mjs";
+const CANONICAL_BACKEND_WORKFLOW_SHA256 =
+  "f1cbc04d3db761b1733525c29e11f266497d1ce6079e8888f5e6ed5dd877f6bf";
+export const CANONICAL_PRODUCTION_FUNCTION_DEPLOYMENT_SCRIPT = [
+  'import { spawnSync } from "node:child_process";',
+  "",
+  "const PRODUCTION_FUNCTIONS = Object.freeze([",
+  ...REQUIRED_PRODUCTION_FUNCTIONS.map((name) => `  "${name}",`),
+  "]);",
+  "",
+  "const projectRef = process.env.PRODUCTION_SUPABASE_PROJECT_REF;",
+  "if (!projectRef) {",
+  '  throw new Error("Missing PRODUCTION_SUPABASE_PROJECT_REF.");',
+  "}",
+  "",
+  "for (const functionName of PRODUCTION_FUNCTIONS) {",
+  "  const result = spawnSync(",
+  '    "pnpm",',
+  '    ["exec", "supabase", "functions", "deploy", functionName, "--project-ref", projectRef],',
+  '    { stdio: "inherit" },',
+  "  );",
+  "  if (result.error) throw result.error;",
+  "  if (result.status !== 0) process.exit(result.status ?? 1);",
+  "}",
+  "",
+].join("\n");
 const RELEASE_INPUT_DEFINITIONS = {
   release_mode: {
     description: "Release authorization mode",
@@ -247,63 +276,39 @@ function requireEdgeReadyWait(job, label) {
   }
 }
 
+export function validateProductionFunctionDeploymentScript(script) {
+  if (script !== CANONICAL_PRODUCTION_FUNCTION_DEPLOYMENT_SCRIPT) {
+    fail("exact production Function deployment script is not canonical");
+  }
+}
+
+export function validateCanonicalBackendWorkflowSource(source) {
+  const digest = createHash("sha256").update(source).digest("hex");
+  if (digest !== CANONICAL_BACKEND_WORKFLOW_SHA256) {
+    fail("canonical backend workflow source is required");
+  }
+}
+
 function requireExactProductionFunctionSet(job) {
-  const deployCommand = /\b(?:pnpm\s+exec\s+)?supabase\s+functions\s+deploy\b/;
-  const deployCommandMatches =
-    /\b(?:pnpm\s+exec\s+)?supabase\s+functions\s+deploy\b/g;
-  const stepRuns = (job?.steps ?? []).map((step) =>
-    String(step?.run ?? "").replace(/\\\s*\n/g, " ")
+  const runs = (job?.steps ?? []).map((step) => String(step?.run ?? ""));
+  const deploymentSteps = runs.filter(
+    (run) => run.trim() === PRODUCTION_FUNCTION_DEPLOYMENT_ENTRYPOINT,
   );
-  const deploySteps = (job?.steps ?? []).filter((step) =>
-    deployCommand.test(String(step?.run ?? ""))
+  const hasUnexpectedDeploy = runs.some((run) =>
+    run.trim() !== PRODUCTION_FUNCTION_DEPLOYMENT_ENTRYPOINT &&
+    /\bdeploy\b/i.test(run.replace(/\\\s*\n/g, "").replace(/["']/g, ""))
   );
-  const runs = deploySteps.map((step) => String(step.run ?? ""));
-  const deployCommandCount = runs.reduce(
-    (count, run) => count + (run.match(deployCommandMatches) ?? []).length,
-    0,
-  );
-  const deployTokenCount = stepRuns.reduce(
-    (count, run) => count + (run.match(/\bdeploy\b/g) ?? []).length,
-    0,
-  );
-  if (
-    deploySteps.length !== 1 ||
-    deployCommandCount !== 1 ||
-    deployTokenCount !== 1
-  ) {
+  if (deploymentSteps.length !== 1 || hasUnexpectedDeploy) {
     fail(
       "exact production Function deployment loop requires one deploy command",
     );
   }
 
-  const loop = runs[0].match(
-    /^\s*for\s+function_name\s+in\s+(?<names>[^;\n]+)\s*;\s*do\s*(?<body>[\s\S]*?)\s*done\s*;?\s*$/,
+  const script = readFileSync(
+    resolve(process.cwd(), "scripts", "deploy-production-functions.mjs"),
+    "utf8",
   );
-  if (!loop?.groups) {
-    fail("exact production Function deployment loop is missing");
-  }
-
-  const functionNames = loop.groups.names.trim().split(/\s+/);
-  const hasExactFunctionSet =
-    functionNames.length === REQUIRED_PRODUCTION_FUNCTIONS.length &&
-    new Set(functionNames).size === REQUIRED_PRODUCTION_FUNCTIONS.length &&
-    REQUIRED_PRODUCTION_FUNCTIONS.every((name) => functionNames.includes(name));
-  if (!hasExactFunctionSet) {
-    fail("exact production Function set must be deployed exactly once");
-  }
-
-  const deploymentCommand = loop.groups.body
-    .trim()
-    .replace(/\\\s*\n/g, " ")
-    .replace(/\s+/g, " ");
-  if (
-    deploymentCommand !==
-      'pnpm exec supabase functions deploy "$function_name" --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"' &&
-    deploymentCommand !==
-      'supabase functions deploy "$function_name" --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"'
-  ) {
-    fail("exact production Function deployment loop is not canonical");
-  }
+  validateProductionFunctionDeploymentScript(script);
 }
 
 function requireStudentLoginSecretIsolation({ backend, pages }) {
@@ -554,7 +559,7 @@ function requireBootstrapPreflightOrder(job) {
   );
   const secretsIndex = indexOfRun((run) => run.includes("supabase secrets set"));
   const functionsIndex = indexOfRun((run) =>
-    run.includes("supabase functions deploy")
+    run.includes(PRODUCTION_FUNCTION_DEPLOYMENT_ENTRYPOINT)
   );
   const requiredIndices = [
     linkIndex,
@@ -651,7 +656,9 @@ function requireBackendReleaseIdentity(workflow, job) {
     fail("backend release must use the canonical fail-closed identity script");
   }
 
-  const productionMutation = /\b(?:pnpm exec )?supabase\s+(?:db\s+push|secrets\s+set|functions\s+deploy)\b/;
+  const productionMutation = new RegExp(
+    `\\b(?:pnpm exec )?supabase\\s+(?:db\\s+push|secrets\\s+set|functions\\s+deploy)\\b|${PRODUCTION_FUNCTION_DEPLOYMENT_ENTRYPOINT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+  );
   const mutationSteps = steps.filter((step) =>
     productionMutation.test(String(step?.run ?? ""))
   );
@@ -862,7 +869,13 @@ export function validateProductionJoinLatencyFixConfiguration(workflow) {
   requirePinnedActions([workflow]);
 }
 
-export function validateDeploymentConfiguration({ ci, backend, pages, rollback }) {
+export function validateDeploymentConfiguration({
+  ci,
+  backend,
+  backendSource,
+  pages,
+  rollback,
+}) {
   const backendJob = backend?.jobs?.release;
   const authorizationJob = backend?.jobs?.validate_release_authorization;
   const packageJob = pages?.jobs?.package;
@@ -871,6 +884,9 @@ export function validateDeploymentConfiguration({ ci, backend, pages, rollback }
   const rollbackPrepare = rollback?.jobs?.prepare;
   const rollbackDeploy = rollback?.jobs?.deploy;
 
+  if (backendSource !== undefined) {
+    validateCanonicalBackendWorkflowSource(backendSource);
+  }
   requireCiSecretScan(ci);
   requireStudentLoginSecretIsolation({ backend, pages });
   requireInputs(backend, ["expected_sha", "production_project_ref"]);
@@ -878,6 +894,7 @@ export function validateDeploymentConfiguration({ ci, backend, pages, rollback }
   requireEnvironment(backendJob, "production-backend");
   requireContentsReadOnly(backendJob, "backend release");
   requireBackendReleaseIdentity(backend, backendJob);
+  requireExactProductionFunctionSet(backendJob);
   requireBootstrapPreflightOrder(backendJob);
   requireRun(backendJob, /migration list/, "backend migration list is missing");
   requireRun(
@@ -888,8 +905,6 @@ export function validateDeploymentConfiguration({ ci, backend, pages, rollback }
   requireProductionFunctionConfigurationValidation(backendJob);
   requireModernProductionFunctionCredentials(backendJob);
   requireRun(backendJob, /secrets set/, "Edge Function secret deployment is missing");
-  requireRun(backendJob, /functions deploy/, "Edge Function deployment is missing");
-  requireExactProductionFunctionSet(backendJob);
   requireEdgeReadyWait(backendJob, "backend release");
   requireFrozenDenoCheck(backendJob, "backend release");
 
@@ -944,7 +959,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     load(await readFile(resolve(workflowDirectory, name), "utf8"));
   const [
     ci,
-    backend,
+    backendSource,
     pages,
     rollback,
     bootstrapFunctionRepair,
@@ -955,7 +970,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     productionJoinLatencyFix,
   ] = await Promise.all([
     readWorkflow("ci.yml"),
-    readWorkflow("backend-production.yml"),
+    readFile(resolve(workflowDirectory, "backend-production.yml"), "utf8"),
     readWorkflow("pages.yml"),
     readWorkflow("pages-rollback.yml"),
     readWorkflow("bootstrap-function-repair.yml"),
@@ -967,7 +982,8 @@ export async function loadDeploymentConfiguration(baseDirectory) {
   ]);
   return {
     ci,
-    backend,
+    backend: load(backendSource),
+    backendSource,
     pages,
     rollback,
     bootstrapFunctionRepair,

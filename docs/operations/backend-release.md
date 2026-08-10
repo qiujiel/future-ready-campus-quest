@@ -113,9 +113,10 @@ Expected deploy set:
 For the simplified-login upgrade, joining remains closed before the backup.
 The pending migration list must contain the reviewed ordered series beginning
 with `20260810000100_simplified_student_login.sql` and ending with
-`20260810000800_simplified_login_release_readiness.sql`. The final readiness
-migration verifies the complete chain and the private credential/attempt tables
-plus all four simplified-login RPCs. Configure the
+`20260810000900_simplified_login_security_readiness.sql`. The final readiness
+migration verifies the complete chain, class-access column and unique index,
+private credential/attempt table ownership, RLS and browser ACLs, plus the exact
+service-only join/login RPC ownership, definer, search-path, and ACL contract. Configure the
 encrypted student-login signer only after migrations succeed, then deploy
 `join-cohort`, `student-login`, `manage-join-window`, `teacher-controls`, and
 `teacher-dashboard` with the rest of the exact Function set from that same

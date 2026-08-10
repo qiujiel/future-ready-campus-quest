@@ -44,9 +44,10 @@ function environment(overrides = {}) {
 function readinessReport(overrides = {}) {
   return {
     requiredMigrationsPresent: true,
-    latestGateDMigration: "20260810000800",
+    latestGateDMigration: "20260810000900",
     requiredFunctionsPresent: true,
     studentLoginObjectsPresent: true,
+    studentLoginSecurityReady: true,
     cleanupScheduleReady: true,
     edgeFunctionsReady: 11,
     openJoinWindows: 0,
@@ -209,7 +210,7 @@ describe("production readiness report", () => {
     const configuration = readPreflightConfiguration(environment());
 
     expect(evaluateReadinessReport(readinessReport(), configuration)).toEqual({
-      latestGateDMigration: "20260810000800",
+      latestGateDMigration: "20260810000900",
       cleanupScheduleReady: true,
       edgeFunctionsReady: 11,
       contentVersion: {
@@ -239,13 +240,13 @@ describe("production readiness report", () => {
     ).toThrow(/required Gate D migrations.*required Gate D functions/i);
   });
 
-  it("rejects a database report that predates the simplified-login migration chain", () => {
+  it("rejects a database report that predates the security-readiness migration", () => {
     const configuration = readPreflightConfiguration(environment(), {
       backendOnly: true,
     });
 
     expect(() => evaluateReadinessReport(
-      readinessReport({ latestGateDMigration: "20260806000700" }),
+      readinessReport({ latestGateDMigration: "20260810000800" }),
       configuration,
     )).toThrow(/required Gate D migrations/i);
   });
@@ -257,11 +258,21 @@ describe("production readiness report", () => {
 
     expect(() => evaluateReadinessReport(
       readinessReport({
-        latestGateDMigration: "20260806000700",
         studentLoginObjectsPresent: false,
       }),
       configuration,
     )).toThrow(/student-login RPCs or private objects/i);
+  });
+
+  it("rejects student-login ownership, RLS, search-path, or ACL drift", () => {
+    const configuration = readPreflightConfiguration(environment(), {
+      backendOnly: true,
+    });
+
+    expect(() => evaluateReadinessReport(
+      readinessReport({ studentLoginSecurityReady: false }),
+      configuration,
+    )).toThrow(/student-login runtime security/i);
   });
 
   it("omits classroom fixtures from backend-only evidence", () => {
@@ -270,7 +281,7 @@ describe("production readiness report", () => {
     });
 
     expect(evaluateReadinessReport(readinessReport(), configuration)).toEqual({
-      latestGateDMigration: "20260810000800",
+      latestGateDMigration: "20260810000900",
       cleanupScheduleReady: true,
       edgeFunctionsReady: 11,
       basePath: "/campus-quest/",

@@ -3,7 +3,12 @@ begin;
 create extension if not exists pgtap with schema extensions;
 create extension if not exists pg_cron with schema extensions;
 
-select plan(16);
+select plan(31);
+
+create role readiness_security_owner;
+grant usage, create on schema private to readiness_security_owner;
+grant usage, create on schema public to readiness_security_owner;
+grant readiness_security_owner to postgres;
 
 select is(
   public.get_production_readiness_report(
@@ -11,7 +16,7 @@ select is(
     '00000000-0000-0000-0000-000000000001'::uuid,
     '00000000-0000-0000-0000-000000000002'::uuid
   )->>'latestGateDMigration',
-  '20260810000800',
+  '20260810000900',
   'readiness records the complete simplified-login deployment migration set'
 );
 
@@ -33,6 +38,16 @@ select is(
   )->>'studentLoginObjectsPresent',
   'true',
   'readiness requires the student-login RPCs and private credential objects'
+);
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'true',
+  'readiness verifies private-table and join/login RPC runtime security'
 );
 
 select ok(
@@ -73,6 +88,229 @@ select ok(
   ),
   'only the service boundary retains readiness-report execution'
 );
+
+savepoint missing_prepare_rpc;
+
+drop function public.prepare_student_code_join(text, uuid, text);
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'requiredFunctionsPresent',
+  'false',
+  'readiness rejects a database missing the combined join-prepare RPC'
+);
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginObjectsPresent',
+  'false',
+  'student-login object readiness requires the combined join-prepare RPC'
+);
+
+rollback to savepoint missing_prepare_rpc;
+
+savepoint missing_login_table;
+
+drop table private.student_login_attempts cascade;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginObjectsPresent',
+  'false',
+  'student-login object readiness rejects a missing private runtime table'
+);
+
+rollback to savepoint missing_login_table;
+
+savepoint missing_student_access_column;
+
+alter table public.cohorts drop column student_access_id cascade;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginObjectsPresent',
+  'false',
+  'student-login object readiness requires the non-null UUID class access column'
+);
+
+rollback to savepoint missing_student_access_column;
+
+savepoint missing_student_access_index;
+
+drop index public.cohorts_student_access_id_uidx;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginObjectsPresent',
+  'false',
+  'student-login object readiness requires the valid unique class access index'
+);
+
+rollback to savepoint missing_student_access_index;
+
+savepoint login_table_rls_drift;
+
+alter table private.student_login_credentials disable row level security;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness rejects disabled private-table RLS'
+);
+
+rollback to savepoint login_table_rls_drift;
+
+savepoint login_table_owner_drift;
+
+alter table private.student_login_credentials owner to readiness_security_owner;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness rejects private-table owner drift'
+);
+
+rollback to savepoint login_table_owner_drift;
+
+savepoint login_table_acl_drift;
+
+grant select on private.student_login_attempts to authenticated;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness rejects browser table grants'
+);
+
+rollback to savepoint login_table_acl_drift;
+
+savepoint login_table_anon_acl_drift;
+
+grant insert on private.student_login_credentials to anon;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness rejects anonymous table grants'
+);
+
+rollback to savepoint login_table_anon_acl_drift;
+
+savepoint login_rpc_invoker_drift;
+
+alter function public.begin_student_login(uuid, text, text, uuid)
+  security invoker;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness rejects invoker-rights RPC drift'
+);
+
+rollback to savepoint login_rpc_invoker_drift;
+
+savepoint login_rpc_search_path_drift;
+
+alter function public.begin_student_login(uuid, text, text, uuid)
+  set search_path to public;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness rejects RPC search-path drift'
+);
+
+rollback to savepoint login_rpc_search_path_drift;
+
+savepoint login_rpc_owner_drift;
+
+alter function public.begin_student_login(uuid, text, text, uuid)
+  owner to readiness_security_owner;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness rejects RPC owner drift'
+);
+
+rollback to savepoint login_rpc_owner_drift;
+
+savepoint login_rpc_acl_drift;
+
+grant execute on function public.begin_student_login(uuid, text, text, uuid)
+  to anon;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness rejects browser RPC grants'
+);
+
+rollback to savepoint login_rpc_acl_drift;
+
+savepoint login_rpc_service_acl_drift;
+
+revoke execute on function public.begin_student_login(uuid, text, text, uuid)
+  from service_role;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness requires service-role RPC execution'
+);
+
+rollback to savepoint login_rpc_service_acl_drift;
 
 select is(
   public.get_production_readiness_report(

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  CANONICAL_PRODUCTION_FUNCTION_DEPLOYMENT_SCRIPT,
   REQUIRED_BACKEND_SECRETS,
   REQUIRED_PAGES_SECRETS,
   REQUIRED_PAGES_VARIABLES,
   validateDeploymentConfiguration,
+  validateProductionFunctionDeploymentScript,
 } from "../../scripts/deployment-config.mjs";
 
 const pinnedCheckout =
@@ -204,11 +206,7 @@ function validConfiguration() {
               ].join("\n"),
             },
             {
-              run: [
-                "for function_name in complete-quest export-cohort get-next-item join-cohort manage-group-identity manage-join-window production-readiness recover-student student-login submit-response teacher-controls teacher-dashboard; do",
-                "  supabase functions deploy \"$function_name\" --project-ref \"$PRODUCTION_SUPABASE_PROJECT_REF\"",
-                "done",
-              ].join("\n"),
+              run: "node scripts/deploy-production-functions.mjs",
             },
             {
               run: "for readiness_function in join-cohort recover-student student-login; do response_code=$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Origin: http://127.0.0.1:4173' http://127.0.0.1/functions/v1/$readiness_function); if [ \"$response_code\" = \"405\" ]; then break; fi; done",
@@ -352,7 +350,7 @@ describe("deployment workflow boundaries", () => {
     );
   });
 
-  it("deploys student login only after ordered migrations and secret configuration", () => {
+  it("deploys the reviewed Function entrypoint only after ordered migrations and secret configuration", () => {
     const configuration = validConfiguration();
     const steps = configuration.backend.jobs.release.steps;
     const migrationIndex = steps.findIndex((step) =>
@@ -363,70 +361,54 @@ describe("deployment workflow boundaries", () => {
       String(step.run ?? "").includes("supabase secrets set")
     );
     const deployIndex = steps.findIndex((step) =>
-      String(step.run ?? "").includes("supabase functions deploy")
+      String(step.run ?? "").includes(
+        "node scripts/deploy-production-functions.mjs",
+      )
     );
 
-    expect(String(steps[deployIndex]?.run)).toContain("student-login");
+    expect(String(steps[deployIndex]?.run).trim()).toBe(
+      "node scripts/deploy-production-functions.mjs",
+    );
     expect(migrationIndex).toBeLessThan(secretIndex);
     expect(secretIndex).toBeLessThan(deployIndex);
   });
 
-  it("rejects a production Function release that omits student login", () => {
-    const configuration = validConfiguration();
-    const deployStep = configuration.backend.jobs.release.steps.find((step) =>
-      String(step.run ?? "").includes("supabase functions deploy")
-    );
-    deployStep.run = deployStep.run.replace(" student-login", "");
-
-    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
-      /exact production Function set/i,
-    );
+  it("accepts the canonical production Function deployment entrypoint", () => {
+    expect(() => validateDeploymentConfiguration(validConfiguration())).not.toThrow();
   });
 
   it.each([
     [
       "appends an unreviewed Function",
-      /exact production Function set/i,
-      (run) =>
-        run.replace(
-          "teacher-dashboard; do",
-          "teacher-dashboard unreviewed-function; do",
-        ),
+      (script) => script.replace(
+        '  "teacher-dashboard",',
+        '  "teacher-dashboard",\n  "unreviewed-function",',
+      ),
     ],
     [
       "lists a Function twice",
-      /exact production Function set/i,
-      (run) =>
-        run.replace(
-          "teacher-dashboard; do",
-          "teacher-dashboard teacher-dashboard; do",
-        ),
+      (script) => script.replace(
+        '  "teacher-dashboard",',
+        '  "teacher-dashboard",\n  "teacher-dashboard",',
+      ),
     ],
     [
-      "adds a secondary Function deploy command",
-      /exact production Function deployment loop/i,
-      (run) =>
-        `${run}\nsupabase functions deploy student-login --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"`,
+      "omits a reviewed Function",
+      (script) => script.replace('  "student-login",\n', ""),
+    ],
+    [
+      "uses an indirect executable",
+      (script) => script.replace('    "pnpm",', "    process.env.DEPLOY_BIN,"),
     ],
     [
       "uses a wildcard Function name",
-      /exact production Function deployment loop/i,
-      (run) => run.replace('"$function_name"', '"$function_name"*'),
+      (script) => script.replace("functionName,", '"*",'),
     ],
-    [
-      "omits the Function name",
-      /exact production Function deployment loop/i,
-      (run) => run.replace('"$function_name" ', ""),
-    ],
-  ])("rejects a backend workflow that %s", (_description, expected, mutateRun) => {
-    const configuration = validConfiguration();
-    const deployStep = configuration.backend.jobs.release.steps.find((step) =>
-      String(step.run ?? "").includes("supabase functions deploy"),
-    );
-    deployStep.run = mutateRun(deployStep.run);
-
-    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
-      expected,
+  ])("rejects a deployment script that %s", (_description, mutateScript) => {
+    expect(() => validateProductionFunctionDeploymentScript(
+      mutateScript(CANONICAL_PRODUCTION_FUNCTION_DEPLOYMENT_SCRIPT),
+    )).toThrow(
+      /exact production Function deployment script/i,
     );
   });
 
@@ -457,6 +439,55 @@ describe("deployment workflow boundaries", () => {
     configuration.backend.jobs.release.steps.push({
       run: '"$DEPLOY_BIN" "functions" "deploy" unreviewed-function --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"',
     });
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /exact production Function deployment loop/i,
+    );
+  });
+
+  it.each([
+    '"$DEPLOY_BIN" functions de"ploy" unreviewed-function',
+    '"$DEPLOY_BIN" functions de\\\nploy unreviewed-function',
+  ])("rejects an unreviewed deploy assembled with shell syntax: %s", (run) => {
+    const configuration = validConfiguration();
+    configuration.backend.jobs.release.steps.push({ run });
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /exact production Function deployment loop/i,
+    );
+  });
+
+  it.each([
+    {
+      env: { BIN: "pnpm", ACTION: "deploy" },
+      run: '"$BIN" exec supabase functions "$ACTION" unreviewed-function --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"',
+    },
+    {
+      env: { BIN: "pnpm", ACTION_LEFT: "de", ACTION_RIGHT: "ploy" },
+      run: '"$BIN" exec supabase functions "${ACTION_LEFT}${ACTION_RIGHT}" unreviewed-function --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"',
+    },
+  ])("rejects a variable-only secondary deploy command", (step) => {
+    const configuration = validConfiguration();
+    configuration.backend.jobs.release.steps.push(step);
+    configuration.backendSource = "unreviewed backend workflow source";
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /canonical backend workflow/i,
+    );
+  });
+
+  it.each([
+    "node scripts/deploy-production-functions.mjs --again",
+    "node scripts/de\"ploy\"-production-functions.mjs",
+    "node scripts/deploy-production-functions.mjs\nnode scripts/deploy-production-functions.mjs",
+  ])("rejects a non-canonical deployment entrypoint: %s", (run) => {
+    const configuration = validConfiguration();
+    const deployStep = configuration.backend.jobs.release.steps.find((step) =>
+      String(step.run ?? "").includes(
+        "node scripts/deploy-production-functions.mjs",
+      ),
+    );
+    deployStep.run = run;
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /exact production Function deployment loop/i,
@@ -938,7 +969,7 @@ describe("deployment workflow boundaries", () => {
     ["migration dry-run", "db push --dry-run"],
     ["migration apply", "db push --linked"],
     ["Function secrets", "supabase secrets set"],
-    ["Function deployment", "supabase functions deploy"],
+    ["Function deployment", "node scripts/deploy-production-functions.mjs"],
   ])("rejects bootstrap preflight after %s", (_label, marker) => {
     const configuration = validConfiguration();
     const steps = configuration.backend.jobs.release.steps;

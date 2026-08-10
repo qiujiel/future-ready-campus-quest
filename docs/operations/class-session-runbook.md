@@ -10,7 +10,7 @@
    health endpoint responds. If reactivation was needed, wait for normal health
    and record only project identity, status, and time.
 3. After the project is healthy, re-run migration readiness and confirm the
-   reviewed series through `20260810000700`, then re-run approved protected-content readiness with 24 items across
+   reviewed series through `20260810000900`, then re-run approved protected-content readiness with 24 items across
    C1–C8, Auth health, and all application-function method-boundary readiness.
    A prior result from before a pause is insufficient.
 4. Sign in with the provisioned teacher account. Never share that account or

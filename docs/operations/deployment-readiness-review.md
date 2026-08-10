@@ -99,9 +99,9 @@ values into evidence.
 The original reviewed baseline contains the retention cleanup scheduling and
 schedule uniqueness/readiness controls through `20260730021100`. The current
 student-ready extension adds ordered, forward-only classroom migrations through
-`20260810000800` for group codes, classroom readiness, roster controls, atomic
+`20260810000900` for group codes, classroom readiness, roster controls, atomic
 launch, adaptive completion, teacher question-bank review, simplified student
-join and returning login, leader transfer, and release-preflight coverage.
+join and returning login, leader transfer, and catalog/ACL release-preflight coverage.
 `supabase/config.toml` declares the twelve expected Edge Functions, including
 `student-login` and `production-readiness`. The protected backend procedure records the remote
 migration list, performs a dry-run before one forward migration push, deploys
