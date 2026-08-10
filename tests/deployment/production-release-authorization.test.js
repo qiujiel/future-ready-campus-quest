@@ -6,72 +6,51 @@ import {
 
 const now = new Date("2026-08-07T12:05:00Z");
 
-const validRecoveryEvidence = {
-  backupEvidenceId: "frcq-backup-20260807T100000Z-a1b2c3d4",
-  backupCreatedAtUtc: "2026-08-07T10:00:00Z",
-  backupArchiveSha256: "a".repeat(64),
-  restoreRehearsalEvidenceId: "frcq-restore-20260807T110000Z-b1c2d3e4",
-};
-
 const bootstrap = {
   releaseMode: "bootstrap",
   bootstrapAuthorizationId: "frcq-bootstrap-20260807T120000Z-a1b2c3d4",
-  backupEvidenceId: "",
-  backupCreatedAtUtc: "",
-  backupArchiveSha256: "",
-  restoreRehearsalEvidenceId: "",
 };
 
-const upgrade = {
-  releaseMode: "upgrade",
+const disposableUpgrade = {
+  releaseMode: "disposable-upgrade",
   bootstrapAuthorizationId: "",
-  ...validRecoveryEvidence,
 };
 
 describe("production release authorization", () => {
-  it("accepts bootstrap only with canonical bootstrap evidence and blank recovery evidence", () => {
+  it("accepts bootstrap only with a canonical bootstrap authorization identifier", () => {
     expect(validateReleaseAuthorization(bootstrap, { now })).toEqual({
       releaseMode: "bootstrap",
       bootstrapAuthorizationId: bootstrap.bootstrapAuthorizationId,
-      recoveryEvidence: null,
     });
   });
 
   it.each([
-    ["backupEvidenceId", validRecoveryEvidence.backupEvidenceId],
-    ["backupCreatedAtUtc", validRecoveryEvidence.backupCreatedAtUtc],
-    ["backupArchiveSha256", validRecoveryEvidence.backupArchiveSha256],
-    ["restoreRehearsalEvidenceId", validRecoveryEvidence.restoreRehearsalEvidenceId],
-  ])("rejects recovery field %s in bootstrap mode", (name, value) => {
+    ["backupEvidenceId", "frcq-backup-20260807T100000Z-a1b2c3d4"],
+    ["backupCreatedAtUtc", "2026-08-07T10:00:00Z"],
+    ["backupArchiveSha256", "a".repeat(64)],
+    ["restoreRehearsalEvidenceId", "frcq-restore-20260807T110000Z-b1c2d3e4"],
+  ])("rejects removed recovery field %s", (name, value) => {
     expect(() => validateReleaseAuthorization({
-      ...bootstrap,
+      ...disposableUpgrade,
       [name]: value,
-    }, { now })).toThrow(/bootstrap.*recovery/i);
+    }, { now })).toThrow(/recovery.*not supported/i);
   });
 
-  it("accepts upgrade only with the four existing recovery fields", () => {
-    expect(validateReleaseAuthorization(upgrade, { now })).toEqual({
-      releaseMode: "upgrade",
+  it("accepts disposable-upgrade with a blank bootstrap authorization identifier", () => {
+    expect(validateReleaseAuthorization(disposableUpgrade, { now })).toEqual({
+      releaseMode: "disposable-upgrade",
       bootstrapAuthorizationId: "",
-      recoveryEvidence: validRecoveryEvidence,
     });
   });
 
-  it("rejects a bootstrap authorization ID in upgrade mode", () => {
+  it("rejects a bootstrap authorization ID in disposable-upgrade mode", () => {
     expect(() => validateReleaseAuthorization({
-      ...upgrade,
+      ...disposableUpgrade,
       bootstrapAuthorizationId: bootstrap.bootstrapAuthorizationId,
-    }, { now })).toThrow(/upgrade.*bootstrap/i);
+    }, { now })).toThrow(/disposable-upgrade.*bootstrap/i);
   });
 
-  it("delegates upgrade recovery validation to the existing strict validator", () => {
-    expect(() => validateReleaseAuthorization({
-      ...upgrade,
-      backupArchiveSha256: "",
-    }, { now })).toThrow(/recovery evidence invalid/i);
-  });
-
-  it.each(["", "Bootstrap", "initial", "upgrade "])(
+  it.each(["", "Bootstrap", "initial", "upgrade", "disposable-upgrade "])(
     "rejects noncanonical release mode %j",
     (releaseMode) => {
       expect(() => validateReleaseAuthorization({
@@ -101,18 +80,13 @@ describe("production release authorization", () => {
 
   it("maps only approved dispatch values and ignores unrelated secrets", () => {
     expect(readReleaseAuthorization({
-      RELEASE_MODE: "bootstrap",
-      BOOTSTRAP_AUTHORIZATION_ID: bootstrap.bootstrapAuthorizationId,
-      BACKUP_EVIDENCE_ID: "",
-      BACKUP_CREATED_AT_UTC: "",
-      BACKUP_ARCHIVE_SHA256: "",
-      RESTORE_REHEARSAL_EVIDENCE_ID: "",
+      RELEASE_MODE: "disposable-upgrade",
+      BOOTSTRAP_AUTHORIZATION_ID: "",
       PRODUCTION_SUPABASE_DB_PASSWORD: "ignored-secret",
       SUPABASE_ACCESS_TOKEN: "ignored-secret",
     }, { now })).toEqual({
-      releaseMode: "bootstrap",
-      bootstrapAuthorizationId: bootstrap.bootstrapAuthorizationId,
-      recoveryEvidence: null,
+      releaseMode: "disposable-upgrade",
+      bootstrapAuthorizationId: "",
     });
   });
 });

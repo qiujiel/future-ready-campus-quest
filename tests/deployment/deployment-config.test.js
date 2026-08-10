@@ -45,6 +45,11 @@ const bootstrapPreflightStep = (configuration) =>
     step.name === "Verify empty production bootstrap state"
   );
 
+const disposableStatePreflightStep = (configuration) =>
+  configuration.backend.jobs.release.steps.find((step) =>
+    step.name === "Verify disposable production state"
+  );
+
 const identityStep = (configuration) =>
   configuration.backend.jobs.release.steps.find((step) =>
     step.name === "Validate protected release identity"
@@ -78,32 +83,11 @@ function validConfiguration() {
               description: "Release authorization mode",
               required: true,
               type: "choice",
-              default: "upgrade",
-              options: ["upgrade", "bootstrap"],
+              default: "disposable-upgrade",
+              options: ["disposable-upgrade", "bootstrap"],
             },
             bootstrap_authorization_id: {
               description: "Redaction-safe bootstrap authorization identifier",
-              required: false,
-              type: "string",
-            },
-            backup_evidence_id: {
-              description: "Redaction-safe backup evidence identifier",
-              required: false,
-              type: "string",
-            },
-            backup_created_at_utc: {
-              description: "Redaction-safe UTC backup completion timestamp",
-              required: false,
-              type: "string",
-            },
-            backup_archive_sha256: {
-              description: "Redaction-safe SHA-256 for the backup archive",
-              required: false,
-              type: "string",
-            },
-            restore_rehearsal_evidence_id: {
-              description:
-                "Redaction-safe restore rehearsal evidence identifier",
               required: false,
               type: "string",
             },
@@ -140,12 +124,6 @@ function validConfiguration() {
                 RELEASE_MODE: "${{ inputs.release_mode }}",
                 BOOTSTRAP_AUTHORIZATION_ID:
                   "${{ inputs.bootstrap_authorization_id }}",
-                BACKUP_EVIDENCE_ID: "${{ inputs.backup_evidence_id }}",
-                BACKUP_CREATED_AT_UTC: "${{ inputs.backup_created_at_utc }}",
-                BACKUP_ARCHIVE_SHA256:
-                  "${{ inputs.backup_archive_sha256 }}",
-                RESTORE_REHEARSAL_EVIDENCE_ID:
-                  "${{ inputs.restore_rehearsal_evidence_id }}",
               },
               run: "node scripts/production-release-authorization.mjs",
             },
@@ -177,6 +155,20 @@ function validConfiguration() {
                   "${{ inputs.production_project_ref }}",
               },
               run: identityScript,
+            },
+            {
+              name: "Verify disposable production state",
+              if: "${{ inputs.release_mode == 'disposable-upgrade' }}",
+              env: {
+                RELEASE_MODE: "${{ inputs.release_mode }}",
+                PRODUCTION_SUPABASE_PROJECT_REF:
+                  "${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}",
+                PRODUCTION_SUPABASE_URL: "${{ vars.VITE_SUPABASE_URL }}",
+                LOAD_SUPABASE_PROJECT_REF:
+                  "${{ vars.LOAD_SUPABASE_PROJECT_REF }}",
+                SUPABASE_ACCESS_TOKEN: "${{ secrets.SUPABASE_ACCESS_TOKEN }}",
+              },
+              run: "node scripts/production-disposable-state.mjs",
             },
             {
               name: "Link the confirmed production project",
@@ -566,9 +558,22 @@ describe("deployment workflow boundaries", () => {
 
   it("rejects a backend workflow missing release authorization inputs", () => {
     const configuration = validConfiguration();
-    delete configuration.backend.on.workflow_dispatch.inputs.backup_archive_sha256;
+    delete configuration.backend.on.workflow_dispatch.inputs.bootstrap_authorization_id;
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
-      /canonical release workflow input backup_archive_sha256/i,
+      /canonical release workflow input bootstrap_authorization_id/i,
+    );
+  });
+
+  it("rejects removed recovery-evidence dispatch inputs", () => {
+    const configuration = validConfiguration();
+    configuration.backend.on.workflow_dispatch.inputs.backup_evidence_id = {
+      description: "Redaction-safe backup evidence identifier",
+      required: false,
+      type: "string",
+    };
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /canonical release workflow inputs/i,
     );
   });
 
@@ -577,7 +582,7 @@ describe("deployment workflow boundaries", () => {
       input.default = "bootstrap";
     }],
     ["choice options", (input) => {
-      input.options = ["upgrade"];
+      input.options = ["disposable-upgrade"];
     }],
     ["option order", (input) => {
       input.options.reverse();
@@ -597,34 +602,6 @@ describe("deployment workflow boundaries", () => {
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /canonical release workflow input release_mode/i,
-    );
-  });
-
-  it.each([
-    ["default", (input) => {
-      input.default = "evidence-already-present";
-    }],
-    ["choice options", (input) => {
-      input.type = "choice";
-      input.options = ["evidence-already-present"];
-    }],
-    ["missing type", (input) => {
-      delete input.type;
-    }],
-    ["wrong type", (input) => {
-      input.type = "boolean";
-    }],
-    ["extra field", (input) => {
-      input.unexpected = true;
-    }],
-  ])("rejects a release workflow input with %s", (_scope, mutate) => {
-    const configuration = validConfiguration();
-    mutate(
-      configuration.backend.on.workflow_dispatch.inputs.backup_evidence_id,
-    );
-
-    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
-      /canonical release workflow input backup_evidence_id/i,
     );
   });
 
@@ -912,25 +889,25 @@ describe("deployment workflow boundaries", () => {
   it("rejects release authorization validation without every dispatch input mapping", () => {
     const configuration = validConfiguration();
     delete authorizationValidatorStep(configuration).env
-      .RESTORE_REHEARSAL_EVIDENCE_ID;
+      .BOOTSTRAP_AUTHORIZATION_ID;
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
-      /restore_rehearsal_evidence_id/i,
+      /bootstrap_authorization_id/i,
     );
   });
 
   it("rejects inexact or extra release input mappings", () => {
     const wrongInputConfiguration = validConfiguration();
-    authorizationValidatorStep(wrongInputConfiguration).env.BACKUP_EVIDENCE_ID =
-      "${{ inputs.restore_rehearsal_evidence_id }}";
+    authorizationValidatorStep(wrongInputConfiguration).env.BOOTSTRAP_AUTHORIZATION_ID =
+      "${{ inputs.release_mode }}";
     expect(() => validateDeploymentConfiguration(wrongInputConfiguration)).toThrow(
-      /backup_evidence_id/i,
+      /bootstrap_authorization_id/i,
     );
 
     const extraMappingConfiguration = validConfiguration();
     authorizationValidatorStep(extraMappingConfiguration).env.EXTRA =
-      "${{ inputs.backup_evidence_id }}";
+      "${{ inputs.release_mode }}";
     expect(() => validateDeploymentConfiguration(extraMappingConfiguration)).toThrow(
-      /exactly six approved environment mappings/i,
+      /exactly two approved environment mappings/i,
     );
   });
 
@@ -956,7 +933,7 @@ describe("deployment workflow boundaries", () => {
 
   it.each([
     ["condition", (step) => {
-      step.if = "${{ inputs.release_mode != 'upgrade' }}";
+      step.if = "${{ inputs.release_mode != 'bootstrap' }}";
     }],
     ["command", (step) => {
       step.run = "echo node scripts/production-bootstrap-preflight.mjs";
@@ -1001,6 +978,68 @@ describe("deployment workflow boundaries", () => {
 
     expect(() => validateDeploymentConfiguration(configuration)).toThrow(
       /bootstrap preflight must run after linking and before production mutations/i,
+    );
+  });
+
+  it.each([
+    ["condition", (step) => {
+      step.if = "${{ inputs.release_mode != 'bootstrap' }}";
+    }],
+    ["command", (step) => {
+      step.run = "echo node scripts/production-disposable-state.mjs";
+    }],
+    ["missing release-mode mapping", (step) => {
+      delete step.env.RELEASE_MODE;
+    }],
+    ["wrong access-token mapping", (step) => {
+      step.env.SUPABASE_ACCESS_TOKEN =
+        "${{ secrets.PRODUCTION_SUPABASE_DB_PASSWORD }}";
+    }],
+    ["additional secret mapping", (step) => {
+      step.env.PRODUCTION_SUPABASE_SECRET_KEY =
+        "${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}";
+    }],
+    ["continue on error", (step) => {
+      step["continue-on-error"] = true;
+    }],
+  ])("rejects a non-canonical disposable-state preflight %s", (_scope, mutate) => {
+    const configuration = validConfiguration();
+    mutate(disposableStatePreflightStep(configuration));
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /canonical disposable-state preflight/i,
+    );
+  });
+
+  it("rejects a missing disposable-state preflight", () => {
+    const configuration = validConfiguration();
+    const steps = configuration.backend.jobs.release.steps;
+    steps.splice(steps.indexOf(disposableStatePreflightStep(configuration)), 1);
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /canonical disposable-state preflight/i,
+    );
+  });
+
+  it.each([
+    ["production link", "Link the confirmed production project"],
+    ["migration list", "migration list"],
+    ["migration dry-run", "db push --dry-run"],
+    ["migration apply", "db push --linked"],
+    ["Function secrets", "supabase secrets set"],
+    ["Function deployment", "node scripts/deploy-production-functions.mjs"],
+  ])("rejects disposable-state preflight after %s", (_label, marker) => {
+    const configuration = validConfiguration();
+    const steps = configuration.backend.jobs.release.steps;
+    const disposableIndex = steps.indexOf(disposableStatePreflightStep(configuration));
+    const [disposable] = steps.splice(disposableIndex, 1);
+    const markerIndex = steps.findIndex((step) =>
+      step.name === marker || String(step.run ?? "").includes(marker)
+    );
+    steps.splice(markerIndex + 1, 0, disposable);
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /disposable-state preflight must run before production link and mutations/i,
     );
   });
 

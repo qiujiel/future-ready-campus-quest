@@ -1,13 +1,11 @@
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { validateRecoveryEvidence } from "./recovery-evidence.mjs";
-
 const BOOTSTRAP_ID =
   /^frcq-bootstrap-([0-9]{8}T[0-9]{6}Z)-[a-f0-9]{8}$/;
-const MODES = new Set(["bootstrap", "upgrade"]);
+const MODES = new Set(["bootstrap", "disposable-upgrade"]);
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
-const RECOVERY_FIELDS = [
+const REMOVED_RECOVERY_FIELDS = [
   "backupEvidenceId",
   "backupCreatedAtUtc",
   "backupArchiveSha256",
@@ -41,29 +39,29 @@ function validateBootstrapAuthorizationId(value, now) {
 
 export function validateReleaseAuthorization(input, { now = new Date() } = {}) {
   const releaseMode = input?.releaseMode;
-  if (!MODES.has(releaseMode)) fail("release mode must be bootstrap or upgrade");
+  if (!MODES.has(releaseMode)) {
+    fail("release mode must be bootstrap or disposable-upgrade");
+  }
+  if (REMOVED_RECOVERY_FIELDS.some((name) => name in (input ?? {}))) {
+    fail("recovery evidence is not supported");
+  }
 
   if (releaseMode === "bootstrap") {
-    if (RECOVERY_FIELDS.some((name) => input?.[name] !== "")) {
-      fail("bootstrap recovery evidence must be empty");
-    }
     return Object.freeze({
       releaseMode,
       bootstrapAuthorizationId: validateBootstrapAuthorizationId(
         input?.bootstrapAuthorizationId,
         now,
       ),
-      recoveryEvidence: null,
     });
   }
 
   if (input?.bootstrapAuthorizationId !== "") {
-    fail("upgrade bootstrap authorization ID must be empty");
+    fail("disposable-upgrade bootstrap authorization ID must be empty");
   }
   return Object.freeze({
     releaseMode,
     bootstrapAuthorizationId: "",
-    recoveryEvidence: validateRecoveryEvidence(input, { now }),
   });
 }
 
@@ -71,10 +69,6 @@ export function readReleaseAuthorization(environment, options) {
   return validateReleaseAuthorization({
     releaseMode: environment.RELEASE_MODE,
     bootstrapAuthorizationId: environment.BOOTSTRAP_AUTHORIZATION_ID,
-    backupEvidenceId: environment.BACKUP_EVIDENCE_ID,
-    backupCreatedAtUtc: environment.BACKUP_CREATED_AT_UTC,
-    backupArchiveSha256: environment.BACKUP_ARCHIVE_SHA256,
-    restoreRehearsalEvidenceId: environment.RESTORE_REHEARSAL_EVIDENCE_ID,
   }, options);
 }
 
