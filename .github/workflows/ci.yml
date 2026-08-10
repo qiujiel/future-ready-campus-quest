@@ -125,23 +125,19 @@ jobs:
 
       - name: Bootstrap disposable full-stack classroom
         env:
-          SUPABASE_URL: ${{ env.TEST_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ env.TEST_SUPABASE_SERVICE_ROLE_KEY }}
           LOCAL_TEACHER_EMAIL: ci-full-stack-teacher@example.invalid
           LOCAL_TEACHER_PASSWORD: ci-only-full-stack-teacher-password
           LOCAL_SYNTHETIC_CONTENT: "1"
-        run: >-
-          pnpm bootstrap:local tests/fixtures/public-synthetic-bank.json
+        run: |
+          SUPABASE_URL="$TEST_SUPABASE_URL" \
+            SUPABASE_SERVICE_ROLE_KEY="$TEST_SUPABASE_SERVICE_ROLE_KEY" \
+            pnpm bootstrap:local tests/fixtures/public-synthetic-bank.json
 
       - name: Run hosted classroom full-stack gate
         env:
           LOCAL_CLASSROOM_E2E: "1"
           LOCAL_TEACHER_EMAIL: ci-full-stack-teacher@example.invalid
           LOCAL_TEACHER_PASSWORD: ci-only-full-stack-teacher-password
-          TEST_SUPABASE_URL: ${{ env.TEST_SUPABASE_URL }}
-          TEST_SUPABASE_ANON_KEY: ${{ env.TEST_SUPABASE_ANON_KEY }}
-          VITE_SUPABASE_URL: ${{ env.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ env.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: pnpm test:e2e:classroom
 
       - name: Run browser smoke tests

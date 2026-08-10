@@ -76,27 +76,29 @@ it("wires a dedicated hosted-classroom gate to disposable Supabase in CI", () =>
   expect(edgeStep.run).toContain("pnpm test:integration");
 
   const bootstrapStep = namedStep("Bootstrap disposable full-stack classroom");
-  expect(bootstrapStep.env).toMatchObject({
-    SUPABASE_URL: "${{ env.TEST_SUPABASE_URL }}",
-    SUPABASE_SERVICE_ROLE_KEY: "${{ env.TEST_SUPABASE_SERVICE_ROLE_KEY }}",
+  expect(bootstrapStep.env).toEqual({
     LOCAL_TEACHER_EMAIL: "ci-full-stack-teacher@example.invalid",
+    LOCAL_TEACHER_PASSWORD: "ci-only-full-stack-teacher-password",
     LOCAL_SYNTHETIC_CONTENT: "1",
   });
-  expect(bootstrapStep.env.LOCAL_TEACHER_PASSWORD).toMatch(/^ci-only-/);
+  expect(bootstrapStep.run).toContain(
+    'SUPABASE_URL="$TEST_SUPABASE_URL"',
+  );
+  expect(bootstrapStep.run).toContain(
+    'SUPABASE_SERVICE_ROLE_KEY="$TEST_SUPABASE_SERVICE_ROLE_KEY"',
+  );
   expect(bootstrapStep.run).toContain("tests/fixtures/public-synthetic-bank.json");
   expect(bootstrapStep.run).not.toContain("echo");
 
   const gateStep = namedStep("Run hosted classroom full-stack gate");
-  expect(gateStep.env).toMatchObject({
+  expect(gateStep.env).toEqual({
     LOCAL_CLASSROOM_E2E: "1",
     LOCAL_TEACHER_EMAIL: bootstrapStep.env.LOCAL_TEACHER_EMAIL,
     LOCAL_TEACHER_PASSWORD: bootstrapStep.env.LOCAL_TEACHER_PASSWORD,
-    TEST_SUPABASE_URL: "${{ env.TEST_SUPABASE_URL }}",
-    TEST_SUPABASE_ANON_KEY: "${{ env.TEST_SUPABASE_ANON_KEY }}",
-    VITE_SUPABASE_URL: "${{ env.VITE_SUPABASE_URL }}",
-    VITE_SUPABASE_PUBLISHABLE_KEY:
-      "${{ env.VITE_SUPABASE_PUBLISHABLE_KEY }}",
   });
+  expect(JSON.stringify([bootstrapStep, gateStep])).not.toMatch(
+    /\$\{\{\s*env\.(?:TEST|VITE)_SUPABASE_/,
+  );
   expect(gateStep.run).toBe("pnpm test:e2e:classroom");
   expect(namedStep("Run browser smoke tests").run).toBe("pnpm playwright test");
 
