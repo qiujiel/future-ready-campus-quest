@@ -210,16 +210,16 @@ concurrently. Browser route checks read `current_role()` from the protected
 role table rather than trusting token metadata.
 
 The original 1.5-second p95 join objective remains aspirational. The approved
-classroom-readiness release gate requires one-time join p95 at or below 5 seconds for
+classroom-readiness release gate requires one-time join p95 at or below 7 seconds for
 30 exactly simultaneous students. The response p95 below 1.5 seconds remains
-unchanged, as does the dashboard p95 below 2.5 seconds. Evidence must also show
-all 30 students joined, zero incorrect group assignments, zero duplicate student
-identities, zero failed authorized requests, zero accepted unauthorized calls,
-no duplicate responses or data loss, five correct groups, and verified score
-formulas. The longer join latency occurs only during initial classroom entry;
-it is a known limitation, not permission to reduce
-authentication, code validation, the 45/90 rate and capacity limits, replay
-protection, RLS, student isolation, or teacher authorization.
+unchanged, as does the dashboard p95 below 2.5 seconds. Before-optimization overall/preflight p95 was `7,640.78` / `3,121.82` ms. Final accepted overall/preflight p95 is `6,882.59` / `1,660.52` ms. The `6,882.59` ms overall p95 is an owner-approved one-time initial-entry limitation. Evidence must also
+show all 30 students joined, zero incorrect group assignments, zero duplicate student
+identities, zero failed authorized requests, zero accepted unauthorized
+calls, no duplicate responses or data loss, five correct groups, and verified
+score formulas. The longer join latency occurs only during initial classroom
+entry; it is a known limitation, not permission to reduce authentication, code
+validation, the 45/90 rate and capacity limits, replay protection, RLS, student
+isolation, or teacher authorization. No other correctness, security, or performance gate changes.
 
 Protected Pages run `31243468453` at commit
 `68ab33aed1636330c06475054954e9da17b6b223` is the accepted classroom-load

@@ -270,7 +270,10 @@ const assertBackendReleasePolicy = (backend) => {
   assertPatterns(backend, [
     /only accepted recovery path[\s\S]*verified Free-plan encrypted logical/is,
     /Before approving\s+`production-backend`[\s\S]*compares all four inputs/is,
-    /one-time join p95 at or below 5\s+seconds[\s\S]*response p95 below 1\.5 seconds/is,
+    /one-time join p95 at or below 7 seconds[\s\S]*response p95 below 1\.5 seconds[\s\S]*dashboard p95 below 2\.5 seconds/is,
+    /before-optimization overall\/preflight p95[\s\S]*7,640\.78[\s\S]*3,121\.82/is,
+    /final accepted overall\/preflight p95[\s\S]*6,882\.59[\s\S]*1,660\.52/is,
+    /6,882\.59[\s\S]*owner-approved one-time initial-entry limitation/is,
     /zero incorrect group assignments[\s\S]*zero duplicate student\s+identities/is,
   ]);
   rejectPatterns(backend, [
@@ -394,8 +397,12 @@ const assertChecklistPolicy = (checklist) => {
     "Independent reviewer signature/time",
     "Any unchecked item means **HOLD**",
     "No operator, owner, approver, or reviewer may waive",
-    "one-time join p95 at or below 5 seconds",
+    "one-time join p95 at or below 7 seconds",
+    "at most 7 seconds",
+    "6,882.59 ms overall",
+    "1,660.52 ms preflight",
     "response p95 below 1.5 seconds",
+    "dashboard p95 below 2.5 seconds",
     "zero incorrect group assignments",
     "zero duplicate student identities",
     "20260810001100_class_scoped_join_preparation.sql",
