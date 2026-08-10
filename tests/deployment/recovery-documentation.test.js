@@ -20,7 +20,7 @@ const section = (source, heading, level = "##") => {
 
 const inventoryNames = (source, heading) => {
   const scope = section(source, heading, "###");
-  const names = [...scope.matchAll(/^\| `([A-Z_]+)` \|/gm)]
+  const names = [...scope.matchAll(/^\| `([A-Za-z_][A-Za-z0-9_]*)` \|/gm)]
     .map((match) => match[1])
     .sort();
   if (names.length === 0) expect(scope).toMatch(/^### (?:Variables|Secrets)\n\nNone\.\n?$/);
@@ -101,6 +101,60 @@ const expectedGitHubScopeInventory = {
 const assertGitHubScopeInventory = (github) => {
   expect(githubScopeInventory(github)).toEqual(expectedGitHubScopeInventory);
 };
+
+const githubInventoryScopes = [
+  {
+    heading: "`load-test` environment",
+    inventory: expectedGitHubScopeInventory.loadTest,
+  },
+  {
+    heading: "`production-backend` environment",
+    inventory: expectedGitHubScopeInventory.productionBackend,
+  },
+  {
+    heading: "`production-readiness` environment",
+    inventory: expectedGitHubScopeInventory.productionReadiness,
+  },
+  {
+    heading: "`github-pages` environment",
+    inventory: expectedGitHubScopeInventory.githubPages,
+  },
+];
+
+const mutateInventory = (github, environmentHeading, inventoryHeading, transform) => {
+  const environment = section(github, environmentHeading);
+  const inventory = section(environment, inventoryHeading, "###");
+  const mutatedInventory = transform(inventory);
+  expect(mutatedInventory).not.toBe(inventory);
+  return github.replace(environment, environment.replace(inventory, mutatedInventory));
+};
+
+const addInventoryName = (github, environmentHeading, inventoryHeading, name) => mutateInventory(
+  github,
+  environmentHeading,
+  inventoryHeading,
+  (inventory) => {
+    const row = `| \`${name}\` | Injected mutation. |\n`;
+    if (inventory.includes("None.")) {
+      const singular = inventoryHeading === "Variables" ? "Variable" : "Secret";
+      return inventory.replace(
+        "None.",
+        `| ${singular} | Purpose |\n| --- | --- |\n${row}`,
+      );
+    }
+    return inventory.replace(/^\| --- \| --- \|\n/m, (separator) => `${separator}${row}`);
+  },
+);
+
+const removeInventoryName = (github, environmentHeading, inventoryHeading, name) => mutateInventory(
+  github,
+  environmentHeading,
+  inventoryHeading,
+  (inventory) => inventory
+    .split("\n")
+    .filter((line) => !line.startsWith(`| \`${name}\` |`))
+    .join("\n"),
+);
 
 const disposableAggregateContract = [
   "exactly one Auth account marked by `course-owner-2026-08-08` and no other Auth account",
@@ -214,20 +268,57 @@ describe("disposable production recovery policy", () => {
     });
   });
 
-  it("rejects missing, extra, and cross-scope GitHub inventory names", async () => {
+  it("rejects valid mixed-case and digit-bearing extra names in every GitHub inventory", async () => {
     const github = await read("github-environments.md");
-    const missing = github.replace("| `PRODUCTION_TEACHER_EMAIL`", "| `REMOVED_NAME`");
-    const secretInVariables = github.replace(
-      "| `PRODUCTION_FRONTEND_ORIGIN` | Deployed HTTPS browser origin, with no path. |",
-      "| `PRODUCTION_FRONTEND_ORIGIN` | Deployed HTTPS browser origin, with no path. |\n| `SUPABASE_ACCESS_TOKEN` | Incorrect scope. |",
-    );
-    const variableInSecrets = github.replace(
-      "| `SUPABASE_ACCESS_TOKEN` | CLI authorization for the production organization. |",
-      "| `SUPABASE_ACCESS_TOKEN` | CLI authorization for the production organization. |\n| `VITE_BASE_PATH` | Incorrect scope. |",
-    );
 
-    for (const mutation of [missing, secretInVariables, variableInSecrets]) {
-      expect(() => assertGitHubScopeInventory(mutation)).toThrow();
+    for (const { heading } of githubInventoryScopes) {
+      for (const inventoryHeading of ["Variables", "Secrets"]) {
+        const mutation = addInventoryName(
+          github,
+          heading,
+          inventoryHeading,
+          "extraValid1",
+        );
+        expect(() => assertGitHubScopeInventory(mutation)).toThrow();
+      }
     }
+  });
+
+  it("rejects every missing and wrong Variables or Secrets scope name", async () => {
+    const github = await read("github-environments.md");
+
+    for (const { heading, inventory } of githubInventoryScopes) {
+      for (const [kind, names] of Object.entries(inventory)) {
+        const inventoryHeading = kind === "variables" ? "Variables" : "Secrets";
+        const wrongInventoryHeading = kind === "variables" ? "Secrets" : "Variables";
+        for (const name of names) {
+          const missing = removeInventoryName(github, heading, inventoryHeading, name);
+          expect(() => assertGitHubScopeInventory(missing)).toThrow();
+
+          const wrongScope = addInventoryName(
+            removeInventoryName(github, heading, inventoryHeading, name),
+            heading,
+            wrongInventoryHeading,
+            name,
+          );
+          expect(() => assertGitHubScopeInventory(wrongScope)).toThrow();
+        }
+      }
+    }
+
+    const pagesVariableInSecrets = addInventoryName(
+      github,
+      "`github-pages` environment",
+      "Secrets",
+      "PRODUCTION_FRONTEND_ORIGIN",
+    );
+    const pagesSecretInVariables = addInventoryName(
+      github,
+      "`github-pages` environment",
+      "Variables",
+      "PRODUCTION_READINESS_SECRET",
+    );
+    expect(() => assertGitHubScopeInventory(pagesVariableInSecrets)).toThrow();
+    expect(() => assertGitHubScopeInventory(pagesSecretInVariables)).toThrow();
   });
 });
