@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(23);
+select plan(25);
 
 select has_column(
   'public',
@@ -101,6 +101,39 @@ set identity_editor_id = 'a2000000-0000-4000-8000-000000000001'
 where cohort_id = 'a3000000-0000-4000-8000-000000000001'
   and group_number = 1;
 
+update public.groups
+set identity_editor_id = 'a2000000-0000-4000-8000-000000000003'
+where cohort_id = 'a3000000-0000-4000-8000-000000000001'
+  and group_number = 2;
+
+insert into private.group_identity_receipts (
+  actor_user_id,
+  request_key,
+  input_payload,
+  group_id,
+  group_number,
+  display_name,
+  image_object_path,
+  locked_at
+)
+select
+  'a2000000-0000-4000-8000-000000000003',
+  'a6000000-0000-4000-8000-000000000017',
+  jsonb_build_object(
+    'action', 'transfer-editor',
+    'group_id', groups.id,
+    'display_name', null,
+    'next_editor_id', 'a2000000-0000-4000-8000-000000000004'::uuid
+  ),
+  groups.id,
+  groups.group_number,
+  groups.display_name,
+  groups.image_object_path,
+  groups.identity_locked_at
+from public.groups as groups
+where groups.cohort_id = 'a3000000-0000-4000-8000-000000000001'
+  and groups.group_number = 2;
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'a2000000-0000-4000-8000-000000000002', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
@@ -128,6 +161,37 @@ select throws_ok(
   '42501',
   'MEDIA_ACTION_DENIED',
   'an ordinary member cannot upload group media at the database boundary'
+);
+
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'a2000000-0000-4000-8000-000000000003', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+
+select throws_ok(
+  $$select * from public.manage_group_identity(
+      'transfer-editor',
+      (select id from public.groups where cohort_id = 'a3000000-0000-4000-8000-000000000001' and group_number = 2),
+      null,
+      'a2000000-0000-4000-8000-000000000004',
+      'a6000000-0000-4000-8000-000000000016'
+    )$$,
+  '42501',
+  'GROUP_ACTION_DENIED',
+  'the current group leader cannot transfer leadership at the database boundary'
+);
+
+select throws_ok(
+  $$select * from public.manage_group_identity(
+      'transfer-editor',
+      (select id from public.groups where cohort_id = 'a3000000-0000-4000-8000-000000000001' and group_number = 2),
+      null,
+      'a2000000-0000-4000-8000-000000000004',
+      'a6000000-0000-4000-8000-000000000017'
+    )$$,
+  '42501',
+  'GROUP_ACTION_DENIED',
+  'a pre-migration student transfer receipt cannot bypass teacher-only authorization'
 );
 
 reset role;

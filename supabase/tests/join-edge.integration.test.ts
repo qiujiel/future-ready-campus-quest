@@ -349,7 +349,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
         joinCode,
         displayName: "Synthetic Integration Learner",
         passcode: studentPasscode,
-        wantsLeader: false,
+        wantsLeader: true,
         requestKey: crypto.randomUUID(),
       }),
     });
@@ -358,7 +358,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
     expect(payload.identity).toMatchObject({
       cohortId,
       groupNumber: 1,
-      isGroupIdentityEditor: false,
+      isGroupIdentityEditor: true,
     });
     expect(payload.identity).not.toHaveProperty("realName");
     studentId = payload.identity.studentId;
@@ -451,6 +451,29 @@ it("completes a valid join against real Auth and database boundaries", async () 
         password: credentiallessPassword,
       });
     if (credentiallessSession.error) throw credentiallessSession.error;
+
+    const forbiddenStudentTransfer = await fetch(
+      `${apiUrl}/functions/v1/manage-group-identity`,
+      {
+        method: "POST",
+        headers: {
+          Origin: allowedOrigin,
+          apikey: anonKey,
+          Authorization: `Bearer ${String(payload.accessToken)}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "transfer-editor",
+          groupId: credentiallessGroupId,
+          nextEditorId: credentiallessStudentId,
+          requestKey: crypto.randomUUID(),
+        }),
+      },
+    );
+    expect(forbiddenStudentTransfer.status).toBe(400);
+    expect(await forbiddenStudentTransfer.json()).toEqual({
+      error: "INVALID_GROUP_ACTION",
+    });
 
     const questionBank = await teacherClient.functions.invoke(
       "teacher-dashboard",

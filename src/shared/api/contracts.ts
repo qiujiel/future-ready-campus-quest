@@ -125,12 +125,6 @@ export type GroupIdentityCommand =
       requestKey: string;
     }
   | {
-      action: "transfer-editor";
-      groupId: string;
-      nextEditorId: string;
-      requestKey: string;
-    }
-  | {
       action: "lock" | "unlock";
       groupId: string;
       requestKey: string;
