@@ -2,7 +2,16 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(51);
+select plan(53);
+
+select ok(
+  exists (
+    select 1
+    from supabase_migrations.schema_migrations
+    where version = '20260810000400'
+  ),
+  'the leaderless identity fix is delivered by a post-003 upgrade migration'
+);
 
 select has_column(
   'public',
@@ -52,6 +61,19 @@ select has_function(
   'load_student_login_identity',
   array['uuid'],
   'the narrow returning-login identity RPC exists'
+);
+
+select ok(
+  (
+    select
+      functions.prosecdef
+      and functions.proconfig @> array['search_path=""']
+      and pg_get_userbyid(functions.proowner) = 'postgres'
+    from pg_proc as functions
+    where functions.oid =
+      'public.load_student_login_identity(uuid)'::regprocedure
+  ),
+  'the upgraded identity RPC preserves definer security, empty search path, and owner'
 );
 
 insert into auth.users (

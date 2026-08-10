@@ -20,7 +20,7 @@ as $$
     private_profiles.group_id,
     groups.group_number,
     public_profiles.nickname,
-    groups.identity_editor_id = private_profiles.student_id
+    coalesce(groups.identity_editor_id = private_profiles.student_id, false)
   from public.student_private_profiles as private_profiles
   join public.student_public_profiles as public_profiles
     on public_profiles.student_id = private_profiles.student_id
@@ -32,6 +32,8 @@ as $$
   where private_profiles.student_id = p_student_id
     and private_profiles.removed_at is null;
 $$;
+
+alter function public.load_student_login_identity(uuid) owner to postgres;
 
 revoke all on function public.load_student_login_identity(uuid)
   from public, anon, authenticated;
