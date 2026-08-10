@@ -398,6 +398,7 @@ const assertChecklistPolicy = (checklist) => {
     "response p95 below 1.5 seconds",
     "zero incorrect group assignments",
     "zero duplicate student identities",
+    "20260810001000_exact_login_acl_readiness.sql",
   ]);
 
   for (const label of remoteApprovalLabels) {

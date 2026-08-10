@@ -805,6 +805,56 @@ export function validateLoadTestBootstrapConfiguration(workflow) {
   ) {
     fail("load-test bootstrap must not receive production or load application keys");
   }
+
+  const secretFile = "/tmp/campus-quest-load-functions.env";
+  const expectedSecretConfiguration = [
+    "set +x",
+    "umask 077",
+    'JOIN_TOKEN_SIGNING_SECRET="$(openssl rand -hex 32)"',
+    'RECOVERY_TOKEN_SIGNING_SECRET="$(openssl rand -hex 32)"',
+    'STUDENT_LOGIN_SIGNING_SECRET="$(openssl rand -hex 32)"',
+    'PRODUCTION_READINESS_SECRET="$(openssl rand -hex 32)"',
+    'test "$STUDENT_LOGIN_SIGNING_SECRET" != "$JOIN_TOKEN_SIGNING_SECRET"',
+    'test "$STUDENT_LOGIN_SIGNING_SECRET" != "$RECOVERY_TOKEN_SIGNING_SECRET"',
+    'test "$STUDENT_LOGIN_SIGNING_SECRET" != "$PRODUCTION_READINESS_SECRET"',
+    "printf '%s\\n' \\",
+    "  \"ALLOWED_FRONTEND_ORIGINS=http://127.0.0.1:4173\" \\",
+    "  \"FRONTEND_APP_URL=http://127.0.0.1:4173\" \\",
+    "  \"JOIN_TOKEN_SIGNING_SECRET=$JOIN_TOKEN_SIGNING_SECRET\" \\",
+    "  \"RECOVERY_TOKEN_SIGNING_SECRET=$RECOVERY_TOKEN_SIGNING_SECRET\" \\",
+    "  \"STUDENT_LOGIN_SIGNING_SECRET=$STUDENT_LOGIN_SIGNING_SECRET\" \\",
+    "  \"PRODUCTION_READINESS_SECRET=$PRODUCTION_READINESS_SECRET\" \\",
+    `  > ${secretFile}`,
+    `chmod 600 ${secretFile}`,
+    "pnpm exec supabase secrets set \\",
+    "  --project-ref \"$LOAD_SUPABASE_PROJECT_REF\" \\",
+    `  --env-file ${secretFile}`,
+  ].join("\n");
+  const steps = job?.steps ?? [];
+  const secretSteps = steps.filter((step) =>
+    String(step?.run ?? "").includes("supabase secrets set")
+  );
+  const secretStep = secretSteps[0];
+  const cleanupSteps = steps.filter((step) =>
+    String(step?.run ?? "").trim() === `rm -f ${secretFile}`
+  );
+  const cleanupStep = cleanupSteps[0];
+  const fileReferences = steps.filter((step) =>
+    String(step?.run ?? "").includes(secretFile)
+  );
+  if (
+    secretSteps.length !== 1 ||
+    String(secretStep?.run ?? "").trim() !== expectedSecretConfiguration ||
+    !isDeepStrictEqual(secretStep?.env, {
+      SUPABASE_ACCESS_TOKEN: "${{ secrets.SUPABASE_ACCESS_TOKEN }}",
+    }) ||
+    cleanupSteps.length !== 1 ||
+    cleanupStep?.if !== "always()" ||
+    steps.at(-1) !== cleanupStep ||
+    fileReferences.length !== 2
+  ) {
+    fail("load-test bootstrap requires canonical synthetic Function secret handling");
+  }
   requireContentsReadOnly(job, "load-test bootstrap");
   requirePinnedActions([workflow]);
 }

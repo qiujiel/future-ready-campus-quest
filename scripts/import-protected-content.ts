@@ -12,6 +12,7 @@ export interface ImportConfiguration {
   secretKey: string;
   confirmedProjectRef?: string;
   expectedContentVersion?: string;
+  allowSyntheticContent?: boolean;
 }
 
 function projectRefFromUrl(url: string): string {
@@ -46,6 +47,9 @@ export function assertImportConfiguration(
   }
 
   const projectRef = projectRefFromUrl(configuration.supabaseUrl);
+  if (configuration.allowSyntheticContent && projectRef !== "local") {
+    throw new Error("Synthetic content imports are restricted to local Supabase.");
+  }
   if (projectRef !== "local" && configuration.confirmedProjectRef !== projectRef) {
     throw new Error(
       `Production import requires --confirm-project-ref=${projectRef}.`,
@@ -54,12 +58,32 @@ export function assertImportConfiguration(
   return projectRef;
 }
 
+export function prepareLocalSyntheticContent(bank: ContentBank): ContentBank {
+  return {
+    ...bank,
+    items: bank.items.map((item) => ({
+      ...item,
+      sourceRefs: item.sourceRefs.map((sourceRef) => ({
+        ...sourceRef,
+        document: sourceRef.document === "public-synthetic"
+          ? "overview-ict" as const
+          : sourceRef.document,
+      })),
+    })),
+  };
+}
+
 export async function importProtectedContent(
   bank: ContentBank,
   configuration: ImportConfiguration,
 ): Promise<{ itemCount: number; conceptCount: number; version: string }> {
   assertImportConfiguration(configuration);
-  const validated = validateContentBank(bank, { production: true });
+  const validated = validateContentBank(bank, {
+    production: !configuration.allowSyntheticContent,
+  });
+  const payload = configuration.allowSyntheticContent
+    ? prepareLocalSyntheticContent(validated)
+    : validated;
   if (
     configuration.expectedContentVersion &&
     configuration.expectedContentVersion !== validated.version
@@ -72,7 +96,7 @@ export async function importProtectedContent(
     { auth: { persistSession: false, autoRefreshToken: false } },
   );
   const result = await client.rpc("import_learning_content", {
-    payload: validated,
+    payload,
   });
   if (result.error) {
     throw new Error(`Protected import was rejected: ${result.error.code}`);

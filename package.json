@@ -23,6 +23,7 @@
     "test:content": "vitest run tests/learning/content-import.test.ts",
     "test:functions": "vitest run --config vitest.functions.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e:classroom": "node scripts/run-local-classroom-e2e.mjs",
     "test:load": "node tests/load/class-session.js --plan",
     "test:load:live": "node tests/load/class-session.js",
     "typecheck": "tsc -b --pretty false",
