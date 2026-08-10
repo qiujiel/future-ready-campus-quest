@@ -45,6 +45,20 @@ const authGateway: AuthGateway = {
       refreshToken: "refresh",
     };
   },
+  async loginStudent(input) {
+    return {
+      identity: {
+        studentId: "student-1",
+        cohortId: "cohort-1",
+        groupId: "group-1",
+        groupNumber: 1,
+        nickname: input.displayName,
+        isGroupIdentityEditor: false,
+      },
+      accessToken: "access",
+      refreshToken: "refresh",
+    };
+  },
   async recoverStudent() {
     throw new Error("unused");
   },
@@ -81,12 +95,14 @@ function syntheticItem(phase: LearningPhase): LearningItemPayload {
 
 afterEach(() => cleanup());
 
-it("has no serious accessibility violations in join and Group Studio states", async () => {
+it("has no serious accessibility violations in both class entry modes and Group Studio states", async () => {
   const router = createMemoryRouter(
-    [{ path: "/join", element: <JoinPage gateway={authGateway} /> }],
-    { initialEntries: ["/join"] },
+    [{ path: "/class/:classAccessId", element: <JoinPage gateway={authGateway} /> }],
+    { initialEntries: ["/class/40000000-0000-4000-8000-000000000099"] },
   );
   const join = render(<RouterProvider router={router} />);
+  await expectNoSeriousViolations(join.container);
+  join.getByRole("button", { name: /log back in/i }).click();
   await expectNoSeriousViolations(join.container);
   cleanup();
 

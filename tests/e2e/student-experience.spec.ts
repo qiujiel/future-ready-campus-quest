@@ -41,6 +41,8 @@ test("completes the synthetic student review journey", async ({
 
   await page.getByLabel(/^your name/i).fill("Bright Comet");
   await page.getByLabel(/^group code/i).fill("PREVIEW2");
+  await page.getByLabel(/^create a 4-digit passcode$/i).fill("4826");
+  await page.getByLabel(/^confirm passcode$/i).fill("4826");
   await activate(page.getByRole("button", { name: "Join Group" }), true);
 
   await expect(

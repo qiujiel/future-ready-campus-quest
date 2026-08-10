@@ -71,6 +71,9 @@ function authGateway(): AuthGateway & {
     async joinCohort() {
       throw new Error("unused");
     },
+    async loginStudent() {
+      throw new Error("unused");
+    },
     async recoverStudent() {
       throw new Error("unused");
     },

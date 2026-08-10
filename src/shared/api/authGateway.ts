@@ -31,7 +31,7 @@ export interface AuthGateway {
   ): Promise<JoinWindowReceipt>;
   closeJoinWindow?(cohortId: string, requestKey: string): Promise<void>;
   joinCohort(input: JoinCohortInput): Promise<JoinCohortOutput>;
-  loginStudent?(input: StudentLoginInput): Promise<StudentLoginOutput>;
+  loginStudent(input: StudentLoginInput): Promise<StudentLoginOutput>;
   recoverStudent(input: RecoverStudentInput): Promise<RecoverStudentOutput>;
 }
 
@@ -161,6 +161,25 @@ export const supabaseAuthGateway: AuthGateway = {
       await throwAuthGatewayError(result.error.context, "JOIN_NOT_ACCEPTED");
     }
     const output = result.data as JoinCohortOutput;
+    const session = await client.auth.setSession({
+      access_token: output.accessToken,
+      refresh_token: output.refreshToken,
+    });
+    if (session.error) throw new Error("The student session could not be saved.");
+    return output;
+  },
+  async loginStudent(input) {
+    const client = getSupabaseClient();
+    const result = await client.functions.invoke("student-login", {
+      body: input,
+    });
+    if (result.error) {
+      await throwAuthGatewayError(
+        result.error.context,
+        "STUDENT_LOGIN_NOT_ACCEPTED",
+      );
+    }
+    const output = result.data as StudentLoginOutput;
     const session = await client.auth.setSession({
       access_token: output.accessToken,
       refresh_token: output.refreshToken,

@@ -50,6 +50,20 @@ function createGateway(): AuthGateway & {
         refreshToken: "student-refresh-token",
       };
     },
+    async loginStudent(input) {
+      return {
+        identity: {
+          studentId: "20000000-0000-4000-8000-000000000001",
+          cohortId: "40000000-0000-4000-8000-000000000001",
+          groupId: "60000000-0000-4000-8000-000000000001",
+          groupNumber: 3,
+          nickname: input.displayName,
+          isGroupIdentityEditor: true,
+        },
+        accessToken: "student-access-token",
+        refreshToken: "student-refresh-token",
+      };
+    },
     async recoverStudent() {
       return {
         studentId: "20000000-0000-4000-8000-000000000001",
@@ -126,22 +140,22 @@ it("creates a teacher-owned cohort with five groups of six by default", async ()
   );
 });
 
-it("joins a student from the shared route without email, password, or PIN", async () => {
+it("joins a student from the class route without email or password", async () => {
   const gateway = createGateway();
   const router = createMemoryRouter(
     [
       {
-        path: "/join",
+        path: "/class/:classAccessId",
         element: <JoinPage gateway={gateway} />,
       },
       { path: "/quest", element: <CurrentPath /> },
     ],
-    { initialEntries: ["/join"] },
+    { initialEntries: ["/class/40000000-0000-4000-8000-000000000099"] },
   );
   render(<RouterProvider router={router} />);
 
   expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
-  expect(screen.queryByLabelText(/password|pin/i)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText(/^password$/i)).not.toBeInTheDocument();
 
   fireEvent.change(await screen.findByLabelText(/your name/i), {
     target: { value: "Synthetic Learner" },
@@ -149,12 +163,21 @@ it("joins a student from the shared route without email, password, or PIN", asyn
   fireEvent.change(screen.getByLabelText(/group code/i), {
     target: { value: "CAMPUS73" },
   });
+  fireEvent.change(screen.getByLabelText(/^create a 4-digit passcode$/i), {
+    target: { value: "4826" },
+  });
+  fireEvent.change(screen.getByLabelText(/^confirm passcode$/i), {
+    target: { value: "4826" },
+  });
   fireEvent.click(screen.getByRole("button", { name: /join group/i }));
 
   await waitFor(() => expect(gateway.joinCalls).toHaveLength(1));
   expect(gateway.joinCalls[0]).toMatchObject({
+    classAccessId: "40000000-0000-4000-8000-000000000099",
     joinCode: "CAMPUS73",
     displayName: "Synthetic Learner",
+    passcode: "4826",
+    wantsLeader: false,
   });
   expect(await screen.findByLabelText("current path")).toHaveTextContent(
     "/quest",
