@@ -99,8 +99,9 @@ server compensates for the small credential space:
   address without writing names or passcodes to logs;
 - repeated failures produce a short cooldown and a neutral response;
 - successful login rotates the student session;
-- no teacher, student, API response, audit event, or export can read a passcode
-  or passcode hash.
+- no teacher, student, API response, audit event, or export can read a passcode,
+  passcode hash, salt, or name lookup hash. Real names remain in the existing
+  teacher-only profile boundary protected by RLS.
 
 Teacher-issued recovery links remain available as the exceptional recovery
 path when a student forgets a passcode. Passcode reset is not added to the
