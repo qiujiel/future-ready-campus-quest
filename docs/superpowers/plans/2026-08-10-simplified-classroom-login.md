@@ -162,7 +162,6 @@ git commit -m "feat: define secure student credentials"
 **Files:**
 - Create: `supabase/migrations/20260810000100_simplified_student_login.sql`
 - Create: `supabase/tests/simplified_student_login.test.sql`
-- Create: `tests/deployment/simplified-student-login-migration.test.js`
 
 **Interfaces:**
 - Consumes: hexadecimal name hashes and base64url PBKDF2 fields from Task 1.
@@ -170,21 +169,9 @@ git commit -m "feat: define secure student credentials"
 - Produces: `public.complete_student_code_join(text, uuid, uuid, text, uuid, text, text, text, integer, boolean)`.
 - Produces: `public.begin_student_login(uuid, text, text, uuid)` and `public.finish_student_login(uuid, uuid, boolean)` for service-role-only use.
 
-- [ ] **Step 1: Write failing migration-shape and SQL behavior tests**
+- [ ] **Step 1: Write failing SQL behavior and privilege tests**
 
-The JavaScript deployment test must read the migration and assert all of these strings or equivalent parsed clauses exist:
-
-```js
-expect(sql).toMatch(/student_access_id uuid not null default gen_random_uuid\(\)/i);
-expect(sql).toMatch(/create table private\.student_login_credentials/i);
-expect(sql).toMatch(/create table private\.student_login_attempts/i);
-expect(sql).toMatch(/revoke all on table private\.student_login_credentials from/i);
-expect(sql).toMatch(/grant execute on function public\.begin_student_login[^;]+ to service_role/i);
-expect(sql).toMatch(/identity_editor_id is null[\s\S]+p_wants_leader/i);
-expect(sql).not.toMatch(/grant (select|insert|update|delete) on table private\.student_login_credentials to (anon|authenticated)/i);
-```
-
-The pgTAP test must create one teacher/class with two groups and prove:
+The pgTAP test must create one teacher/class with two groups and prove the observable schema, function, and privilege behavior:
 
 ```sql
 select isnt(student_access_id, null, 'a class receives an opaque student access id')
@@ -198,19 +185,31 @@ select throws_ok(
   'P0001', 'STUDENT_LOGIN_NOT_ACCEPTED',
   'unknown class access is neutral'
 );
+
+select is(
+  has_table_privilege('anon', 'private.student_login_credentials', 'select'),
+  false,
+  'anonymous users cannot read private student credentials'
+);
+
+select is(
+  has_function_privilege(
+    'authenticated',
+    'public.begin_student_login(uuid,text,text,uuid)',
+    'execute'
+  ),
+  false,
+  'authenticated browser users cannot call the service-role login preparation RPC'
+);
 ```
 
 Add concurrent or sequential assertions that two `p_wants_leader = true` joins leave exactly one `groups.identity_editor_id`, that `p_wants_leader = false` never claims it, that closing the join window blocks enrollment but not `begin_student_login`, and that five failed finalized attempts cause the sixth name-scoped attempt to raise `STUDENT_LOGIN_NOT_ACCEPTED` without returning credential rows.
 
 - [ ] **Step 2: Run the migration tests and confirm RED**
 
-Run: `pnpm vitest run tests/deployment/simplified-student-login-migration.test.js`
-
-Expected: FAIL because the migration file does not exist.
-
 After local Supabase is running, run: `pnpm exec supabase test db --debug`
 
-Expected: the new pgTAP file cannot pass until the migration exists.
+Expected: FAIL because `student_access_id`, the private credential tables, and the login RPCs do not exist.
 
 - [ ] **Step 3: Implement the migration**
 
@@ -265,10 +264,6 @@ Extend `get_teacher_classroom_readiness` so every roster student includes:
 
 - [ ] **Step 4: Run migration tests and confirm GREEN**
 
-Run: `pnpm vitest run tests/deployment/simplified-student-login-migration.test.js`
-
-Expected: PASS.
-
 Run: `pnpm exec supabase db reset`
 
 Run: `pnpm exec supabase test db --debug`
@@ -278,7 +273,7 @@ Expected: all SQL tests PASS, including rate limits, closed-join returning login
 - [ ] **Step 5: Commit the database boundary**
 
 ```bash
-git add supabase/migrations/20260810000100_simplified_student_login.sql supabase/tests/simplified_student_login.test.sql tests/deployment/simplified-student-login-migration.test.js
+git add supabase/migrations/20260810000100_simplified_student_login.sql supabase/tests/simplified_student_login.test.sql
 git commit -m "feat: add private student login storage"
 ```
 
