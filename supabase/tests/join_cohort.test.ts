@@ -13,8 +13,11 @@ import type {
 } from "../../src/shared/api/contracts";
 
 const baseInput: JoinCohortInput = {
+  classAccessId: "40000000-0000-4000-8000-000000000099",
   joinCode: "FJP5-Z8YN",
   displayName: "  Synthetic   Learner  ",
+  passcode: "4826",
+  wantsLeader: true,
   requestKey: "50000000-0000-4000-8000-000000000001",
 };
 
@@ -38,6 +41,17 @@ function createDependencies(capacity = 6): JoinDependencies & {
       remainingCapacity = value;
     },
     stored,
+    async createCredential() {
+      return {
+        nameLookupHash:
+          "b0c3cdb99f2679dace8734b4cbba5541c637555f7268bcda5c2aa6f86d27ee94",
+        passcode: {
+          salt: "BwcHBwcHBwcHBwcHBwcHBw",
+          hash: "6bs7_7cRveH4ksIlN8Y-XUXqT69lkI68wQDlqS5wAao",
+          iterations: 210_000,
+        },
+      };
+    },
     async findCompletedJoin(codeHash, requestKey) {
       return stored.get(`${codeHash}:${requestKey}`) ?? null;
     },
@@ -163,6 +177,89 @@ it("rejects a malformed group code before creating an Auth user", async () => {
   await expect(
     joinStudent({ ...baseInput, joinCode: "10-IO" }, dependencies),
   ).rejects.toMatchObject({ code: "INVALID_REQUEST", status: 400 });
+  expect(dependencies.createdUsers).toBe(0);
+});
+
+it("rejects a malformed class access ID before creating an Auth user", async () => {
+  const dependencies = createDependencies();
+
+  await expect(
+    joinStudent({ ...baseInput, classAccessId: "not-a-class-id" }, dependencies),
+  ).rejects.toMatchObject({ code: "INVALID_REQUEST", status: 400 });
+  expect(dependencies.createdUsers).toBe(0);
+});
+
+it.each(["123", "12345", "12a4", "１２３４"])(
+  "rejects the non-four-digit passcode %j before creating an Auth user",
+  async (passcode) => {
+    const dependencies = createDependencies();
+
+    await expect(
+      joinStudent({ ...baseInput, passcode }, dependencies),
+    ).rejects.toMatchObject({ code: "INVALID_REQUEST", status: 400 });
+    expect(dependencies.createdUsers).toBe(0);
+  },
+);
+
+it("passes class-scoped private credential material and leader intent only to completion", async () => {
+  const dependencies = createDependencies();
+  const complete = vi.spyOn(dependencies, "completeJoin");
+
+  await joinStudent(baseInput, dependencies);
+
+  expect(complete).toHaveBeenCalledWith({
+    classAccessId: baseInput.classAccessId,
+    codeHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    requestKey: baseInput.requestKey,
+    studentId: "20000000-0000-4000-8000-000000000001",
+    groupNumber: 4,
+    displayName: "Synthetic Learner",
+    wantsLeader: true,
+    nameLookupHash:
+      "b0c3cdb99f2679dace8734b4cbba5541c637555f7268bcda5c2aa6f86d27ee94",
+    passcodeSalt: "BwcHBwcHBwcHBwcHBwcHBw",
+    passcodeHash: "6bs7_7cRveH4ksIlN8Y-XUXqT69lkI68wQDlqS5wAao",
+    passcodeIterations: 210_000,
+  });
+  expect(JSON.stringify(complete.mock.calls)).not.toContain(baseInput.passcode);
+});
+
+it("validates class scope during trusted preparation before creating an Auth user", async () => {
+  const dependencies = createDependencies();
+  dependencies.prepareJoin = async (_codeHash, _requestKey, classAccessId) => {
+    expect(classAccessId).toBe(baseInput.classAccessId);
+    throw new JoinBoundaryError("INVALID_JOIN_CODE", 404);
+  };
+
+  await expect(joinStudent(baseInput, dependencies)).rejects.toMatchObject({
+    code: "INVALID_JOIN_CODE",
+    status: 404,
+  });
+  expect(dependencies.createdUsers).toBe(0);
+});
+
+it("requires credential-aware completion before replaying an existing session", async () => {
+  const dependencies = createDependencies();
+  const identity: StudentIdentity = {
+    studentId: "20000000-0000-4000-8000-000000000099",
+    cohortId: "40000000-0000-4000-8000-000000000001",
+    groupId: "60000000-0000-4000-8000-000000000004",
+    groupNumber: 4,
+    nickname: "Explorer 1",
+    isGroupIdentityEditor: true,
+  };
+  dependencies.prepareJoin = async () => ({
+    completed: { identity },
+    groupNumber: identity.groupNumber,
+  });
+  dependencies.completeJoin = async () => {
+    throw new JoinBoundaryError("STUDENT_RECOVERY_REQUIRED", 409);
+  };
+
+  await expect(joinStudent(baseInput, dependencies)).rejects.toMatchObject({
+    code: "STUDENT_RECOVERY_REQUIRED",
+    status: 409,
+  });
   expect(dependencies.createdUsers).toBe(0);
 });
 

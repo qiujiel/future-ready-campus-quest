@@ -33,6 +33,28 @@ export function createSyntheticLoadContent() {
   };
 }
 
+export function buildLoadStudentJoinPayloads({
+  classAccessId,
+  groupCodes,
+  requestKey = () => crypto.randomUUID(),
+}) {
+  if (groupCodes.length !== 5) {
+    throw new Error("Synthetic load group codes missing.");
+  }
+
+  return Array.from({ length: 30 }, (_, index) => {
+    const studentIndexWithinGroup = index % 6;
+    return {
+      classAccessId,
+      joinCode: groupCodes[Math.floor(index / 6)],
+      displayName: `Load Learner ${index + 1}`,
+      passcode: String(9_000 + index),
+      wantsLeader: studentIndexWithinGroup === 0,
+      requestKey: requestKey(index),
+    };
+  });
+}
+
 function clientOptions(headers = {}) {
   return {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -106,7 +128,8 @@ export async function createLoadFixture({ apiUrl, publishableKey, secretKey }) {
       ? cohortReceipt.cohort[0]
       : cohortReceipt.cohort;
     const cohortId = cohortValue?.id;
-    if (typeof cohortId !== "string") {
+    const classAccessId = cohortValue?.student_access_id;
+    if (typeof cohortId !== "string" || typeof classAccessId !== "string") {
       throw new Error("Synthetic load cohort receipt missing.");
     }
     createdCohortId = cohortId;
@@ -125,6 +148,7 @@ export async function createLoadFixture({ apiUrl, publishableKey, secretKey }) {
       teacherId,
       teacherToken,
       cohortId,
+      classAccessId,
       groupCodes: joinReceipt.groups.map((group) => String(group.joinCode)),
     };
   } catch (error) {

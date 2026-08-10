@@ -1,5 +1,6 @@
 import { readDedicatedLoadConfiguration } from "../../scripts/load-project-guard.mjs";
 import {
+  buildLoadStudentJoinPayloads,
   createLoadFixture,
   deleteLoadFixture,
   launchLoadQuest,
@@ -30,11 +31,16 @@ async function liveRun() {
   const configuration = readDedicatedLoadConfiguration(process.env);
   const { apiUrl, publishableKey } = configuration;
   const fixture = await createLoadFixture(configuration);
-  const { admin, teacherToken, cohortId, groupCodes } = fixture;
+  const { admin, teacherToken, cohortId, classAccessId, groupCodes } = fixture;
+  const joinPayloads = buildLoadStudentJoinPayloads({
+    classAccessId,
+    groupCodes,
+  });
   const joinLatencies = [];
   const joinStageLatencies = {
     find: [],
     preflight: [],
+    credential: [],
     create: [],
     sign: [],
     complete: [],
@@ -52,7 +58,7 @@ async function liveRun() {
 
   try {
     const joinResults = await Promise.all(
-      Array.from({ length: studentCount }, async (_, index) => {
+      joinPayloads.map(async (joinPayload, index) => {
         const expectedGroupNumber = Math.floor(index / studentsPerGroup) + 1;
         try {
           const joined = await timed(async () => {
@@ -63,11 +69,7 @@ async function liveRun() {
                 Origin: "http://127.0.0.1:4173",
                 "Content-Type": "application/json",
               },
-              body: JSON.stringify({
-                joinCode: groupCodes[expectedGroupNumber - 1],
-                displayName: `Load Learner ${index + 1}`,
-                requestKey: crypto.randomUUID(),
-              }),
+              body: JSON.stringify(joinPayload),
             });
             requireAuthorized(response, "join");
             const stageTimings = parseJoinServerTiming(
@@ -84,6 +86,7 @@ async function liveRun() {
             studentId: joined.value.identity.studentId,
             expectedGroupNumber,
             actualGroupNumber: joined.value.identity.groupNumber,
+            isGroupLeader: joined.value.identity.isGroupIdentityEditor,
           });
           return {
             studentId: joined.value.identity.studentId,
@@ -112,6 +115,39 @@ async function liveRun() {
       joinEvidence.p95JoinMs >= CLASSROOM_JOIN_P95_LIMIT_MS
     ) {
       throw new Error(`Load join gate failed: ${JSON.stringify(joinEvidence)}`);
+    }
+
+    const readinessResponse = await fetch(
+      `${apiUrl}/functions/v1/teacher-dashboard`,
+      {
+        method: "POST",
+        headers: {
+          apikey: publishableKey,
+          Authorization: `Bearer ${teacherToken}`,
+          Origin: "http://127.0.0.1:4173",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ cohortId, view: "readiness" }),
+      },
+    );
+    requireAuthorized(readinessResponse, "readiness");
+    const readiness = await readinessResponse.json();
+    const readinessJson = JSON.stringify(readiness);
+    if (
+      joinPayloads.some(({ passcode }) =>
+        readinessJson.includes(JSON.stringify(passcode))
+      )
+    ) {
+      throw new Error("Load readiness exposed private credentials.");
+    }
+    const readinessGroups = readiness.readiness?.groups ?? [];
+    if (
+      readinessGroups.length !== groupCount ||
+      readinessGroups.some((group) =>
+        group.students.filter((student) => student.isGroupLeader).length !== 1
+      )
+    ) {
+      throw new Error("Load readiness leader assignment failed.");
     }
 
     await launchLoadQuest(configuration, fixture);

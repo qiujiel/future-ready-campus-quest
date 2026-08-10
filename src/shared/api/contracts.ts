@@ -17,8 +17,11 @@ export type LearningPhase =
   | "reflection";
 
 export interface JoinCohortInput {
+  classAccessId: string;
   joinCode: string;
   displayName: string;
+  passcode: string;
+  wantsLeader: boolean;
   requestKey: string;
 }
 

@@ -5,13 +5,17 @@ import type {
   SessionTokens,
   StudentIdentity,
 } from "../../../src/shared/api/contracts.ts";
+import type { StoredPasscode } from "./student-credentials-core.ts";
 
 const uuidSchema = z.uuid();
 const groupCodeAlphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 const joinInputSchema = z.object({
+  classAccessId: uuidSchema,
   joinCode: z.string().min(6).max(16),
   displayName: z.string().trim().min(1).max(100),
+  passcode: z.string().regex(/^\d{4}$/),
+  wantsLeader: z.boolean(),
   requestKey: uuidSchema,
 });
 
@@ -23,6 +27,8 @@ export type JoinFailureCode =
   | "JOIN_WINDOW_CLOSED"
   | "INVALID_GROUP"
   | "GROUP_FULL"
+  | "STUDENT_RECOVERY_REQUIRED"
+  | "STUDENT_NAME_NOT_AVAILABLE"
   | "JOIN_NOT_AVAILABLE";
 
 export class JoinBoundaryError extends Error {
@@ -46,18 +52,35 @@ export interface SyntheticUser {
 }
 
 export interface CompleteJoinInput {
+  classAccessId: string;
   codeHash: string;
   requestKey: string;
   studentId: string;
   groupNumber: number;
   displayName: string;
+  wantsLeader: boolean;
+  nameLookupHash: string;
+  passcodeSalt: string;
+  passcodeHash: string;
+  passcodeIterations: number;
+}
+
+export interface StudentJoinCredential {
+  nameLookupHash: string;
+  passcode: StoredPasscode;
 }
 
 export interface JoinDependencies {
   prepareJoin(
     codeHash: string,
     requestKey: string,
+    classAccessId: string,
   ): Promise<{ completed: StoredJoin | null; groupNumber: number }>;
+  createCredential(
+    classAccessId: string,
+    displayName: string,
+    passcode: string,
+  ): Promise<StudentJoinCredential>;
   findCompletedJoin(
     codeHash: string,
     requestKey: string,
@@ -213,8 +236,11 @@ function parseInput(input: JoinCohortInput): JoinCohortInput {
   }
 
   return {
+    classAccessId: result.data.classAccessId,
     joinCode,
     displayName,
+    passcode: result.data.passcode,
+    wantsLeader: result.data.wantsLeader,
     requestKey: result.data.requestKey,
   };
 }
@@ -228,28 +254,48 @@ export async function joinStudent(
   const prepared = await dependencies.prepareJoin(
     codeHash,
     normalized.requestKey,
+    normalized.classAccessId,
   );
-
-  if (prepared.completed) {
-    const session = await dependencies.issueReplacementSession(
-      prepared.completed.identity.studentId,
-    );
-    return { identity: prepared.completed.identity, ...session };
-  }
 
   let syntheticUser: SyntheticUser | undefined;
   let initialSession: SessionTokens | undefined;
   let completedIdentity: StudentIdentity | undefined;
   try {
+    const credential = await dependencies.createCredential(
+      normalized.classAccessId,
+      normalized.displayName,
+      normalized.passcode,
+    );
+    const completion = {
+      classAccessId: normalized.classAccessId,
+      codeHash,
+      requestKey: normalized.requestKey,
+      groupNumber: prepared.groupNumber,
+      displayName: normalized.displayName,
+      wantsLeader: normalized.wantsLeader,
+      nameLookupHash: credential.nameLookupHash,
+      passcodeSalt: credential.passcode.salt,
+      passcodeHash: credential.passcode.hash,
+      passcodeIterations: credential.passcode.iterations,
+    };
+
+    if (prepared.completed) {
+      const identity = await dependencies.completeJoin({
+        ...completion,
+        studentId: prepared.completed.identity.studentId,
+      });
+      const session = await dependencies.issueReplacementSession(
+        identity.studentId,
+      );
+      return { identity, ...session };
+    }
+
     syntheticUser = await dependencies.createSyntheticUser();
     const [sessionResult, identityResult] = await Promise.allSettled([
       dependencies.signInNewUser(syntheticUser),
       dependencies.completeJoin({
-        codeHash,
-        requestKey: normalized.requestKey,
+        ...completion,
         studentId: syntheticUser.studentId,
-        groupNumber: prepared.groupNumber,
-        displayName: normalized.displayName,
       }),
     ]);
     if (sessionResult.status === "fulfilled") {

@@ -72,8 +72,11 @@ it("rejects an unknown group code before creating a synthetic Auth user", async 
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
+      classAccessId: crypto.randomUUID(),
       joinCode: "ZZZZZZZZ",
       displayName: "Synthetic Learner",
+      passcode: "4825",
+      wantsLeader: false,
       requestKey: crypto.randomUUID(),
     }),
   });
@@ -115,6 +118,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
   if (teacher.error || !teacher.data.user) throw teacher.error;
   const teacherId = teacher.data.user.id;
   let cohortId: string | undefined;
+  let classAccessId: string | undefined;
   let studentId: string | undefined;
 
   try {
@@ -135,10 +139,11 @@ it("completes a valid join against real Auth and database boundaries", async () 
         group_count: 2,
         group_capacity: 2,
       })
-      .select("id")
+      .select("id,student_access_id")
       .single();
     if (cohort.error) throw cohort.error;
     cohortId = cohort.data.id;
+    classAccessId = cohort.data.student_access_id;
 
     const teacherClient = createClient(apiUrl, anonKey, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -177,6 +182,28 @@ it("completes a valid join against real Auth and database boundaries", async () 
     });
     const joinCode = String(opened.data.groups[0].joinCode);
 
+    const usersBeforeClassMismatch = await authUserCount();
+    const classMismatch = await fetch(`${apiUrl}/functions/v1/join-cohort`, {
+      method: "POST",
+      headers: {
+        Origin: allowedOrigin,
+        apikey: anonKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        classAccessId: crypto.randomUUID(),
+        joinCode,
+        displayName: "Rejected Class Mismatch",
+        passcode: "4827",
+        wantsLeader: false,
+        requestKey: crypto.randomUUID(),
+      }),
+    });
+    expect(classMismatch.status).toBe(404);
+    expect(await classMismatch.json()).toEqual({ error: "INVALID_JOIN_CODE" });
+    expect(await authUserCount()).toBe(usersBeforeClassMismatch);
+
+    const studentPasscode = "4826";
     const response = await fetch(`${apiUrl}/functions/v1/join-cohort`, {
       method: "POST",
       headers: {
@@ -185,8 +212,11 @@ it("completes a valid join against real Auth and database boundaries", async () 
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        classAccessId,
         joinCode,
         displayName: "Synthetic Integration Learner",
+        passcode: studentPasscode,
+        wantsLeader: true,
         requestKey: crypto.randomUUID(),
       }),
     });
@@ -195,6 +225,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
     expect(payload.identity).toMatchObject({
       cohortId,
       groupNumber: 1,
+      isGroupIdentityEditor: true,
     });
     expect(payload.identity).not.toHaveProperty("realName");
     studentId = payload.identity.studentId;
@@ -226,11 +257,15 @@ it("completes a valid join against real Auth and database boundaries", async () 
           studentId,
           displayName: "Synthetic Integration Learner",
           activityStatus: "joined",
+          isGroupLeader: true,
         },
       ],
     });
     expect(JSON.stringify(readiness.data)).not.toContain("requestKey");
     expect(JSON.stringify(readiness.data)).not.toContain("joinWindowId");
+    expect(JSON.stringify(readiness.data)).not.toContain(
+      JSON.stringify(studentPasscode),
+    );
 
     const studentClient = createClient(apiUrl, anonKey, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -409,8 +444,11 @@ it("completes a valid join against real Auth and database boundaries", async () 
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        classAccessId,
         joinCode,
         displayName: "Rejected Disabled Learner",
+        passcode: "4828",
+        wantsLeader: false,
         requestKey: crypto.randomUUID(),
       }),
     });
