@@ -33,8 +33,12 @@ const disposable = {
   productionClassroomCount: 1,
   otherCohortCount: 0,
   productionClassroomGroupCount: 5,
+  joinWindowCount: 0,
+  sessionControlCount: 0,
   openJoiningCount: 0,
   openQuestStartCount: 0,
+  cohortGroupJoinCodeCount: 0,
+  auditEventCount: 0,
   studentPrivateProfileCount: 0,
   studentPublicProfileCount: 0,
   questAttemptCount: 0,
@@ -47,7 +51,7 @@ const disposable = {
   teamScoreSnapshotCount: 0,
   studentJoinRequestCount: 0,
   studentCredentialCount: 0,
-  studentSessionCount: 0,
+  nonTeacherSessionCount: 0,
   studentLoginAttemptCount: 0,
   joinAttemptCount: 0,
   recoveryAttemptCount: 0,
@@ -55,6 +59,8 @@ const disposable = {
   groupMediaAssetCount: 0,
   cohortQuestLaunchCount: 0,
   cohortQuestLaunchReceiptCount: 0,
+  teacherControlAuditCount: 0,
+  teacherRosterControlReceiptCount: 0,
   groupImageObjectCount: 0,
 };
 
@@ -79,8 +85,12 @@ function providerRow(snapshot = disposable) {
     production_classroom_count: snapshot.productionClassroomCount,
     other_cohort_count: snapshot.otherCohortCount,
     production_classroom_group_count: snapshot.productionClassroomGroupCount,
+    join_window_count: snapshot.joinWindowCount,
+    session_control_count: snapshot.sessionControlCount,
     open_joining_count: snapshot.openJoiningCount,
     open_quest_start_count: snapshot.openQuestStartCount,
+    cohort_group_join_code_count: snapshot.cohortGroupJoinCodeCount,
+    audit_event_count: snapshot.auditEventCount,
     student_private_profile_count: snapshot.studentPrivateProfileCount,
     student_public_profile_count: snapshot.studentPublicProfileCount,
     quest_attempt_count: snapshot.questAttemptCount,
@@ -93,7 +103,7 @@ function providerRow(snapshot = disposable) {
     team_score_snapshot_count: snapshot.teamScoreSnapshotCount,
     student_join_request_count: snapshot.studentJoinRequestCount,
     student_credential_count: snapshot.studentCredentialCount,
-    student_session_count: snapshot.studentSessionCount,
+    non_teacher_session_count: snapshot.nonTeacherSessionCount,
     student_login_attempt_count: snapshot.studentLoginAttemptCount,
     join_attempt_count: snapshot.joinAttemptCount,
     recovery_attempt_count: snapshot.recoveryAttemptCount,
@@ -101,6 +111,8 @@ function providerRow(snapshot = disposable) {
     group_media_asset_count: snapshot.groupMediaAssetCount,
     cohort_quest_launch_count: snapshot.cohortQuestLaunchCount,
     cohort_quest_launch_receipt_count: snapshot.cohortQuestLaunchReceiptCount,
+    teacher_control_audit_count: snapshot.teacherControlAuditCount,
+    teacher_roster_control_receipt_count: snapshot.teacherRosterControlReceiptCount,
     group_image_object_count: snapshot.groupImageObjectCount,
   };
 }
@@ -152,8 +164,11 @@ describe("disposable production state", () => {
     ["quest result", "questResultCount"],
     ["team score snapshot", "teamScoreSnapshotCount"],
     ["student join request", "studentJoinRequestCount"],
+    ["closed or open join window", "joinWindowCount"],
+    ["closed or open session control", "sessionControlCount"],
+    ["cohort group join code", "cohortGroupJoinCodeCount"],
+    ["audit event", "auditEventCount"],
     ["student credential", "studentCredentialCount"],
-    ["student session", "studentSessionCount"],
     ["student login attempt", "studentLoginAttemptCount"],
     ["join attempt", "joinAttemptCount"],
     ["recovery attempt", "recoveryAttemptCount"],
@@ -161,6 +176,8 @@ describe("disposable production state", () => {
     ["group media asset", "groupMediaAssetCount"],
     ["quest launch", "cohortQuestLaunchCount"],
     ["quest launch receipt", "cohortQuestLaunchReceiptCount"],
+    ["teacher control audit", "teacherControlAuditCount"],
+    ["teacher roster control receipt", "teacherRosterControlReceiptCount"],
     ["group-images object", "groupImageObjectCount"],
   ])("rejects a protected %s record", (_label, name) => {
     expectRedactedFailure(() => evaluateDisposableStateSnapshot({
@@ -182,6 +199,17 @@ describe("disposable production state", () => {
     expectRedactedFailure(() => evaluateDisposableStateSnapshot({
       ...disposable,
       [name]: value,
+    }, configuration));
+  });
+
+  it("permits marked teacher sessions while blocking non-teacher sessions", () => {
+    expect(evaluateDisposableStateSnapshot({
+      ...disposable,
+      markedTeacherSessionCount: 1,
+    }, configuration)).toEqual(expectedEvidence);
+    expectRedactedFailure(() => evaluateDisposableStateSnapshot({
+      ...disposable,
+      nonTeacherSessionCount: 1,
     }, configuration));
   });
 
@@ -221,10 +249,15 @@ describe("disposable production state", () => {
     expect(requests[0].url).toBe(
       `https://api.supabase.com/v1/projects/${productionRef}/database/query`,
     );
-    expect(JSON.parse(requests[0].options.body)).toMatchObject({
+    const payload = JSON.parse(requests[0].options.body);
+    expect(payload).toMatchObject({
       read_only: true,
       parameters: ["course-owner-2026-08-08", "teacher", "Production Classroom"],
     });
+    expect(payload.query).toContain("from auth.sessions as sessions");
+    expect(payload.query).toContain(
+      "where sessions.user_id not in (select id from marked_teachers)",
+    );
     expect(JSON.stringify(requests[0].options.body)).not.toContain(accessToken);
   });
 

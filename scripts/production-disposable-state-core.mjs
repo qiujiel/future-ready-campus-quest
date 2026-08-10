@@ -31,11 +31,17 @@ select
   (select count(*)::int from public.groups
     where cohort_id in (select id from production_classrooms))
     as production_classroom_group_count,
+  (select count(*)::int from public.cohort_join_windows) as join_window_count,
+  (select count(*)::int from public.cohort_session_controls)
+    as session_control_count,
   (select count(*)::int from public.cohort_join_windows where closed_at is null)
     as open_joining_count,
   (select count(*)::int from public.cohort_session_controls
     where quest_starts_allowed = true and closed_at is null)
     as open_quest_start_count,
+  (select count(*)::int from public.cohort_group_join_codes)
+    as cohort_group_join_code_count,
+  (select count(*)::int from public.audit_events) as audit_event_count,
   (select count(*)::int from public.student_private_profiles)
     as student_private_profile_count,
   (select count(*)::int from public.student_public_profiles)
@@ -50,7 +56,9 @@ select
   (select count(*)::int from public.team_score_snapshots) as team_score_snapshot_count,
   (select count(*)::int from public.student_join_requests) as student_join_request_count,
   (select count(*)::int from private.student_login_credentials) as student_credential_count,
-  (select count(*)::int from auth.sessions) as student_session_count,
+  (select count(*)::int from auth.sessions as sessions
+    where sessions.user_id not in (select id from marked_teachers))
+    as non_teacher_session_count,
   (select count(*)::int from private.student_login_attempts) as student_login_attempt_count,
   (select count(*)::int from private.join_attempts) as join_attempt_count,
   (select count(*)::int from private.session_recovery_tokens) as recovery_attempt_count,
@@ -59,6 +67,10 @@ select
   (select count(*)::int from public.cohort_quest_launches) as cohort_quest_launch_count,
   (select count(*)::int from private.cohort_quest_launch_receipts)
     as cohort_quest_launch_receipt_count,
+  (select count(*)::int from private.teacher_control_audit)
+    as teacher_control_audit_count,
+  (select count(*)::int from private.teacher_roster_control_receipts)
+    as teacher_roster_control_receipt_count,
   (select count(*)::int from storage.objects where bucket_id = 'group-images')
     as group_image_object_count`;
 
@@ -68,8 +80,12 @@ const DATABASE_FIELDS = {
   productionClassroomCount: "production_classroom_count",
   otherCohortCount: "other_cohort_count",
   productionClassroomGroupCount: "production_classroom_group_count",
+  joinWindowCount: "join_window_count",
+  sessionControlCount: "session_control_count",
   openJoiningCount: "open_joining_count",
   openQuestStartCount: "open_quest_start_count",
+  cohortGroupJoinCodeCount: "cohort_group_join_code_count",
+  auditEventCount: "audit_event_count",
   studentPrivateProfileCount: "student_private_profile_count",
   studentPublicProfileCount: "student_public_profile_count",
   questAttemptCount: "quest_attempt_count",
@@ -82,7 +98,7 @@ const DATABASE_FIELDS = {
   teamScoreSnapshotCount: "team_score_snapshot_count",
   studentJoinRequestCount: "student_join_request_count",
   studentCredentialCount: "student_credential_count",
-  studentSessionCount: "student_session_count",
+  nonTeacherSessionCount: "non_teacher_session_count",
   studentLoginAttemptCount: "student_login_attempt_count",
   joinAttemptCount: "join_attempt_count",
   recoveryAttemptCount: "recovery_attempt_count",
@@ -90,6 +106,8 @@ const DATABASE_FIELDS = {
   groupMediaAssetCount: "group_media_asset_count",
   cohortQuestLaunchCount: "cohort_quest_launch_count",
   cohortQuestLaunchReceiptCount: "cohort_quest_launch_receipt_count",
+  teacherControlAuditCount: "teacher_control_audit_count",
+  teacherRosterControlReceiptCount: "teacher_roster_control_receipt_count",
   groupImageObjectCount: "group_image_object_count",
 };
 
