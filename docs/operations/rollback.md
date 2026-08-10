@@ -32,6 +32,16 @@ or unexpected classroom state exists, stop: `disposable-upgrade` is no longer
 authorized. Preserve that state and obtain an owner-approved data-bearing
 recovery strategy before any later deployment.
 
+## Protected-content import recovery
+
+Before a disposable rebuild imports content, use the protected importer from
+the exact reviewed SHA, exact production ref, and approved content version.
+The source is held only as an encrypted environment secret
+`PROTECTED_CONTENT_BANK_JSON`; no artifact is created, temporary files receive
+cleanup, and the record contains only the version and the 24-item/8-concept
+receipt. Require `--confirm-project-ref=<exact-production-ref>` and
+`--expected-content-version=<approved-version>` for every non-local import.
+
 ## Compatible Function forward redeploy
 
 When a backend defect is compatible with the production migration list, deploy

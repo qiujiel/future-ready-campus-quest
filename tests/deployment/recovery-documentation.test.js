@@ -12,13 +12,16 @@ const loadProjectRef = "vadyhuipwbtgbzpeisbn";
 const disposableAggregateContract = [
   "exactly one Auth account marked by `course-owner-2026-08-08` and no other Auth account",
   "exactly one unarchived `Production Classroom` cohort owned by that marked teacher, exactly five groups, no other cohort, and closed joining/quest start",
-  "zero private/public student profiles, attempts, responses, concept evidence, reflections, student credentials/sessions, and join/recovery attempts",
+  "zero join-window rows, session-control rows, open joining rows, open quest-start rows, cohort group join-code rows, and audit-event rows",
+  "zero private/public student profiles, quest attempts, phase progress, responses, concept evidence, attempt items, reflections, results, and team score snapshots",
+  "zero student join requests, student credentials, non-teacher sessions, student-login attempts, join attempts, and recovery attempts",
+  "zero group-identity receipts, group-media assets, teacher-control audits, teacher-roster-control receipts, quest launches, and quest-launch receipts",
   "zero objects in the private `group-images` bucket",
   "no query error, malformed aggregate, identity mismatch, or load-project target",
 ];
 
-const assertDisposablePolicy = ({ runbook, backend, checklist, readiness, github, rollback }) => {
-  for (const document of [runbook, backend, checklist, readiness, github, rollback]) {
+const assertDisposablePolicy = ({ runbook, backend, checklist, readiness, github, rollback, privacy }) => {
+  for (const document of [runbook, backend, checklist, readiness, github, rollback, privacy]) {
     expect(document).toContain(productionProjectRef);
     expect(document).toContain(loadProjectRef);
   }
@@ -62,12 +65,46 @@ const assertDisposablePolicy = ({ runbook, backend, checklist, readiness, github
   expect(github).toMatch(/`disposable-upgrade` and `bootstrap` are the only backend dispatch modes/i);
   expect(github).toMatch(/no backup.*database connection string.*Storage administration key.*encryption key.*protected manifest/is);
   expect(github).toMatch(/production-backend.*main/is);
-  expect(github).toMatch(/no second human reviewer is required while the\s+disposable-state preflight passes/i);
+  expect(github).toMatch(/no second human\s+reviewer is required while the\s+disposable-state preflight passes/i);
+  for (const safeguard of [
+    "VITE_SUPABASE_URL",
+    "VITE_SUPABASE_PUBLISHABLE_KEY",
+    "VITE_BASE_PATH",
+    "PRODUCTION_FRONTEND_ORIGIN",
+    "ALLOWED_FRONTEND_ORIGINS",
+    "FRONTEND_APP_URL",
+    "JOIN_TOKEN_SIGNING_SECRET",
+    "RECOVERY_TOKEN_SIGNING_SECRET",
+    "STUDENT_LOGIN_SIGNING_SECRET",
+    "PRODUCTION_READINESS_SECRET",
+    "PRODUCTION_SUPABASE_SECRET_KEY",
+  ]) expect(github).toContain(safeguard);
+  expect(github).toMatch(/ALLOWED_FRONTEND_ORIGINS.*exactly equal.*PRODUCTION_FRONTEND_ORIGIN/is);
+  expect(github).toMatch(/FRONTEND_APP_URL.*VITE_BASE_PATH/is);
+  expect(github).toMatch(/STUDENT_LOGIN_SIGNING_SECRET.*production-backend.*never.*frontend/is);
+
+  for (const importControl of [
+    "PROTECTED_CONTENT_BANK_JSON",
+    "production-content-import.yml",
+    "--confirm-project-ref=<exact-production-ref>",
+    "--expected-content-version=<approved-version>",
+    "24-item/8-concept receipt",
+    "never uploads the source as an artifact",
+  ]) expect(backend).toContain(importControl);
+  expect(backend).toMatch(/exact approved.*SHA.*exact production.*ref.*content version/is);
+  expect(backend).toMatch(/always removes.*temporary file/is);
 
   expect(rollback).toMatch(/forward redeployment from the\s+exact reviewed Git SHA/i);
   expect(rollback).toMatch(/re-import.*protected content.*recreation.*marked teacher.*classroom fixture/is);
   expect(rollback).toMatch(/immutable artifacts/i);
   expect(rollback).toMatch(/no database reset, deletion, migration-history repair, or\s+fabricated backup evidence/i);
+  expect(rollback).toMatch(/protected-content import.*exact reviewed SHA.*exact production ref.*approved content version/is);
+  expect(rollback).toMatch(/environment\s+secret.*no artifact.*cleanup.*24-item\/8-concept\s+receipt/is);
+
+  expect(privacy).toMatch(/disposable.*ghohuwwjxgjqnbsauvzq/is);
+  expect(privacy).toMatch(/forward redeployment.*exact reviewed Git SHA.*protected content.*marked teacher.*closed classroom\s+fixture/is);
+  expect(privacy).toMatch(/any student.*response.*upload.*unmarked account.*unexpected classroom state.*data-bearing recovery strategy/is);
+  expect(privacy).not.toMatch(/two-copy custody rule|latest three successful pre-release backups|age.*private identity|restore rehearsal/i);
 };
 
 describe("disposable production recovery policy", () => {
@@ -79,6 +116,7 @@ describe("disposable production recovery policy", () => {
       readiness: await read("deployment-readiness-review.md"),
       github: await read("github-environments.md"),
       rollback: await read("rollback.md"),
+      privacy: await read("privacy-and-retention.md"),
     });
   });
 });

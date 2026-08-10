@@ -39,6 +39,20 @@ Keep joining closed and new quest starts paused during the release. If a later
 release contains any user or unexpected classroom state, leave the release on
 HOLD until an owner-approved data-bearing recovery strategy exists.
 
+## Protected-content import
+
+The backend workflow deliberately does not import course content. After the
+preflight succeeds, the authorized owner may import from the exact approved
+`main` SHA, exact production project ref, and approved content version. Store
+the ignored JSON only as the encrypted `PROTECTED_CONTENT_BANK_JSON`
+environment secret in `production-backend`, then dispatch
+`production-content-import.yml`. It uses
+`PRODUCTION_SUPABASE_SECRET_KEY`, never uploads the source as an artifact, and
+always removes its temporary file. Every non-local invocation requires
+`--confirm-project-ref=<exact-production-ref>` and
+`--expected-content-version=<approved-version>`. Record only the version key
+and the 24-item/8-concept receipt, never content or credentials.
+
 ## Classroom performance evidence
 
 The one-time join gate remains p95 at or below 7 seconds, while response p95

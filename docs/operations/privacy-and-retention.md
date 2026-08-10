@@ -80,24 +80,25 @@ release checklist. That contact coordinates access revocation, token
 invalidation, artifact removal, incident notes, and required school privacy
 notifications.
 
-Free-plan recovery uses a two-copy custody rule: each verified encrypted archive
-is read back from institution-controlled cloud storage and encrypted
-offline/local storage. Retain each of the latest three successful pre-release
-backups for at least 30 days in both locations. A package may be deleted only
-when it is at least 30 days old and three newer verified packages exist in both
-locations, with data-owner approval.
+## Disposable production-state policy
 
-The institution-designated recovery custodian holds the `age` private identity
-separately from every archive and its storage locations. Plaintext may exist
-only in a newly created, mode-`0700` controlled staging or hosted-rehearsal
-workspace for the approved operation, protected by an always-run cleanup trap.
-It must not persist outside that workspace or enter shell history, logs, Git,
-GitHub, general temporary storage, or an operator backup.
+While `ghohuwwjxgjqnbsauvzq` contains only the documented replaceable setup
+fixture, it uses the disposable-state policy. The dedicated load-test project
+`vadyhuipwbtgbzpeisbn` is never a production or recovery target. Before any
+production mutation, the protected workflow performs the read-only aggregate
+gate documented in `free-plan-recovery.md`; it logs only aggregate counts and a
+boolean classification, never classroom rows, identifiers, credentials, or
+content.
 
-Backup and restore evidence uses opaque identifiers, aggregate counts, archive
-digest/size, and pass/fail results only. A restore rehearsal must target a
-separate non-production project, verify that RLS and private Storage remain
-private, and prove expired credentials are not reactivated. GitHub evidence
-must never contain a backup, classroom export, restored personal data, database
-row or SQL, Storage path, filename, signed URL, credential, encryption recipient
-or key material, or protected internal manifest.
+Recovery is forward redeployment from the exact reviewed Git SHA, re-import of
+protected content, and recreation of the marked teacher and closed classroom
+fixture. It permits no reset, deletion, migration-history repair, or fabricated
+recovery evidence. If any student, response, upload, unmarked account, or
+unexpected classroom state exists, `disposable-upgrade` stops and an
+owner-approved data-bearing recovery strategy is required.
+
+This policy does not change privacy controls for private `group-images`,
+short-lived signed URLs, teacher exports, retention, access revocation, secret
+redaction, audit minimization, or expired-artifact cleanup. GitHub evidence
+must never contain classroom exports, personal data, database rows or SQL,
+Storage paths, signed URLs, credentials, or protected manifests.

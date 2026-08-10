@@ -20,7 +20,10 @@ The job may proceed only when aggregate evidence proves all of the following:
 
 - exactly one Auth account marked by `course-owner-2026-08-08` and no other Auth account;
 - exactly one unarchived `Production Classroom` cohort owned by that marked teacher, exactly five groups, no other cohort, and closed joining/quest start;
-- zero private/public student profiles, attempts, responses, concept evidence, reflections, student credentials/sessions, and join/recovery attempts;
+- zero join-window rows, session-control rows, open joining rows, open quest-start rows, cohort group join-code rows, and audit-event rows;
+- zero private/public student profiles, quest attempts, phase progress, responses, concept evidence, attempt items, reflections, results, and team score snapshots;
+- zero student join requests, student credentials, non-teacher sessions, student-login attempts, join attempts, and recovery attempts;
+- zero group-identity receipts, group-media assets, teacher-control audits, teacher-roster-control receipts, quest launches, and quest-launch receipts;
 - zero objects in the private `group-images` bucket; and
 - no query error, malformed aggregate, identity mismatch, or load-project target.
 
