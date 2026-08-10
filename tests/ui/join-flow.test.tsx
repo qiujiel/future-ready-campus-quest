@@ -8,7 +8,20 @@ import { JoinPage } from "../../src/features/join/JoinPage";
 import type { AuthGateway } from "../../src/shared/api/authGateway";
 
 function CurrentPath() {
-  return <output aria-label="current path">{useLocation().pathname}</output>;
+  const location = useLocation();
+  return (
+    <>
+      <output aria-label="current path">{location.pathname}</output>
+      <output aria-label="current navigation">
+        {JSON.stringify({
+          pathname: location.pathname,
+          search: location.search,
+          hash: location.hash,
+          state: location.state,
+        })}
+      </output>
+    </>
+  );
 }
 
 function joinGateway(
@@ -172,7 +185,8 @@ describe("student join flow", () => {
   });
 
   it("keeps rejected login details out of errors, navigation, and browser storage", async () => {
-    const storageWrite = vi.spyOn(Storage.prototype, "setItem");
+    const localStorageWrite = vi.spyOn(window.localStorage, "setItem");
+    const sessionStorageWrite = vi.spyOn(window.sessionStorage, "setItem");
     const loginStudent = vi.fn()
       .mockRejectedValueOnce(new Error("STUDENT_LOGIN_NOT_ACCEPTED"))
       .mockResolvedValueOnce({
@@ -201,14 +215,25 @@ describe("student join flow", () => {
     expect(alert).toHaveTextContent("Name or passcode was not accepted.");
     expect(alert).not.toHaveTextContent("4826");
     expect(window.location.href).not.toContain("4826");
-    expect(storageWrite).not.toHaveBeenCalledWith(expect.anything(), "4826");
+    const storageCallArguments = [
+      ...localStorageWrite.mock.calls,
+      ...sessionStorageWrite.mock.calls,
+    ].flat()
+      .map((argument) => String(argument));
+    expect(storageCallArguments).not.toEqual(
+      expect.arrayContaining([expect.stringContaining("4826")]),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /continue to activity/i }));
     await waitFor(() => expect(loginStudent).toHaveBeenCalledTimes(2));
     expect(loginStudent.mock.calls[1]?.[0].requestKey).not.toBe(
       loginStudent.mock.calls[0]?.[0].requestKey,
     );
-    storageWrite.mockRestore();
+    const navigation = await screen.findByLabelText("current navigation");
+    expect(navigation).toHaveTextContent('"state":null');
+    expect(navigation).not.toHaveTextContent("4826");
+    localStorageWrite.mockRestore();
+    sessionStorageWrite.mockRestore();
   });
 
   it.each([

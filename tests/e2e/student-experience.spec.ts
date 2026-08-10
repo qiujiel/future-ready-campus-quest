@@ -26,7 +26,7 @@ test("completes the synthetic student review journey", async ({
 
   await page.goto("/#/preview/student");
   await expect(
-    page.getByRole("heading", { name: "Join your group" }),
+    page.getByRole("heading", { name: "Join your class" }),
   ).toBeVisible();
   await screenshot(`join-${testInfo.project.name}.png`, {
     fullPage: true,
