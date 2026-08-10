@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   type AuthGateway,
@@ -15,6 +15,8 @@ export function TeacherSetupPage({
   const [cohorts, setCohorts] = useState<TeacherCohortListItem[]>([]);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const createRequestKey = useRef("");
+  const openRequestKey = useRef("");
 
   useEffect(() => {
     let active = true;
@@ -38,35 +40,36 @@ export function TeacherSetupPage({
     setStatus("");
     const form = new FormData(event.currentTarget);
     let createdCohortId: string;
+    createRequestKey.current ||= crypto.randomUUID();
     try {
       const result = await gateway.createCohort({
         title: String(form.get("title") ?? ""),
         groupCount: Number(form.get("groupCount")),
-        requestKey: crypto.randomUUID(),
+        requestKey: createRequestKey.current,
       });
       createdCohortId = result.cohortId;
+      createRequestKey.current = "";
     } catch {
       setStatus("The class could not be created. Try again.");
       setBusy(false);
       return;
     }
-    try {
-      await gateway.openJoinWindow?.(createdCohortId, crypto.randomUUID());
-    } catch {
-      // Creation is intentionally not retried. The class dashboard shows the
-      // class as closed and gives the teacher a safe Open joining control.
+    openRequestKey.current ||= crypto.randomUUID();
+    for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        await gateway.closeJoinWindow?.(
+        await gateway.openJoinWindow(
           createdCohortId,
-          crypto.randomUUID(),
+          openRequestKey.current,
         );
+        openRequestKey.current = "";
+        break;
       } catch {
-        // The dashboard is still the safe place to inspect and retry joining.
+        // One same-key retry resolves a lost response without duplicating the
+        // atomic window. A persistent rejection remains visible on dashboard.
       }
-    } finally {
-      setBusy(false);
-      navigate(`/teacher/cohorts/${createdCohortId}`, { replace: true });
     }
+    setBusy(false);
+    navigate(`/teacher/cohorts/${createdCohortId}`, { replace: true });
   }
 
   return (

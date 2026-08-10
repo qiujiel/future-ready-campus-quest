@@ -25,6 +25,9 @@ function gateway(
     async createCohort() {
       return { cohortId: "cohort-1" };
     },
+    async openJoinWindow() {
+      throw new Error("unused");
+    },
     async getCurrentRole() {
       return null;
     },

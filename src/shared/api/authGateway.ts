@@ -24,7 +24,7 @@ export interface AuthGateway {
   signOut?(): Promise<void>;
   listCohorts?(): Promise<TeacherCohortListItem[]>;
   createCohort(input: CreateCohortRequest): Promise<{ cohortId: string }>;
-  openJoinWindow?(
+  openJoinWindow(
     cohortId: string,
     requestKey: string,
   ): Promise<JoinWindowReceipt>;

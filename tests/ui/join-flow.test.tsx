@@ -33,6 +33,9 @@ function joinGateway(
     async createCohort() {
       return { cohortId: "cohort-1" };
     },
+    async openJoinWindow() {
+      throw new Error("unused");
+    },
     joinCohort,
     loginStudent,
     async recoverStudent() {

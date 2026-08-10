@@ -30,6 +30,9 @@ const previewAuthGateway: AuthGateway = {
   async createCohort() {
     return { cohortId: "preview-cohort" };
   },
+  async openJoinWindow() {
+    throw new Error("Preview class creation is not available.");
+  },
   async joinCohort(input) {
     return {
       identity: {

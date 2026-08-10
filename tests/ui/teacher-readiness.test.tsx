@@ -147,7 +147,6 @@ it("keeps a created class and navigates to its closed dashboard when opening fai
   const openJoinWindow = vi
     .spyOn(gateway, "openJoinWindow")
     .mockRejectedValue(new Error("open failed"));
-  const closeJoinWindow = vi.spyOn(gateway, "closeJoinWindow");
   render(<RouterProvider router={setupRouter(gateway)} />);
 
   fireEvent.change(await screen.findByLabelText(/class name/i), {
@@ -161,10 +160,65 @@ it("keeps a created class and navigates to its closed dashboard when opening fai
     `/teacher/cohorts/${cohortId}`,
   );
   expect(createCohort).toHaveBeenCalledTimes(1);
-  expect(openJoinWindow).toHaveBeenCalledTimes(1);
-  expect(closeJoinWindow).toHaveBeenCalledWith(
-    cohortId,
-    expect.stringMatching(/^[0-9a-f-]{36}$/i),
+  expect(openJoinWindow).toHaveBeenCalledTimes(2);
+  expect(openJoinWindow.mock.calls[0]?.[1]).toBe(
+    openJoinWindow.mock.calls[1]?.[1],
+  );
+});
+
+it("reuses the create request key after an ambiguous failure", async () => {
+  const gateway = authGateway();
+  const createCohort = vi
+    .spyOn(gateway, "createCohort")
+    .mockRejectedValueOnce(new Error("response lost"))
+    .mockResolvedValueOnce({ cohortId });
+  render(<RouterProvider router={setupRouter(gateway)} />);
+
+  fireEvent.change(await screen.findByLabelText(/class name/i), {
+    target: { value: "Friday seminar" },
+  });
+  const submit = screen.getByRole("button", {
+    name: /create class and open joining/i,
+  });
+  fireEvent.click(submit);
+  await screen.findByText(/class could not be created/i);
+  fireEvent.click(submit);
+
+  expect(await screen.findByLabelText("current path")).toHaveTextContent(
+    `/teacher/cohorts/${cohortId}`,
+  );
+  expect(createCohort).toHaveBeenCalledTimes(2);
+  expect(createCohort.mock.calls[0]?.[0].requestKey).toBe(
+    createCohort.mock.calls[1]?.[0].requestKey,
+  );
+});
+
+it("retries an ambiguous open once with the same request key", async () => {
+  const gateway = authGateway();
+  const openJoinWindow = vi
+    .spyOn(gateway, "openJoinWindow")
+    .mockRejectedValueOnce(new Error("response lost"))
+    .mockResolvedValueOnce({
+      joinUrl: "https://example.invalid/#/class/40000000-0000-4000-8000-000000000099",
+      studentUrl: "https://example.invalid/#/class/40000000-0000-4000-8000-000000000099",
+      expiresAt: "2026-08-10T12:15:00.000Z",
+      groups: [],
+    });
+  render(<RouterProvider router={setupRouter(gateway)} />);
+
+  fireEvent.change(await screen.findByLabelText(/class name/i), {
+    target: { value: "Friday seminar" },
+  });
+  fireEvent.click(
+    screen.getByRole("button", { name: /create class and open joining/i }),
+  );
+
+  expect(await screen.findByLabelText("current path")).toHaveTextContent(
+    `/teacher/cohorts/${cohortId}`,
+  );
+  expect(openJoinWindow).toHaveBeenCalledTimes(2);
+  expect(openJoinWindow.mock.calls[0]?.[1]).toBe(
+    openJoinWindow.mock.calls[1]?.[1],
   );
 });
 

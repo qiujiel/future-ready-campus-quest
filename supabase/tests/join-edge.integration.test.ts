@@ -274,11 +274,12 @@ it("completes a valid join against real Auth and database boundaries", async () 
       group_capacity: 20,
     });
 
+    const initialOpenRequestKey = crypto.randomUUID();
     const opened = await teacherClient.functions.invoke("manage-join-window", {
       body: {
         action: "open",
         cohortId,
-        requestKey: crypto.randomUUID(),
+        requestKey: initialOpenRequestKey,
       },
     });
     if (opened.error) throw opened.error;
@@ -300,6 +301,18 @@ it("completes a valid join against real Auth and database boundaries", async () 
     expect(new Set(opened.data.groups.map(
       (group: { joinCode: string }) => group.joinCode,
     )).size).toBe(2);
+    const replayedOpen = await teacherClient.functions.invoke(
+      "manage-join-window",
+      {
+        body: {
+          action: "open",
+          cohortId,
+          requestKey: initialOpenRequestKey,
+        },
+      },
+    );
+    if (replayedOpen.error) throw replayedOpen.error;
+    expect(replayedOpen.data).toEqual(opened.data);
     const joinCode = String(opened.data.groups[0].joinCode);
 
     const usersBeforeClassMismatch = await authUserCount();

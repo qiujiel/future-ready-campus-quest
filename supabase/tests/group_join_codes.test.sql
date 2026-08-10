@@ -119,7 +119,6 @@ values (
   'a1000000-0000-0000-0000-000000000001'
 );
 
-set local role authenticated;
 select set_config(
   'request.jwt.claim.sub',
   'a1000000-0000-0000-0000-000000000001',
@@ -257,26 +256,13 @@ select throws_ok(
   'closing the window invalidates every group code immediately'
 );
 
-set local role authenticated;
-select set_config(
-  'request.jwt.claim.sub',
-  'a1000000-0000-0000-0000-000000000002',
-  true
-);
-select set_config('request.jwt.claim.role', 'authenticated', true);
-
-select throws_ok(
-  format(
-    $$select public.configure_cohort_group_join_codes(
-      'a2000000-0000-0000-0000-000000000001',
-      'a3000000-0000-0000-0000-000000000001',
-      %L::jsonb
-    )$$,
-    '[]'
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.configure_cohort_group_join_codes(uuid,uuid,jsonb)',
+    'execute'
   ),
-  'P0001',
-  'COHORT_NOT_AVAILABLE',
-  'another teacher cannot configure codes for the cohort'
+  'browser callers cannot invoke the split group-code configuration RPC'
 );
 
 select * from finish();

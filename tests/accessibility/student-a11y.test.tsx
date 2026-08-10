@@ -31,6 +31,9 @@ const authGateway: AuthGateway = {
   async createCohort() {
     return { cohortId: "cohort-1" };
   },
+  async openJoinWindow() {
+    throw new Error("unused");
+  },
   async joinCohort(input) {
     return {
       identity: {
