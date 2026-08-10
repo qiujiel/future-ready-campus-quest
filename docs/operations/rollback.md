@@ -1,172 +1,51 @@
 # Production Rollback and Recovery
 
-The incident owner chooses the smallest safe path below. Record decisions,
-workflow run IDs, full commits, migration timestamps, opaque cohort IDs, and
-times. Never record raw tokens, names, answers, reflections, exports, database
-passwords, or service-role keys.
+Keep joining closed, pause new quest starts, preserve the failed run evidence,
+and never record raw tokens, names, answers, exports, database passwords, or
+secret keys. Production is `ghohuwwjxgjqnbsauvzq`; the load project
+`vadyhuipwbtgbzpeisbn` is never a production or recovery target.
 
-## Immediate containment
+## Existing Pages rollback
 
-1. Stop approving pending production workflows.
-2. Close every join window and pause new quest starts with teacher controls.
-3. Revoke affected recovery material by closing the session or issuing a
-   replacement; never copy raw material into the incident record.
-4. Keep the last verified Pages artifact serving unless it is the fault.
-5. Name the incident owner, database owner, application owner, and privacy
-   contact; record the containment timestamp.
+Pages retains immutable artifacts and its existing rollback workflow. From
+`main`, dispatch `Roll Back GitHub Pages` with the recorded source run ID,
+expected commit SHA, and expected manifest digest. The workflow verifies the
+unchanged archived artifact inventory, hashes, metadata commit, and manifest
+digest before publication. Do not rebuild an old commit with current tooling.
 
-If controls are unavailable, the production owner may temporarily disable the
-affected Edge Function from the provider console while preserving evidence.
-That exceptional action and restoration must be recorded.
-
-## Failed initial bootstrap
-
-A failed initial bootstrap stays on HOLD. Keep Pages unpublished, do not import
-protected content or create classroom fixtures, and close every join path. The
-redaction-safe authorization ID and zero-count output describe a pre-release
-condition only: bootstrap evidence cannot restore data.
-
-Inspect the workflow run and remote migration list without changing production.
-The only permitted next path is a separately approved forward fix through a new
-reviewed workflow run, or empty-project recreation under a separate explicit
-owner decision after proving that no student, teacher, content, Auth, Storage,
-or audit state exists. Neither path is automatic. The bootstrap approval grants
-no reset, deletion, or migration-history repair, and it grants no authority to
-repeat a partially completed migration command manually.
-
-## Pages rollback within 90 days
-
-Use the retained artifact; never rebuild an old commit with current tooling.
-
-1. Open the prior successful `Package and Publish GitHub Pages` workflow run.
-2. Copy its numeric run ID, recorded full commit SHA, and manifest SHA-256 from
-   the job summary. Confirm its `github-pages` artifact has not expired.
-3. Compare those values with the signed release record and select the most
-   recent version known to be compatible with the current backend.
-4. From `main`, dispatch `Roll Back GitHub Pages` with `source_run_id`,
-   `expected_commit_sha`, and `expected_manifest_digest`.
-5. The preparation job downloads that run's `artifact.tar`, verifies its exact
-   file inventory, hashes, metadata commit, and manifest digest, then re-uploads
-   the unchanged archive. A mismatch stops the workflow.
-6. Review its summary and approve `github-pages`. Verify the resulting URL and
-   embedded `release-metadata.json` commit.
-
-Exit when teacher and student smoke checks pass and no new backend incompatibility
-appears. If the artifact is missing or its digest differs, do not publish it.
-
-## First release or expired artifact
-
-The retained-artifact workflow cannot help when no known-good artifact exists.
-Before the first production release, prepare and independently review a static
-maintenance artifact that contains no Supabase URL, key, login form, analytics,
-or protected content. Record its artifact ID, commit, digest, and tested Pages
-URL in the release record. Use the same verification and `github-pages` approval
-path to publish it during containment.
-
-If no reviewed maintenance artifact exists, leave Pages unpublished or keep the
-current provider-served page. Do not improvise a production build during an
+If no compatible immutable artifact exists, leave Pages unpublished or retain
+the current provider-served page; do not improvise a production build during an
 incident.
 
-## Edge Function rollback
+## Disposable-state recovery
 
-Choose the last commit documented as compatible with the migrations already
-present in production. Database migrations are not reversed by this procedure.
+For the current replaceable fixture, recovery is forward redeployment from the
+exact reviewed Git SHA, then re-import of protected content and recreation of
+the marked teacher and closed classroom fixture. Keep all exact project/SHA,
+migration dry-run, forward-only migration, Function, readiness, RLS, and
+authorization controls in place. Verify the exact production target before
+each mutation.
 
-1. Review the diff from the current function commit to the target, including
-   `supabase/config.toml`, shared modules, JWT settings, and secret names.
-2. Check out that exact commit in a clean, access-controlled release checkout;
-   install its frozen dependencies and run its function, Deno, database-contract,
-   integration, build, and privacy tests.
-3. Link the pinned Supabase CLI to the explicitly confirmed production ref.
-   Compare `supabase migration list`; stop if the old functions cannot tolerate
-   every migration already applied.
-4. With `SUPABASE_ACCESS_TOKEN` available only to the release process, deploy
-   all functions from the target checkout with:
+This path permits no database reset, deletion, migration-history repair, or
+fabricated backup evidence. If any student, response, upload, unmarked account,
+or unexpected classroom state exists, stop: `disposable-upgrade` is no longer
+authorized. Preserve that state and obtain an owner-approved data-bearing
+recovery strategy before any later deployment.
 
-   ```sh
-   pnpm exec supabase functions deploy --project-ref <confirmed-production-ref>
-   ```
+## Protected-content import recovery
 
-5. Run `node scripts/production-preflight.mjs --backend-only` using protected
-   production-readiness configuration, then smoke teacher/student boundaries.
+Before a disposable rebuild imports content, use the protected importer from
+the exact reviewed SHA, exact production ref, and approved content version.
+The source is held only as an encrypted environment secret
+`PROTECTED_CONTENT_BANK_JSON`; no artifact is created, temporary files receive
+cleanup, and the record contains only the version and the 24-item/8-concept
+receipt. Require `--confirm-project-ref=<exact-production-ref>` and
+`--expected-content-version=<approved-version>` for every non-local import.
 
-This is a production mutation and requires the same production owner approval
-as a normal backend release. Never substitute `vadyhuipwbtgbzpeisbn`.
+## Compatible Function forward redeploy
 
-## Database compensation
-
-Production migrations are forward-only. Never use `supabase db reset`, delete
-migration history, or apply destructive history repair.
-
-For a failed additive change:
-
-1. stop callers of the new contract and deploy compatibility functions that
-   tolerate both schemas;
-2. write a later timestamped compensating migration;
-3. restore the pre-release backup into a separate non-production project;
-4. apply production migrations through the failed change and then the
-   compensation;
-5. run all pgTAP, integration, privacy, ownership, retention, and smoke tests;
-6. obtain database-owner review and apply the compensation through the protected
-   backend workflow;
-7. re-enable traffic only after read-only production readiness passes.
-
-Do not delete immutable responses, evidence, scores, or audit history merely to
-restore application behavior. Any policy-authorized destruction requires a
-separate data-owner decision and evidence review.
-
-## Backup restoration
-
-Restoration is a separately approved incident decision by the database owner,
-privacy contact, and incident owner. It is never an automatic rollback step,
-never reverses migration history, and never inherits authority from a release
-or rehearsal approval. Keep joining closed and preserve the current system and
-opaque incident evidence until those owners select one path.
-
-### Provider-managed backup or PITR path
-
-Use only the provider backup/PITR identifier and recovery point in the signed
-pre-release record. Rehearse the exact point in a new non-production project,
-then verify migrations, ownership/RLS, Auth and aggregate evidence counts,
-retention/cleanup state, and expired join/recovery behavior. Provider database
-recovery does not by itself restore underlying Storage objects: reconcile the
-private `group-images` inventory, bytes, and per-object digests against the
-separately retained Storage evidence before production recovery is accepted.
-Only then may the owners separately authorize the provider's production
-recovery procedure.
-
-### Free-plan encrypted logical-package path
-
-Use only the opaque backup evidence ID, encrypted archive SHA-256, creation
-time, and successful hosted rehearsal evidence recorded before the release.
-Follow `free-plan-recovery.md` under fresh approvals and with separate key
-custody. Verify both retained encrypted copies before decrypting into controlled
-staging. Restore database roles, schema, data, and migration history in the
-supported order, then reconcile all `group-images` objects with the encrypted
-internal manifest. Never use `vadyhuipwbtgbzpeisbn` as the target or place a
-credential, connection string, path, manifest, SQL, or row in incident evidence.
-
-Before any production cutover, repeat the full database, Auth, ownership/RLS,
-retention, immutable-evidence, function-boundary, and Storage aggregate/digest
-validation. A logical package older than the incident's approved recovery point,
-a missing object, or any digest mismatch stops recovery. Production migrations
-remain forward-only; restoration does not authorize history repair, database
-reset, destructive migration, or an unreviewed second migration command.
-
-After either path, rotate affected credentials, reconcile database Storage
-metadata with every underlying `group-images` object, run the complete readiness
-suite, and keep joining closed until teacher acceptance. Record separate
-incident approval, recovery result, reviewer, and UTC time using opaque evidence
-only.
-
-## Exit criteria
-
-- the exact serving Pages commit and artifact digest are known;
-- deployed function commit and production migration list are recorded;
-- teacher ownership, sign-in, dashboard, controls, and export boundaries pass;
-- unauthorized callers receive neutral errors;
-- joining is closed by default and new starts remain controlled;
-- C1–C8 immutable evidence remains consistent;
-- cleanup scheduling and retention configuration are intact;
-- incident owner, privacy contact, start/end times, actions, and follow-up owner
-  are recorded without sensitive classroom data.
+When a backend defect is compatible with the production migration list, deploy
+the exact last compatible Function commit through the protected workflow and
+rerun backend readiness and permission-boundary smoke checks. Database
+migrations remain forward-only. Do not run an unreviewed manual migration
+command after a partial failure.

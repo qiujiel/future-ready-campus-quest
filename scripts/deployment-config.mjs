@@ -59,7 +59,7 @@ const REQUIRED_PRODUCTION_FUNCTIONS = Object.freeze([
 const PRODUCTION_FUNCTION_DEPLOYMENT_ENTRYPOINT =
   "node scripts/deploy-production-functions.mjs";
 const CANONICAL_BACKEND_WORKFLOW_SHA256 =
-  "f1cbc04d3db761b1733525c29e11f266497d1ce6079e8888f5e6ed5dd877f6bf";
+  "964d04a1fdd6e2cf81220507bcd9e1c4cd8b90ce9fbc1cf436d75e98bb3816d7";
 export const CANONICAL_PRODUCTION_FUNCTION_DEPLOYMENT_SCRIPT = [
   'import { spawnSync } from "node:child_process";',
   "",
@@ -88,31 +88,11 @@ const RELEASE_INPUT_DEFINITIONS = {
     description: "Release authorization mode",
     required: true,
     type: "choice",
-    default: "upgrade",
-    options: ["upgrade", "bootstrap"],
+    default: "disposable-upgrade",
+    options: ["disposable-upgrade", "bootstrap"],
   },
   bootstrap_authorization_id: {
     description: "Redaction-safe bootstrap authorization identifier",
-    required: false,
-    type: "string",
-  },
-  backup_evidence_id: {
-    description: "Redaction-safe backup evidence identifier",
-    required: false,
-    type: "string",
-  },
-  backup_created_at_utc: {
-    description: "Redaction-safe UTC backup completion timestamp",
-    required: false,
-    type: "string",
-  },
-  backup_archive_sha256: {
-    description: "Redaction-safe SHA-256 for the backup archive",
-    required: false,
-    type: "string",
-  },
-  restore_rehearsal_evidence_id: {
-    description: "Redaction-safe restore rehearsal evidence identifier",
     required: false,
     type: "string",
   },
@@ -120,10 +100,6 @@ const RELEASE_INPUT_DEFINITIONS = {
 const RELEASE_ENVIRONMENT = {
   RELEASE_MODE: "release_mode",
   BOOTSTRAP_AUTHORIZATION_ID: "bootstrap_authorization_id",
-  BACKUP_EVIDENCE_ID: "backup_evidence_id",
-  BACKUP_CREATED_AT_UTC: "backup_created_at_utc",
-  BACKUP_ARCHIVE_SHA256: "backup_archive_sha256",
-  RESTORE_REHEARSAL_EVIDENCE_ID: "restore_rehearsal_evidence_id",
 };
 const RELEASE_AUTHORIZATION_COMMAND =
   "node scripts/production-release-authorization.mjs";
@@ -179,6 +155,19 @@ const BOOTSTRAP_PREFLIGHT_STEP = {
 const PRODUCTION_PROJECT_REF = "ghohuwwjxgjqnbsauvzq";
 const LOAD_PROJECT_REF = "vadyhuipwbtgbzpeisbn";
 const PRODUCTION_URL = `https://${PRODUCTION_PROJECT_REF}.supabase.co`;
+const DISPOSABLE_STATE_PREFLIGHT_STEP = {
+  name: "Verify disposable production state",
+  if: "${{ inputs.release_mode == 'disposable-upgrade' }}",
+  env: {
+    RELEASE_MODE: "${{ inputs.release_mode }}",
+    PRODUCTION_SUPABASE_PROJECT_REF:
+      "${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}",
+    PRODUCTION_SUPABASE_URL: "${{ vars.VITE_SUPABASE_URL }}",
+    LOAD_SUPABASE_PROJECT_REF: "${{ vars.LOAD_SUPABASE_PROJECT_REF }}",
+    SUPABASE_ACCESS_TOKEN: "${{ secrets.SUPABASE_ACCESS_TOKEN }}",
+  },
+  run: "node scripts/production-disposable-state.mjs",
+};
 const BACKEND_IDENTITY_SCRIPT = [
   "if ! printf '%s' \"$EXPECTED_SHA\" | grep -Eq '^[0-9a-f]{40}$'; then",
   "  echo \"expected_sha must be a full lowercase commit SHA\" >&2",
@@ -398,6 +387,14 @@ function requireCanonicalReleaseInputs(workflow) {
       fail(`canonical release workflow input ${name}`);
     }
   }
+  const canonicalInputNames = [
+    "expected_sha",
+    "production_project_ref",
+    ...Object.keys(RELEASE_INPUT_DEFINITIONS),
+  ].sort();
+  if (!isDeepStrictEqual(Object.keys(inputs).sort(), canonicalInputNames)) {
+    fail("canonical release workflow inputs");
+  }
 }
 
 function containsSecretsContext(value) {
@@ -516,7 +513,7 @@ function requireReleaseAuthorizationGate(workflow, validationJob, releaseJob) {
     }
   }
   if (Object.keys(environment).length !== Object.keys(RELEASE_ENVIRONMENT).length) {
-    fail("release authorization validation requires exactly six approved environment mappings");
+    fail("release authorization validation requires exactly two approved environment mappings");
   }
   if (!isDeepStrictEqual(validationJob.steps, RELEASE_AUTHORIZATION_STEPS)) {
     fail("release authorization validation requires canonical ordered evidence steps");
@@ -586,6 +583,39 @@ function requireBootstrapPreflightOrder(job) {
     fail(
       "bootstrap preflight must run after linking and before production mutations",
     );
+  }
+}
+
+function requireDisposableStatePreflightOrder(job) {
+  const steps = job?.steps ?? [];
+  const preflightSteps = steps.filter((step) =>
+    step?.name === DISPOSABLE_STATE_PREFLIGHT_STEP.name ||
+    String(step?.run ?? "").includes("production-disposable-state.mjs")
+  );
+  if (
+    preflightSteps.length !== 1 ||
+    !isDeepStrictEqual(preflightSteps[0], DISPOSABLE_STATE_PREFLIGHT_STEP)
+  ) {
+    fail("backend release requires the canonical disposable-state preflight");
+  }
+
+  const disposableIndex = steps.indexOf(preflightSteps[0]);
+  const linkIndex = steps.findIndex(
+    (step) => step?.name === "Link the confirmed production project",
+  );
+  const productionMutation = new RegExp(
+    `\\b(?:pnpm exec )?supabase\\s+(?:db\\s+push|secrets\\s+set|functions\\s+deploy)\\b|${PRODUCTION_FUNCTION_DEPLOYMENT_ENTRYPOINT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+  );
+  const mutationIndices = steps
+    .map((step, index) => (productionMutation.test(String(step?.run ?? "")) ? index : -1))
+    .filter((index) => index >= 0);
+  if (
+    linkIndex < 0 ||
+    disposableIndex < 0 ||
+    disposableIndex >= linkIndex ||
+    mutationIndices.some((index) => disposableIndex >= index)
+  ) {
+    fail("disposable-state preflight must run before production link and mutations");
   }
 }
 
@@ -946,6 +976,7 @@ export function validateDeploymentConfiguration({
   requireContentsReadOnly(backendJob, "backend release");
   requireBackendReleaseIdentity(backend, backendJob);
   requireExactProductionFunctionSet(backendJob);
+  requireDisposableStatePreflightOrder(backendJob);
   requireBootstrapPreflightOrder(backendJob);
   requireRun(backendJob, /migration list/, "backend migration list is missing");
   requireRun(
