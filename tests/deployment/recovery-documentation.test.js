@@ -18,17 +18,88 @@ const section = (source, heading, level = "##") => {
   return source.slice(start, next < 0 ? source.length : start + marker.length + next);
 };
 
-const expectScope = (source, expected, prohibited = []) => {
-  for (const name of expected) expect(source).toContain(`\`${name}\``);
-  for (const name of prohibited) expect(source).not.toContain(`\`${name}\``);
+const inventoryNames = (source, heading) => {
+  const scope = section(source, heading, "###");
+  const names = [...scope.matchAll(/^\| `([A-Z_]+)` \|/gm)]
+    .map((match) => match[1])
+    .sort();
+  if (names.length === 0) expect(scope).toMatch(/^### (?:Variables|Secrets)\n\nNone\.\n?$/);
+  return names;
 };
 
-const inventory = (source, heading) => {
-  const scope = section(source, heading, "###");
-  const tableStart = scope.indexOf("| ");
-  expect(tableStart).toBeGreaterThanOrEqual(0);
-  const tableEnd = scope.indexOf("\n\n", tableStart);
-  return scope.slice(tableStart, tableEnd < 0 ? scope.length : tableEnd);
+const githubScopeInventory = (github) => {
+  const loadEnvironment = section(github, "`load-test` environment");
+  const backendEnvironment = section(github, "`production-backend` environment");
+  const readinessEnvironment = section(github, "`production-readiness` environment");
+  const pagesEnvironment = section(github, "`github-pages` environment");
+  return {
+    loadTest: {
+      variables: inventoryNames(loadEnvironment, "Variables"),
+      secrets: inventoryNames(loadEnvironment, "Secrets"),
+    },
+    productionBackend: {
+      variables: inventoryNames(backendEnvironment, "Variables"),
+      secrets: inventoryNames(backendEnvironment, "Secrets"),
+    },
+    productionReadiness: {
+      variables: inventoryNames(readinessEnvironment, "Variables"),
+      secrets: inventoryNames(readinessEnvironment, "Secrets"),
+    },
+    githubPages: {
+      variables: inventoryNames(pagesEnvironment, "Variables"),
+      secrets: inventoryNames(pagesEnvironment, "Secrets"),
+    },
+  };
+};
+
+const expectedGitHubScopeInventory = {
+  loadTest: {
+    variables: ["LOAD_SUPABASE_PROJECT_REF"],
+    secrets: [
+      "LOAD_SUPABASE_PUBLISHABLE_KEY",
+      "LOAD_SUPABASE_SECRET_KEY",
+      "LOAD_SUPABASE_URL",
+    ],
+  },
+  productionBackend: {
+    variables: [
+      "LOAD_SUPABASE_PROJECT_REF",
+      "PRODUCTION_FRONTEND_ORIGIN",
+      "PRODUCTION_SUPABASE_PROJECT_REF",
+      "VITE_BASE_PATH",
+      "VITE_SUPABASE_PUBLISHABLE_KEY",
+      "VITE_SUPABASE_URL",
+    ],
+    secrets: [
+      "ALLOWED_FRONTEND_ORIGINS",
+      "FRONTEND_APP_URL",
+      "JOIN_TOKEN_SIGNING_SECRET",
+      "PRODUCTION_READINESS_SECRET",
+      "PRODUCTION_SUPABASE_DB_PASSWORD",
+      "PRODUCTION_SUPABASE_SECRET_KEY",
+      "PRODUCTION_TEACHER_EMAIL",
+      "PRODUCTION_TEACHER_PASSWORD",
+      "PROTECTED_CONTENT_BANK_JSON",
+      "RECOVERY_TOKEN_SIGNING_SECRET",
+      "STUDENT_LOGIN_SIGNING_SECRET",
+      "SUPABASE_ACCESS_TOKEN",
+    ],
+  },
+  productionReadiness: {
+    variables: [
+      "PRODUCTION_CONTENT_VERSION",
+      "PRODUCTION_FRONTEND_ORIGIN",
+      "PRODUCTION_SMOKE_COHORT_ID",
+      "PRODUCTION_SMOKE_TEACHER_ID",
+      "PRODUCTION_SUPABASE_PROJECT_REF",
+    ],
+    secrets: ["PRODUCTION_READINESS_SECRET"],
+  },
+  githubPages: { variables: [], secrets: [] },
+};
+
+const assertGitHubScopeInventory = (github) => {
+  expect(githubScopeInventory(github)).toEqual(expectedGitHubScopeInventory);
 };
 
 const disposableAggregateContract = [
@@ -104,62 +175,7 @@ const assertDisposablePolicy = ({ runbook, backend, checklist, readiness, github
   expect(github).toMatch(/ALLOWED_FRONTEND_ORIGINS.*exactly equal.*PRODUCTION_FRONTEND_ORIGIN/is);
   expect(github).toMatch(/FRONTEND_APP_URL.*VITE_BASE_PATH/is);
   expect(github).toMatch(/STUDENT_LOGIN_SIGNING_SECRET.*production-backend.*never.*frontend/is);
-  const loadEnvironment = section(github, "`load-test` environment");
-  const backendEnvironment = section(github, "`production-backend` environment");
-  const readinessEnvironment = section(github, "`production-readiness` environment");
-  const pagesEnvironment = section(github, "`github-pages` environment");
-  const loadVariables = inventory(loadEnvironment, "Variables");
-  const loadSecrets = inventory(loadEnvironment, "Secrets");
-  const backendVariables = inventory(backendEnvironment, "Variables");
-  const backendSecrets = inventory(backendEnvironment, "Secrets");
-  const readinessVariables = inventory(readinessEnvironment, "Variables");
-  const readinessSecrets = inventory(readinessEnvironment, "Secrets");
-  const pagesSecrets = section(pagesEnvironment, "Secrets", "###");
-  expectScope(loadVariables, ["LOAD_SUPABASE_PROJECT_REF"], [
-    "LOAD_SUPABASE_URL",
-    "LOAD_SUPABASE_PUBLISHABLE_KEY",
-    "LOAD_SUPABASE_SECRET_KEY",
-  ]);
-  expectScope(loadSecrets, [
-    "LOAD_SUPABASE_URL",
-    "LOAD_SUPABASE_PUBLISHABLE_KEY",
-    "LOAD_SUPABASE_SECRET_KEY",
-  ], ["LOAD_SUPABASE_PROJECT_REF"]);
-  expectScope(backendVariables, [
-    "PRODUCTION_SUPABASE_PROJECT_REF",
-    "PRODUCTION_FRONTEND_ORIGIN",
-    "VITE_SUPABASE_URL",
-    "VITE_SUPABASE_PUBLISHABLE_KEY",
-    "VITE_BASE_PATH",
-    "LOAD_SUPABASE_PROJECT_REF",
-  ], ["SUPABASE_ACCESS_TOKEN", "PRODUCTION_SUPABASE_DB_PASSWORD"]);
-  expectScope(backendSecrets, [
-    "SUPABASE_ACCESS_TOKEN",
-    "PRODUCTION_SUPABASE_DB_PASSWORD",
-    "PRODUCTION_SUPABASE_SECRET_KEY",
-    "PRODUCTION_READINESS_SECRET",
-    "ALLOWED_FRONTEND_ORIGINS",
-    "FRONTEND_APP_URL",
-    "JOIN_TOKEN_SIGNING_SECRET",
-    "RECOVERY_TOKEN_SIGNING_SECRET",
-    "STUDENT_LOGIN_SIGNING_SECRET",
-    "PROTECTED_CONTENT_BANK_JSON",
-    "PRODUCTION_TEACHER_EMAIL",
-    "PRODUCTION_TEACHER_PASSWORD",
-  ], ["PRODUCTION_SUPABASE_PROJECT_REF", "PRODUCTION_FRONTEND_ORIGIN"]);
-  expectScope(readinessVariables, [
-    "PRODUCTION_SUPABASE_PROJECT_REF",
-    "PRODUCTION_FRONTEND_ORIGIN",
-    "PRODUCTION_CONTENT_VERSION",
-    "PRODUCTION_SMOKE_TEACHER_ID",
-    "PRODUCTION_SMOKE_COHORT_ID",
-  ], ["PRODUCTION_READINESS_SECRET"]);
-  expectScope(readinessSecrets, ["PRODUCTION_READINESS_SECRET"], [
-    "PRODUCTION_SUPABASE_SECRET_KEY",
-    "SUPABASE_ACCESS_TOKEN",
-  ]);
-  expect(pagesSecrets).toMatch(/none/i);
-  expect(pagesSecrets).not.toMatch(/`[A-Z_]+`/);
+  assertGitHubScopeInventory(github);
 
   for (const importControl of [
     "PROTECTED_CONTENT_BANK_JSON",
@@ -196,5 +212,22 @@ describe("disposable production recovery policy", () => {
       rollback: await read("rollback.md"),
       privacy: await read("privacy-and-retention.md"),
     });
+  });
+
+  it("rejects missing, extra, and cross-scope GitHub inventory names", async () => {
+    const github = await read("github-environments.md");
+    const missing = github.replace("| `PRODUCTION_TEACHER_EMAIL`", "| `REMOVED_NAME`");
+    const secretInVariables = github.replace(
+      "| `PRODUCTION_FRONTEND_ORIGIN` | Deployed HTTPS browser origin, with no path. |",
+      "| `PRODUCTION_FRONTEND_ORIGIN` | Deployed HTTPS browser origin, with no path. |\n| `SUPABASE_ACCESS_TOKEN` | Incorrect scope. |",
+    );
+    const variableInSecrets = github.replace(
+      "| `SUPABASE_ACCESS_TOKEN` | CLI authorization for the production organization. |",
+      "| `SUPABASE_ACCESS_TOKEN` | CLI authorization for the production organization. |\n| `VITE_BASE_PATH` | Incorrect scope. |",
+    );
+
+    for (const mutation of [missing, secretInVariables, variableInSecrets]) {
+      expect(() => assertGitHubScopeInventory(mutation)).toThrow();
+    }
   });
 });
