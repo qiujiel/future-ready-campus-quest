@@ -1,231 +1,59 @@
-# Gate D Formal Deployment Checklist
+# Disposable Production Release Checklist
 
-**Default decision: HOLD.** Publication is authorized only after every required
-item is complete and the named reviewer approves the corresponding protected
-environment. This checklist does not itself deploy, approve, or publish.
-
-Release record:
+**Default decision: HOLD.** This checklist applies only while
+`ghohuwwjxgjqnbsauvzq` contains the documented replaceable setup state. It
+does not authorize deployment.
 
 | Field | Value |
 | --- | --- |
 | Release owner | `________________` |
-| Independent reviewer | `________________` |
 | Approved main commit (40 characters) | `________________` |
-| Production Supabase project ref | `________________` |
-| Production Supabase URL | `________________` |
-| Dedicated load-test project ref | `________________` |
-| Pinned Supabase CLI version | `________________` |
+| Production Supabase project ref | `ghohuwwjxgjqnbsauvzq` |
+| Dedicated load-test project ref | `vadyhuipwbtgbzpeisbn` |
 | Backend workflow run | `________________` |
 | Pages workflow run | `________________` |
-| Planned window and timezone | `________________` |
 
-## 1. Configuration and separation
+## Preconditions
 
-- [ ] The exact inventory in `github-environments.md` was checked by two people.
-- [ ] The production ref equals `ghohuwwjxgjqnbsauvzq` exactly.
-- [ ] The production URL equals
-  `https://ghohuwwjxgjqnbsauvzq.supabase.co` exactly.
-- [ ] The dedicated load ref and load fixtures equal only
-  `vadyhuipwbtgbzpeisbn`; neither may be used as production or a restore target.
-- [ ] `load-test`, `production-backend`, `production-readiness`, and
-  `github-pages` are distinct required-reviewer gates, limited to `main`, or use
-  the explicitly recorded initial owner exception.
-- [ ] The release load gate creates and removes its synthetic teacher, cohort,
-  group codes, and students per run; no static load token or fixture ID exists.
-- [ ] `github-pages` contains no Supabase secret.
-- [ ] Public `VITE_*` values contain no service-role or private credential.
-- [ ] `STUDENT_LOGIN_SIGNING_SECRET` is an independently generated encrypted
-  `production-backend` secret of at least 32 characters, distinct from join,
-  recovery, and readiness secrets, and absent from every Pages/frontend scope.
-- [ ] Environment verification completed at `________________` by
-  `________________` and `________________`.
-
-## 2. Data-owner and recovery approval
-
-- [ ] The course owner approved `90` retention days under authorization
-  `course-owner-2026-08-08`; approver and time are recorded in
-  `private.data_retention_configuration`.
-- [ ] Operational/privacy incident owner: `________________`.
-- [ ] Teacher-private CSV handling matches school policy.
-- [ ] Recovery custodian and key provisioning — Approver: `____________`; UTC: `____________`; Result: `____________`.
-- [ ] Cloud and offline custody locations — Approver: `____________`; UTC: `____________`; Result: `____________`.
-- [ ] Production read/export window — Approver: `____________`; UTC: `____________`; Result: `____________`.
-- [ ] Load-test project pause — Approver: `____________`; UTC: `____________`; Result: `____________`.
-- [ ] Temporary recovery project creation — Approver: `____________`; UTC: `____________`; Result: `____________`.
-- [ ] Restore operation — Approver: `____________`; UTC: `____________`; Result: `____________`.
-- [ ] Optional rehearsal deployment — Approver: `____________`; UTC: `____________`; Result: `approved deployment / reviewer-confirmed not required`.
-- [ ] Temporary recovery project deletion — Approver: `____________`; UTC: `____________`; Result: `____________`.
-- [ ] Load-test project reactivation — Approver: `____________`; UTC: `____________`; Result: `____________`.
-
-The optional rehearsal-deployment result must explicitly say either that the
-deployment was approved and completed or that an independent reviewer confirmed
-it was not required. A blank or assumed `N/A` leaves the item unchecked.
-
-- [ ] Backup evidence ID: `________________`.
-- [ ] Quiesced recovery point (canonical UTC): `________________`.
-- [ ] `backup_created_at_utc` archive creation/completion time (canonical UTC):
-  `________________`.
-- [ ] Encrypted archive SHA-256 and byte size:
-  `________________` / `________________`.
-- [ ] Pinned Supabase CLI version `2.110.0` matches the internal manifest and
-  approved release tooling.
-- [ ] Component-completion flags for roles, schema, data, migration-history
-  schema, migration-history data, and Storage export are all complete.
-- [ ] Cloud-copy read-back digest and size verification result/time:
-  `________________`.
-- [ ] Offline-copy read-back digest and size verification result/time:
-  `________________`.
-- [ ] No-write-since-recovery-point attestation by production owner/time:
-  `________________`.
-- [ ] Restore rehearsal evidence ID: `________________`.
-- [ ] Temporary Singapore recovery project ref: `________________`.
-- [ ] Internal manifest full approved 40-character source SHA (the source commit),
-  exact source project ref, pinned CLI version `2.110.0`, command versions, and
-  component-completion flags match the release record.
-- [ ] The two binding reviews below were completed by two distinct named people;
-  self-review and use of the same person for both reviews are prohibited.
-- [ ] Internal manifest-to-release binding review 1 — Reviewer name: `____________`; UTC: `____________`; Result: `____________`.
-- [ ] Internal manifest-to-release binding review 2 — Reviewer name: `____________`; UTC: `____________`; Result: `____________`.
-- [ ] Encrypted source counts and independently captured target counts exactly equal
-  for Auth users, cohorts, private/public profiles, quest attempts, student
-  responses, concept evidence, and audit events; result/time: `____________`.
-- [ ] Database/Auth/RLS/retention validation result: `________________`.
-- [ ] `group-images` object-count/byte-total/digest validation result:
-  `________________`.
-- [ ] Rehearsal reviewer and time: `________________`.
-- [ ] Temporary recovery project deletion and load-test reactivation identity/
-  health results match their separately approved records: `________________`.
-- [ ] The data owner accepted the Free-plan pause/availability limitation and
-  scheduled an early class health/reactivation check: `________________`.
-- [ ] Previous compatible Edge Function commit: `________________`.
-- [ ] Previous successful Pages run, commit, and manifest digest are recorded,
-  or the first-release maintenance procedure in `rollback.md` is ready.
-
-## 3. Source and automated gates
-
-- [ ] Release SHA is the current approved `main` SHA.
-- [ ] `pnpm install --frozen-lockfile` succeeds.
-- [ ] `check:repo`, `check:deployment`, lint, typecheck, unit tests, function
-  tests, Deno checks, local reset, all pgTAP tests, integration tests, build,
-  bundle scan, Playwright, and representative-load tests pass.
-- [ ] Dedicated-project live-load evidence reports all 30 students in five
-  teams of six and zero incorrect group assignments. It must also report zero duplicate student identities,
-  zero duplicate responses, zero authorized failures, zero accepted unauthorized
-  calls, response p95 below 1.5 seconds, and dashboard p95 below 2.5 seconds.
-  The fixed `6,882.59 ms overall` / `1,660.52 ms preflight` result is
-  historical owner-approved policy evidence for the one-time initial-entry
-  limitation, not new release evidence. New release evidence must be
-  independently measured by a new complete live-load run from the exact current approved `main` SHA; it must show one-time join p95 at or below 7 seconds (at most 7 seconds) and need not reproduce the historical measurements exactly.
-  Record the measured initial-join latency as a known limitation; do not weaken
-  authentication, validation, rate/capacity controls, replay protection, RLS,
-  isolation, or teacher authorization.
-- [ ] After joining closes, five returning name/passcode logins restore the
-  same five student/group identities with zero failures and create zero new
-  Auth users.
-- [ ] The installed join preflight permits 45 shared-network attempts per minute
-  for one 30-student class while retaining the 90-request join-window cap.
-- [ ] Release action references are reviewed full commit SHAs.
-
-## 4. Backend release approval
-
+- [ ] Dispatch uses the exact approved 40-character `main` SHA and exact
+  production project ref; the load project is not a target.
+- [ ] `release_mode` is `disposable-upgrade` and the bootstrap identifier is
+  empty, or it is the separately authorized `bootstrap` path.
+- [ ] The aggregate disposable-state preflight completes before mutation and
+  proves the exact marked owner, closed five-group classroom, zero protected
+  user/application state, zero `group-images` objects, and no query, aggregate,
+  identity, or project-target error.
+- [ ] Any nonzero or unverifiable result stops the release; no data is deleted
+  to make the preflight pass.
 - [ ] Joining is closed and new quest starts are paused.
-- [ ] Backend workflow inputs exactly match the approved SHA and production ref.
-- [ ] All four recovery workflow inputs—`backup_evidence_id`,
-  `backup_created_at_utc`, `backup_archive_sha256`, and
-  `restore_rehearsal_evidence_id`—match the release record and separately held
-  evidence.
-- [ ] `supabase migration list` is captured before mutation.
-- [ ] Migration dry-run contains only reviewed forward migrations, in timestamp
-  order, including `20260810000100_simplified_student_login.sql` through
-  `20260810001100_class_scoped_join_preparation.sql`.
-- [ ] `production-backend` approval was granted by `________________` at
-  `________________`.
-- [ ] Migration push, eight custom secret updates, and the exact twelve Function deploys
-  succeeded in the same workflow run.
-- [ ] Backend preflight confirms Auth health, required migration history/RPCs,
-  the exact active cleanup schedule, function boundaries, and the exact
-  non-load project identity.
-- [ ] No secret value or protected content appears in logs or summaries.
 
-## 5. Content and production readiness
+## Automated and deployment gates
 
-- [ ] Protected content was imported only by an authorized owner using exact
-  non-local project confirmation.
-- [ ] Approved version key: `________________`; item/concept counts: `24 / 8`.
-- [ ] Teacher-private question-bank review returns the approved 24 items with
-  accepted responses, rationales, sources, and C1–C8 coverage; a student token
-  is denied.
-- [ ] Smoke teacher and unarchived owned cohort exist as opaque fixtures.
-- [ ] `production-classroom-bootstrap.yml` ran from the exact approved SHA,
-  received `PRODUCTION_TEACHER_EMAIL` and `PRODUCTION_TEACHER_PASSWORD` only as
-  encrypted environment secrets, and returned no personal or credential data.
-- [ ] The opaque receipt IDs exactly match `PRODUCTION_SMOKE_TEACHER_ID` and
-  `PRODUCTION_SMOKE_COHORT_ID` in `production-readiness`.
-- [ ] The temporary teacher password is scheduled to rotate before real
-  classroom use, and the operator will remove the one-time workflow and its
-  validator after readiness succeeds.
-- [ ] No live join window or recovery token remains from testing.
-- [ ] Daily cleanup job `campus-quest-expired-artifact-cleanup` has exactly one
-  row, owned by `postgres` in the production database, active at `17 3 * * *`,
-  and the non-production cleanup rehearsal passed.
-- [ ] Pages package job produced one 90-day `github-pages` artifact without
-  Pages write or OIDC permission.
-- [ ] The dedicated-project 30-student live gate passed using the protected
-  `load-test` environment and modern load secret key.
-- [ ] Package evidence: artifact ID `________________`, commit
-  `________________`, manifest SHA-256 `________________`.
-- [ ] `production-readiness` approver reviewed the downloaded artifact's exact
-  ID/digest plus the redaction-safe production preflight, then approved at
-  `________________`.
-- [ ] GitHub readiness uses only `PRODUCTION_READINESS_SECRET`; no production
-  service-role key is present in any GitHub scope.
+- [ ] Repository, deployment, lint, typecheck, unit, function, database,
+  integration, build, bundle/privacy, and applicable live-load gates pass.
+- [ ] Exact SHA/ref/URL checks, secret scanning, protected credential scope,
+  migration list, migration dry run, ordered forward-only migrations, exact
+  Function set, RLS/authorization tests, and backend readiness pass.
+- [ ] A new complete live-load run from the exact approved `main` SHA reports
+  all 30 students in five correct groups, zero incorrect assignments, duplicate
+  identities, duplicate responses, authorized failures, or accepted
+  unauthorized calls; response p95 below 1.5 seconds; dashboard p95 below 2.5
+  seconds; and one-time join p95 at or below 7 seconds.
+- [ ] Historical policy evidence records `6,882.59 ms overall` and
+  `1,660.52 ms preflight` as the owner-approved one-time initial-entry
+  limitation only. New evidence need not reproduce those measurements exactly.
+- [ ] The immutable Pages artifact ID, approved commit, and manifest digest are
+  recorded before separate Pages publication and remain available for rollback.
 
-## 6. Publication approval and observation
+## Outcome
 
-- [ ] Intended Pages URL/base path: `________________`.
-- [ ] `ALLOWED_FRONTEND_ORIGINS` exactly matches the intended HTTPS origin and
-  contains no Pages path.
-- [ ] `FRONTEND_APP_URL` equals the intended HTTPS origin plus
-  `VITE_BASE_PATH`, so generated join and recovery links retain the Pages path.
-- [ ] Final deploy job depends on the successful readiness job and does not
-  rebuild or receive a Supabase credential.
-- [ ] `github-pages` approval was granted by `________________` at
-  `________________`.
-- [ ] Served release metadata matches the approved commit and the release record.
-- [ ] Teacher sign-in/dashboard/export and student join/quest/completion smoke
-  checks pass without recording names, answers, or tokens.
-- [ ] One shared student URL accepts display name plus short group code, and no
-  student can start until the teacher launches the cohort quest.
-- [ ] Teacher setup asks only for class name and 1–20 groups; every group uses
-  the same class URL, receives a distinct time-limited code, and retains the
-  internal 20-student capacity control.
-- [ ] A first-time student creates one account with name, group code, matching
-  four-digit passcode, and leader choice; only the first successful leader
-  claim can edit group information.
-- [ ] After browser-session loss and joining closure, the same student restores
-  the same group and saved progress with name/passcode; no passcode or derived
-  credential appears in responses, exports, logs, storage, or the public bundle.
-- [ ] Teacher roster move, remove, reset, and recovery controls pass with
-  confirmation, ownership enforcement, session revocation, and audit evidence.
-- [ ] Joining remains closed until the teacher intentionally opens the class.
-- [ ] Observation owner and end time: `________________` / `________________`.
+Any unchecked item means **HOLD**. When protected state exists, stop using
+`disposable-upgrade`, preserve the state, and obtain an owner-approved
+data-bearing recovery strategy before another backend deployment.
 
-- [ ] If acceptance fails: joining is closed; the failed artifact/run evidence
-  is retained; Pages and Functions roll back to the recorded compatible commit
-  before any separately approved database restore; artifact commit/manifest
-  digests are reverified throughout.
-
-## Decision
-
-Any unchecked item means **HOLD**. No operator, owner, approver, or reviewer may waive
-an unchecked control, substitute a combined approval, or sign GO while one is
-incomplete. Record one outcome:
-
-- [ ] **GO** — all controls passed; owners accepted the release.
+- [ ] **GO** — every applicable gate passed.
 - [ ] **HOLD** — blocker/owner: `________________________________________`.
-- [ ] **ROLL BACK** — incident record and procedure start time:
-  `________________________________________`.
+- [ ] **ROLL BACK** — use the immutable Pages artifact or compatible
+  forward-redeploy path in `rollback.md`.
 
 Release owner signature/time: `________________________________________`
-
-Independent reviewer signature/time: `_________________________________`
