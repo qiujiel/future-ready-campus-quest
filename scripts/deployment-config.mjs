@@ -380,6 +380,13 @@ function requireInputs(workflow, names) {
 
 function requireCanonicalReleaseInputs(workflow) {
   const inputs = workflowDispatchInputs(workflow);
+  for (const [name, definition] of Object.entries(
+    RELEASE_INPUT_DEFINITIONS,
+  )) {
+    if (!isDeepStrictEqual(inputs[name], definition)) {
+      fail(`canonical release workflow input ${name}`);
+    }
+  }
   const canonicalInputNames = [
     "expected_sha",
     "production_project_ref",
@@ -387,13 +394,6 @@ function requireCanonicalReleaseInputs(workflow) {
   ].sort();
   if (!isDeepStrictEqual(Object.keys(inputs).sort(), canonicalInputNames)) {
     fail("canonical release workflow inputs");
-  }
-  for (const [name, definition] of Object.entries(
-    RELEASE_INPUT_DEFINITIONS,
-  )) {
-    if (!isDeepStrictEqual(inputs[name], definition)) {
-      fail(`canonical release workflow input ${name}`);
-    }
   }
 }
 
