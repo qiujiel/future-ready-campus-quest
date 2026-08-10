@@ -21,6 +21,10 @@ function passingMetrics(overrides = {}) {
     groupsWithValidScores: 5,
     students: 30,
     studentsWithVerifiedFormula: 30,
+    returningLogins: 5,
+    failedReturningLogins: 0,
+    returningIdentityMismatches: 0,
+    authIdentitiesCreatedByLogin: 0,
     ...overrides,
   };
 }
@@ -86,6 +90,10 @@ describe("classroom load release gate", () => {
     ["invalid group score", { groupsWithValidScores: 4 }, "groupsWithValidScores"],
     ["wrong class size", { students: 29 }, "students"],
     ["invalid score formula", { studentsWithVerifiedFormula: 29 }, "studentsWithVerifiedFormula"],
+    ["missing returning login", { returningLogins: 4 }, "returningLogins"],
+    ["failed returning login", { failedReturningLogins: 1 }, "failedReturningLogins"],
+    ["wrong restored identity", { returningIdentityMismatches: 1 }, "returningIdentityMismatches"],
+    ["new Auth identity on login", { authIdentitiesCreatedByLogin: 1 }, "authIdentitiesCreatedByLogin"],
   ])("rejects %s", (_label, overrides, expectedFailure) => {
     expect(classroomLoadGateFailures(passingMetrics(overrides)))
       .toContain(expectedFailure);

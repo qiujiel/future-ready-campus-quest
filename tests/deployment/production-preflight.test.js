@@ -15,6 +15,7 @@ function functionEnvironment(overrides = {}) {
       "https://qiujiel.github.io/future-ready-campus-quest",
     JOIN_TOKEN_SIGNING_SECRET: "j".repeat(32),
     RECOVERY_TOKEN_SIGNING_SECRET: "r".repeat(32),
+    STUDENT_LOGIN_SIGNING_SECRET: "s".repeat(32),
     PRODUCTION_READINESS_SECRET: "p".repeat(32),
     ...overrides,
   };
@@ -46,7 +47,7 @@ function readinessReport(overrides = {}) {
     latestGateDMigration: "20260806000700",
     requiredFunctionsPresent: true,
     cleanupScheduleReady: true,
-    edgeFunctionsReady: 10,
+    edgeFunctionsReady: 11,
     openJoinWindows: 0,
     openRecoveryTokens: 0,
     contentVersion: {
@@ -119,7 +120,7 @@ describe("production Edge Function configuration", () => {
       frontendAppUrl:
         "https://qiujiel.github.io/future-ready-campus-quest",
       allowedOriginCount: 1,
-      secretCount: 3,
+      secretCount: 4,
     });
   });
 
@@ -181,7 +182,24 @@ describe("production Edge Function configuration", () => {
 
     expect(result).not.toContain(environment.JOIN_TOKEN_SIGNING_SECRET);
     expect(result).not.toContain(environment.RECOVERY_TOKEN_SIGNING_SECRET);
+    expect(result).not.toContain(environment.STUDENT_LOGIN_SIGNING_SECRET);
     expect(result).not.toContain(environment.PRODUCTION_READINESS_SECRET);
+  });
+
+  it("requires a distinct strong student login signing secret", () => {
+    expect(() =>
+      readFunctionConfiguration(
+        functionEnvironment({ STUDENT_LOGIN_SIGNING_SECRET: "too-short" }),
+      )
+    ).toThrow(/STUDENT_LOGIN_SIGNING_SECRET.*32 bytes/i);
+
+    expect(() =>
+      readFunctionConfiguration(
+        functionEnvironment({
+          STUDENT_LOGIN_SIGNING_SECRET: "j".repeat(32),
+        }),
+      )
+    ).toThrow(/must not be reused/i);
   });
 });
 
@@ -192,7 +210,7 @@ describe("production readiness report", () => {
     expect(evaluateReadinessReport(readinessReport(), configuration)).toEqual({
       latestGateDMigration: "20260806000700",
       cleanupScheduleReady: true,
-      edgeFunctionsReady: 10,
+      edgeFunctionsReady: 11,
       contentVersion: {
         versionKey: "approved-v1",
         itemCount: 24,
@@ -228,7 +246,7 @@ describe("production readiness report", () => {
     expect(evaluateReadinessReport(readinessReport(), configuration)).toEqual({
       latestGateDMigration: "20260806000700",
       cleanupScheduleReady: true,
-      edgeFunctionsReady: 10,
+      edgeFunctionsReady: 11,
       basePath: "/campus-quest/",
     });
   });

@@ -9,15 +9,16 @@
 2. Confirm the exact intended local/test or production project is awake and the
    health endpoint responds. If reactivation was needed, wait for normal health
    and record only project identity, status, and time.
-3. After the project is healthy, re-run migration readiness through
-   `20260806000700`, approved protected-content readiness with 24 items across
+3. After the project is healthy, re-run migration readiness and confirm the
+   reviewed series through `20260810000700`, then re-run approved protected-content readiness with 24 items across
    C1–C8, Auth health, and all application-function method-boundary readiness.
    A prior result from before a pause is insufficient.
 4. Sign in with the provisioned teacher account. Never share that account or
    use a student account for teacher checks.
-5. Open the existing cohort or create the planned cohort, confirm five groups
-   of six when running a 30-student session, and leave joining closed while
-   preparing the room.
+5. Open an existing class or create the planned class by entering only its name
+   and number of groups. New groups keep the internal 20-student safety cap;
+   teachers do not enter a group capacity. Leave joining closed while preparing
+   the room unless creation intentionally uses **Create class and open joining**.
 6. Privately review the complete question bank, accepted responses, rationales,
    sources, and concept coverage from the teacher dashboard. This view must
    never be projected or shared with students.
@@ -27,11 +28,14 @@
 ## Admit students
 
 1. Open the 15-minute join window only when ready.
-2. Project the single student application URL. Give each table only its short
-   group code; students enter their display name and that code on the same
-   page. Do not copy raw join or recovery tokens into chat, logs, screenshots,
-   or documents.
-3. Confirm student names, counts, and assigned groups on the dashboard. Resolve
+2. Project the one class-specific student URL shared by every group. Give each
+   table only its distinct short group code. A first-time student enters their
+   teacher-recognizable name, group code, a private four-digit passcode twice,
+   and whether they are the group leader. Never collect, announce, project, or
+   record a passcode.
+3. Confirm student names, counts, assigned groups, and the single group leader
+   on the dashboard. The first successful leader claim wins; the teacher may
+   assign a different same-group leader when needed. Resolve
    duplicate display names by group and move a student only through the
    audited teacher control.
 4. Launch the quest from the teacher dashboard only after the roster is ready.
@@ -49,9 +53,11 @@
    explain; reveal protected item detail only in the private teacher view.
 4. Pause new starts or extend a phase only after reading the named
    confirmation. A single extension is capped at five minutes.
-5. For a lost student session, issue a five-minute recovery QR to that exact
-   student. The prior session is revoked. Never read or announce the raw
-   recovery token.
+5. For a lost browser session, give the student the same class URL. They choose
+   **Log back in** and enter the same name and four-digit passcode, even after
+   joining is closed. Use a five-minute teacher recovery QR only when the
+   passcode is forgotten or for a pre-migration student; never read or announce
+   its raw token.
 6. Use Reset attempt only for the named student after reading the confirmation.
    Use Remove student only when access must be revoked; removal invalidates the
    active student session and is recorded in the audit trail.
@@ -85,7 +91,9 @@ pnpm bootstrap:local
 The command refuses hosted Supabase URLs. Start the local Edge Functions with
 the documented local-only secrets, start the app with `pnpm dev`, and run the
 environment-gated browser rehearsal in `tests/e2e/hosted-classroom.spec.ts`.
-The rehearsal covers invalid codes, isolated student sessions, duplicate names,
-roster move/remove/reset controls, teacher launch, the complete diagnostic and
-adaptive quest, persistence, recovery, completion counts, and teacher-route
-denial. Synthetic local credentials and receipts are not production evidence.
+The rehearsal covers two-field class creation, one shared class link and
+distinct group codes, invalid codes, isolated leader/member sessions,
+first-time passcodes, teacher launch, a safe response, session loss and
+name/passcode restoration after joining closes, progress persistence, and
+teacher route/API denial. Synthetic local credentials and receipts are not
+production evidence.

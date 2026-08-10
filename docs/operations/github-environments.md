@@ -100,6 +100,7 @@ Secrets:
 | `FRONTEND_APP_URL` | full hosted application base URL, including the Pages base path |
 | `JOIN_TOKEN_SIGNING_SECRET` | join-token signing secret |
 | `RECOVERY_TOKEN_SIGNING_SECRET` | recovery-token signing secret |
+| `STUDENT_LOGIN_SIGNING_SECRET` | private student-name lookup and returning-login rate-key signer |
 
 `ALLOWED_FRONTEND_ORIGINS` must exactly equal `PRODUCTION_FRONTEND_ORIGIN`.
 `FRONTEND_APP_URL` must combine that origin with `VITE_BASE_PATH`, without a
@@ -116,10 +117,19 @@ FRONTEND_APP_URL=https://qiujiel.github.io/future-ready-campus-quest
 This distinction is required because browser CORS sends only an origin, while
 join and recovery links must retain the repository Pages path. The backend
 workflow validates the relationship before writing any Function secret.
-Signing and readiness secrets must be
+Join, recovery, student-login, and readiness secrets must be
 independently generated, at least 32 bytes, and never reused from local, CI, or
 the load project. The backend workflow also installs
 `PRODUCTION_READINESS_SECRET` as an Edge Function secret.
+
+`STUDENT_LOGIN_SIGNING_SECRET` exists only as an encrypted
+`production-backend` environment secret and as an encrypted Edge Function
+secret. It must not exist in repository variables or secrets, the `load-test`,
+`production-readiness`, or `github-pages` environments, any `VITE_*` value,
+the frontend bundle, artifacts, caches, logs, summaries, issues, or release
+records. Local CI/package/release verification uses distinct test-only values
+written to its temporary Function environment file and removes that file after
+the run.
 
 `PRODUCTION_SUPABASE_SECRET_KEY` belongs in `production-backend only`.
 Never put it in a repository variable or a repository secret. It is forbidden
@@ -187,6 +197,8 @@ owner performs and records the comparison once:
 - each environment has the `main` branch rule and either its normal required
   reviewer or the recorded initial-release owner exception;
 - `github-pages` contains no Supabase credential;
+- `STUDENT_LOGIN_SIGNING_SECRET` exists only in `production-backend` and is
+  absent from every Pages/frontend scope;
 - the four recovery values are supplied only as per-run non-secret workflow
   inputs and match the separately held release record;
 - no backup, connection string, Storage administration key, encryption key, or

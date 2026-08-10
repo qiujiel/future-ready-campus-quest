@@ -17,6 +17,12 @@ const forbiddenMarkers = [
   { name: "protected-content-path", pattern: /protected-content/i },
   { name: "service-role-marker", pattern: /service[_-]?role/i },
   {
+    name: "student-login-signing-secret",
+    pattern: /STUDENT_LOGIN_SIGNING_SECRET/,
+  },
+  { name: "student-passcode-hash", pattern: /passcodeHash/ },
+  { name: "student-passcode-salt", pattern: /passcodeSalt/ },
+  {
     name: "synthetic-answer-key",
     pattern: /SYNTHETIC_CORRECT_OPTION_DO_NOT_SHIP/,
   },

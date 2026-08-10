@@ -169,6 +169,7 @@ jobs:
           FRONTEND_APP_URL: http://127.0.0.1:4173
           JOIN_TOKEN_SIGNING_SECRET: release-test-join-signing-secret-32-bytes-minimum
           RECOVERY_TOKEN_SIGNING_SECRET: release-test-recovery-signing-secret-32-bytes
+          STUDENT_LOGIN_SIGNING_SECRET: release-test-student-login-signing-secret-32-bytes
           PRODUCTION_READINESS_SECRET: release-test-readiness-secret-32-bytes-minimum
         run: |
           printf '%s\n' \
@@ -176,12 +177,13 @@ jobs:
             "FRONTEND_APP_URL=$FRONTEND_APP_URL" \
             "JOIN_TOKEN_SIGNING_SECRET=$JOIN_TOKEN_SIGNING_SECRET" \
             "RECOVERY_TOKEN_SIGNING_SECRET=$RECOVERY_TOKEN_SIGNING_SECRET" \
+            "STUDENT_LOGIN_SIGNING_SECRET=$STUDENT_LOGIN_SIGNING_SECRET" \
             "PRODUCTION_READINESS_SECRET=$PRODUCTION_READINESS_SECRET" \
             > /tmp/campus-quest-functions.env
           pnpm exec supabase functions serve \
             --env-file /tmp/campus-quest-functions.env \
             > /tmp/campus-quest-functions.log 2>&1 &
-          for readiness_function in join-cohort recover-student; do
+          for readiness_function in join-cohort recover-student student-login; do
             response_code=000
             for attempt in $(seq 1 30); do
               response_code="$(curl --silent --output /dev/null \
@@ -255,6 +257,7 @@ jobs:
           FRONTEND_APP_URL: ${{ secrets.FRONTEND_APP_URL }}
           JOIN_TOKEN_SIGNING_SECRET: ${{ secrets.JOIN_TOKEN_SIGNING_SECRET }}
           RECOVERY_TOKEN_SIGNING_SECRET: ${{ secrets.RECOVERY_TOKEN_SIGNING_SECRET }}
+          STUDENT_LOGIN_SIGNING_SECRET: ${{ secrets.STUDENT_LOGIN_SIGNING_SECRET }}
           PRODUCTION_READINESS_SECRET: ${{ secrets.PRODUCTION_READINESS_SECRET }}
           PRODUCTION_SUPABASE_SECRET_KEY: ${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -266,6 +269,7 @@ jobs:
             "FRONTEND_APP_URL=$FRONTEND_APP_URL" \
             "JOIN_TOKEN_SIGNING_SECRET=$JOIN_TOKEN_SIGNING_SECRET" \
             "RECOVERY_TOKEN_SIGNING_SECRET=$RECOVERY_TOKEN_SIGNING_SECRET" \
+            "STUDENT_LOGIN_SIGNING_SECRET=$STUDENT_LOGIN_SIGNING_SECRET" \
             "PRODUCTION_READINESS_SECRET=$PRODUCTION_READINESS_SECRET" \
             "FRCQ_SUPABASE_PUBLISHABLE_KEY=$PRODUCTION_SUPABASE_PUBLISHABLE_KEY" \
             "FRCQ_SUPABASE_SECRET_KEY=$PRODUCTION_SUPABASE_SECRET_KEY" \
@@ -274,12 +278,14 @@ jobs:
             --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF" \
             --env-file /tmp/campus-quest-production-functions.env
 
-      - name: Deploy all production Edge Functions
+      - name: Deploy the exact production Edge Function set
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          pnpm exec supabase functions deploy \
-            --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"
+          for function_name in complete-quest export-cohort get-next-item join-cohort manage-group-identity manage-join-window production-readiness recover-student student-login submit-response teacher-controls teacher-dashboard; do
+            pnpm exec supabase functions deploy "$function_name" \
+              --project-ref "$PRODUCTION_SUPABASE_PROJECT_REF"
+          done
 
       - name: Verify the compatible backend release
         env:

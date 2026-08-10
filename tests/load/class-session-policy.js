@@ -67,5 +67,15 @@ export function classroomLoadGateFailures(metrics) {
       "studentsWithVerifiedFormula",
       metrics.studentsWithVerifiedFormula === classroomStudentCount,
     ],
+    ["returningLogins", metrics.returningLogins === 5],
+    ["failedReturningLogins", metrics.failedReturningLogins === 0],
+    [
+      "returningIdentityMismatches",
+      metrics.returningIdentityMismatches === 0,
+    ],
+    [
+      "authIdentitiesCreatedByLogin",
+      metrics.authIdentitiesCreatedByLogin === 0,
+    ],
   ].filter(([, passed]) => !passed).map(([field]) => field);
 }

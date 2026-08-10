@@ -12,6 +12,48 @@ import { validateProductionClassroomBootstrapConfiguration } from
 
 const PINNED_ACTION = /^[^@\s]+@[0-9a-f]{40}$/;
 const GITLEAKS_ACTION = "gitleaks/gitleaks-action@v2";
+export const REQUIRED_BACKEND_SECRETS = Object.freeze([
+  "SUPABASE_ACCESS_TOKEN",
+  "PRODUCTION_SUPABASE_DB_PASSWORD",
+  "PRODUCTION_SUPABASE_SECRET_KEY",
+  "PRODUCTION_READINESS_SECRET",
+  "ALLOWED_FRONTEND_ORIGINS",
+  "FRONTEND_APP_URL",
+  "JOIN_TOKEN_SIGNING_SECRET",
+  "RECOVERY_TOKEN_SIGNING_SECRET",
+  "STUDENT_LOGIN_SIGNING_SECRET",
+]);
+export const REQUIRED_PAGES_VARIABLES = Object.freeze([
+  "VITE_SUPABASE_URL",
+  "VITE_SUPABASE_PUBLISHABLE_KEY",
+  "VITE_BASE_PATH",
+  "LOAD_SUPABASE_PROJECT_REF",
+  "PRODUCTION_SUPABASE_PROJECT_REF",
+  "PRODUCTION_FRONTEND_ORIGIN",
+  "PRODUCTION_CONTENT_VERSION",
+  "PRODUCTION_SMOKE_TEACHER_ID",
+  "PRODUCTION_SMOKE_COHORT_ID",
+]);
+export const REQUIRED_PAGES_SECRETS = Object.freeze([
+  "LOAD_SUPABASE_URL",
+  "LOAD_SUPABASE_PUBLISHABLE_KEY",
+  "LOAD_SUPABASE_SECRET_KEY",
+  "PRODUCTION_READINESS_SECRET",
+]);
+const REQUIRED_PRODUCTION_FUNCTIONS = Object.freeze([
+  "complete-quest",
+  "export-cohort",
+  "get-next-item",
+  "join-cohort",
+  "manage-group-identity",
+  "manage-join-window",
+  "production-readiness",
+  "recover-student",
+  "student-login",
+  "submit-response",
+  "teacher-controls",
+  "teacher-dashboard",
+]);
 const RELEASE_INPUT_DEFINITIONS = {
   release_mode: {
     description: "Release authorization mode",
@@ -196,11 +238,39 @@ function requireEdgeReadyWait(job, label) {
     !/Origin:/.test(runs) ||
     !/join-cohort/.test(runs) ||
     !/recover-student/.test(runs) ||
+    !/student-login/.test(runs) ||
     !/response_code[\s\S]*405|405[\s\S]*response_code/.test(runs)
   ) {
     fail(
-      `${label} Edge readiness must require the join and recovery 405 responses`,
+      `${label} Edge readiness must require join and recovery plus student login 405 responses`,
     );
+  }
+}
+
+function requireExactProductionFunctionSet(job) {
+  const deployStep = (job?.steps ?? []).find((step) =>
+    String(step?.run ?? "").includes("supabase functions deploy")
+  );
+  const run = String(deployStep?.run ?? "");
+  const missing = REQUIRED_PRODUCTION_FUNCTIONS.filter((name) =>
+    !new RegExp(`(^|\\s)${name}(?=\\s|;|$)`).test(run)
+  );
+  if (missing.length > 0) {
+    fail(`exact production Function set is missing ${missing.join(", ")}`);
+  }
+}
+
+function requireStudentLoginSecretIsolation({ backend, pages }) {
+  const backendSerialized = JSON.stringify(backend ?? {});
+  if (!backendSerialized.includes("STUDENT_LOGIN_SIGNING_SECRET")) {
+    fail("backend release requires the student login signing secret");
+  }
+  if (
+    JSON.stringify(pages ?? {}).includes(
+      "${{ secrets.STUDENT_LOGIN_SIGNING_SECRET }}",
+    )
+  ) {
+    fail("Pages must not receive the student login signing secret");
   }
 }
 
@@ -756,6 +826,7 @@ export function validateDeploymentConfiguration({ ci, backend, pages, rollback }
   const rollbackDeploy = rollback?.jobs?.deploy;
 
   requireCiSecretScan(ci);
+  requireStudentLoginSecretIsolation({ backend, pages });
   requireInputs(backend, ["expected_sha", "production_project_ref"]);
   requireReleaseAuthorizationGate(backend, authorizationJob, backendJob);
   requireEnvironment(backendJob, "production-backend");
@@ -772,6 +843,7 @@ export function validateDeploymentConfiguration({ ci, backend, pages, rollback }
   requireModernProductionFunctionCredentials(backendJob);
   requireRun(backendJob, /secrets set/, "Edge Function secret deployment is missing");
   requireRun(backendJob, /functions deploy/, "Edge Function deployment is missing");
+  requireExactProductionFunctionSet(backendJob);
   requireEdgeReadyWait(backendJob, "backend release");
   requireFrozenDenoCheck(backendJob, "backend release");
 

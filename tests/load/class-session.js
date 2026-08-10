@@ -27,6 +27,19 @@ async function timed(action) {
   return { value, duration: performance.now() - started };
 }
 
+async function countAuthUsers(admin) {
+  let page = 1;
+  let count = 0;
+  for (;;) {
+    const result = await admin.auth.admin.listUsers({ page, perPage: 1_000 });
+    if (result.error) throw new Error("load Auth inventory unavailable");
+    const users = result.data.users;
+    count += users.length;
+    if (users.length < 1_000) return count;
+    page += 1;
+  }
+}
+
 async function liveRun() {
   const configuration = readDedicatedLoadConfiguration(process.env);
   const { apiUrl, publishableKey } = configuration;
@@ -117,6 +130,8 @@ async function liveRun() {
       throw new Error(`Load join gate failed: ${JSON.stringify(joinEvidence)}`);
     }
 
+    const authIdentitiesBeforeLogin = await countAuthUsers(admin);
+
     const readinessResponse = await fetch(
       `${apiUrl}/functions/v1/teacher-dashboard`,
       {
@@ -148,6 +163,78 @@ async function liveRun() {
       )
     ) {
       throw new Error("Load readiness leader assignment failed.");
+    }
+
+
+    const closeJoiningResponse = await fetch(
+      `${apiUrl}/functions/v1/manage-join-window`,
+      {
+        method: "POST",
+        headers: {
+          apikey: publishableKey,
+          Authorization: `Bearer ${teacherToken}`,
+          Origin: "http://127.0.0.1:4173",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "close",
+          cohortId,
+          requestKey: crypto.randomUUID(),
+        }),
+      },
+    );
+    requireAuthorized(closeJoiningResponse, "close joining");
+
+    const returningResults = await Promise.all(
+      sessions.slice(0, 5).map(async (session, index) => {
+        const payload = joinPayloads[index];
+        try {
+          const response = await fetch(`${apiUrl}/functions/v1/student-login`, {
+            method: "POST",
+            headers: {
+              apikey: publishableKey,
+              Origin: "http://127.0.0.1:4173",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              classAccessId,
+              displayName: payload.displayName,
+              passcode: payload.passcode,
+              requestKey: crypto.randomUUID(),
+            }),
+          });
+          requireAuthorized(response, "returning login");
+          const restored = await response.json();
+          return {
+            succeeded: true,
+            identityMatches:
+              restored.identity?.studentId === session.studentId &&
+              restored.identity?.groupNumber ===
+                Math.floor(index / studentsPerGroup) + 1,
+          };
+        } catch {
+          return { succeeded: false, identityMatches: false };
+        }
+      }),
+    );
+    const authIdentitiesAfterLogin = await countAuthUsers(admin);
+    const returningLogins = returningResults.filter((result) =>
+      result.succeeded
+    ).length;
+    const failedReturningLogins = returningResults.length - returningLogins;
+    const returningIdentityMismatches = returningResults.filter((result) =>
+      result.succeeded && !result.identityMatches
+    ).length;
+    const authIdentitiesCreatedByLogin =
+      authIdentitiesAfterLogin - authIdentitiesBeforeLogin;
+
+    if (
+      returningLogins !== 5 ||
+      failedReturningLogins !== 0 ||
+      returningIdentityMismatches !== 0 ||
+      authIdentitiesCreatedByLogin !== 0
+    ) {
+      throw new Error("Returning student login load gate failed.");
     }
 
     await launchLoadQuest(configuration, fixture);
@@ -307,6 +394,10 @@ async function liveRun() {
       groupsWithValidScores: validTeamScores.length,
       students: studentCount,
       studentsWithVerifiedFormula: validFormulaResults,
+      returningLogins,
+      failedReturningLogins,
+      returningIdentityMismatches,
+      authIdentitiesCreatedByLogin,
     };
     const gateFailures = classroomLoadGateFailures(metrics);
     if (gateFailures.length > 0) {
@@ -329,7 +420,7 @@ if (process.argv.includes("--plan")) {
     throw new Error("The representative class must be five groups of six.");
   }
   process.stdout.write(
-    "Load plan valid: 30 students, five groups of six, unique request keys, cleanup enabled.\n",
+    "Load plan valid: 30 concurrent joins, five groups of six, five returning logins after joining closes, unique request keys, identity-integrity checks, and cleanup enabled.\n",
   );
 } else {
   await liveRun();

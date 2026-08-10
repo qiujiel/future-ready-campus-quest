@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  REQUIRED_BACKEND_SECRETS,
+  REQUIRED_PAGES_SECRETS,
+  REQUIRED_PAGES_VARIABLES,
   validateDeploymentConfiguration,
 } from "../../scripts/deployment-config.mjs";
 
@@ -189,17 +192,26 @@ function validConfiguration() {
               env: {
                 PRODUCTION_SUPABASE_SECRET_KEY:
                   "${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}",
+                STUDENT_LOGIN_SIGNING_SECRET:
+                  "${{ secrets.STUDENT_LOGIN_SIGNING_SECRET }}",
               },
               run: [
                 "node scripts/production-function-config.mjs",
                 '"FRCQ_SUPABASE_PUBLISHABLE_KEY=$PRODUCTION_SUPABASE_PUBLISHABLE_KEY"',
                 '"FRCQ_SUPABASE_SECRET_KEY=$PRODUCTION_SUPABASE_SECRET_KEY"',
+                '"STUDENT_LOGIN_SIGNING_SECRET=$STUDENT_LOGIN_SIGNING_SECRET"',
                 "supabase secrets set --env-file /tmp/functions.env",
               ].join("\n"),
             },
-            { run: "supabase functions deploy --project-ref \"$PRODUCTION_SUPABASE_PROJECT_REF\"" },
             {
-              run: "for readiness_function in join-cohort recover-student; do response_code=$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Origin: http://127.0.0.1:4173' http://127.0.0.1/functions/v1/$readiness_function); if [ \"$response_code\" = \"405\" ]; then break; fi; done",
+              run: [
+                "for function_name in complete-quest export-cohort get-next-item join-cohort manage-group-identity manage-join-window production-readiness recover-student student-login submit-response teacher-controls teacher-dashboard; do",
+                "  supabase functions deploy \"$function_name\" --project-ref \"$PRODUCTION_SUPABASE_PROJECT_REF\"",
+                "done",
+              ].join("\n"),
+            },
+            {
+              run: "for readiness_function in join-cohort recover-student student-login; do response_code=$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Origin: http://127.0.0.1:4173' http://127.0.0.1/functions/v1/$readiness_function); if [ \"$response_code\" = \"405\" ]; then break; fi; done",
             },
             {
               run: "deno check --frozen --config supabase/functions/deno.json --lock supabase/functions/deno.lock supabase/functions/*/index.ts",
@@ -216,7 +228,7 @@ function validConfiguration() {
           steps: [
             { uses: pinnedCheckout },
             {
-              run: "for readiness_function in join-cohort recover-student; do response_code=$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Origin: http://127.0.0.1:4173' http://127.0.0.1/functions/v1/$readiness_function); if [ \"$response_code\" = \"405\" ]; then break; fi; done",
+              run: "for readiness_function in join-cohort recover-student student-login; do response_code=$(curl --silent --output /dev/null --write-out '%{http_code}' --header 'Origin: http://127.0.0.1:4173' http://127.0.0.1/functions/v1/$readiness_function); if [ \"$response_code\" = \"405\" ]; then break; fi; done",
             },
             {
               run: "deno check --frozen --config supabase/functions/deno.json --lock supabase/functions/deno.lock supabase/functions/*/index.ts",
@@ -328,6 +340,67 @@ function validConfiguration() {
 }
 
 describe("deployment workflow boundaries", () => {
+  it("keeps the student login signer in backend encrypted secrets only", () => {
+    expect(REQUIRED_BACKEND_SECRETS).toContain(
+      "STUDENT_LOGIN_SIGNING_SECRET",
+    );
+    expect(REQUIRED_PAGES_VARIABLES).not.toContain(
+      "STUDENT_LOGIN_SIGNING_SECRET",
+    );
+    expect(REQUIRED_PAGES_SECRETS).not.toContain(
+      "STUDENT_LOGIN_SIGNING_SECRET",
+    );
+  });
+
+  it("deploys student login only after ordered migrations and secret configuration", () => {
+    const configuration = validConfiguration();
+    const steps = configuration.backend.jobs.release.steps;
+    const migrationIndex = steps.findIndex((step) =>
+      String(step.run ?? "").includes("supabase db push --linked") &&
+      !String(step.run ?? "").includes("--dry-run")
+    );
+    const secretIndex = steps.findIndex((step) =>
+      String(step.run ?? "").includes("supabase secrets set")
+    );
+    const deployIndex = steps.findIndex((step) =>
+      String(step.run ?? "").includes("supabase functions deploy")
+    );
+
+    expect(String(steps[deployIndex]?.run)).toContain("student-login");
+    expect(migrationIndex).toBeLessThan(secretIndex);
+    expect(secretIndex).toBeLessThan(deployIndex);
+  });
+
+  it("rejects a production Function release that omits student login", () => {
+    const configuration = validConfiguration();
+    const deployStep = configuration.backend.jobs.release.steps.find((step) =>
+      String(step.run ?? "").includes("supabase functions deploy")
+    );
+    deployStep.run = deployStep.run.replace(" student-login", "");
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /exact production Function set/i,
+    );
+  });
+
+  it("rejects a Pages job that receives the student login signing secret", () => {
+    const configuration = validConfiguration();
+    configuration.pages.jobs.package.env = {
+      STUDENT_LOGIN_SIGNING_SECRET:
+        "${{ secrets.STUDENT_LOGIN_SIGNING_SECRET }}",
+    };
+
+    expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+      /Pages.*student login signing secret/i,
+    );
+  });
+
+  it("never gives the Pages workflow the student login signing secret", () => {
+    expect(JSON.stringify(validConfiguration().pages)).not.toContain(
+      "STUDENT_LOGIN_SIGNING_SECRET",
+    );
+  });
+
   it("accepts separated, least-privilege, immutable release workflows", () => {
     expect(() => validateDeploymentConfiguration(validConfiguration())).not
       .toThrow();

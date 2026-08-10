@@ -91,28 +91,60 @@ export function QuestEntryPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const requestKeys = useRef(new Map<string, string>());
+  const loadAttemptInFlight = useRef<Promise<void> | null>(null);
   const attemptId = attempt?.attemptId;
   const queue = useMemo(
     () => suppliedQueue ?? createQueue(gateway),
     [gateway, suppliedQueue],
   );
 
-  const loadAttempt = useCallback(async () => {
-    const latest = await gateway.findLatestAttempt();
-    setAttempt(latest);
-    setResponse(null);
-    setPrompt(null);
-    setItem(null);
-    if (!latest) return;
-    if (latest.status === "completed") {
-      setResults(await gateway.loadResults(latest.attemptId, latest.cohortId));
-      return;
-    }
-    if (latest.currentPhase === "reflection") {
-      setPrompt(await gateway.getReflectionPrompt(latest.attemptId));
-      return;
-    }
-    setItem(await gateway.getNextItem(latest.attemptId));
+  const loadAttempt = useCallback(() => {
+    if (loadAttemptInFlight.current) return loadAttemptInFlight.current;
+    const request = (async () => {
+      const latest = await gateway.findLatestAttempt();
+      if (!latest) {
+        setAttempt(null);
+        setResponse(null);
+        setPrompt(null);
+        setItem(null);
+        setResults(null);
+        return;
+      }
+      if (latest.status === "completed") {
+        const nextResults = await gateway.loadResults(
+          latest.attemptId,
+          latest.cohortId,
+        );
+        setAttempt(latest);
+        setResponse(null);
+        setPrompt(null);
+        setItem(null);
+        setResults(nextResults);
+        return;
+      }
+      if (latest.currentPhase === "reflection") {
+        const nextPrompt = await gateway.getReflectionPrompt(latest.attemptId);
+        setAttempt(latest);
+        setResponse(null);
+        setPrompt(nextPrompt);
+        setItem(null);
+        setResults(null);
+        return;
+      }
+      const nextItem = await gateway.getNextItem(latest.attemptId);
+      setAttempt(latest);
+      setResponse(null);
+      setPrompt(null);
+      setItem(nextItem);
+      setResults(null);
+    })();
+    const tracked = request.finally(() => {
+      if (loadAttemptInFlight.current === tracked) {
+        loadAttemptInFlight.current = null;
+      }
+    });
+    loadAttemptInFlight.current = tracked;
+    return tracked;
   }, [gateway]);
 
   useEffect(() => {

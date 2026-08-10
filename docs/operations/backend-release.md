@@ -8,7 +8,8 @@ Reading this document or merging its workflow does not authorize a deployment.
 
 1. Complete the configuration inventory in `github-environments.md`.
 2. Confirm the release commit is on `main`, signed off by the release owner,
-   and contains migrations through `20260806000700`.
+   and contains the reviewed simplified-login migration series through
+   `20260810000700`.
 3. For every normal upgrade, this project selected Supabase Free plan, so the
    only accepted recovery path is the verified Free-plan encrypted logical
    package in `free-plan-recovery.md`, with both custody copies read back and
@@ -84,15 +85,15 @@ The workflow performs one ordered sequence from the approved commit:
 4. record `supabase migration list`;
 5. run `supabase db push --dry-run` and review the pending timestamps;
 6. apply pending migrations once with `supabase db push`;
-7. set the seven custom Edge Function secrets from a mode-restricted temporary
+7. set the eight custom Edge Function secrets from a mode-restricted temporary
    file outside the checkout;
-8. deploy all eleven functions together from `supabase/config.toml`, including
+8. deploy the exact twelve-function set from the same reviewed commit, including
    the custom-secret-protected `production-readiness` endpoint;
 9. run `production-preflight.mjs --backend-only` to verify exact project
-   identity, migrations through `20260806000700`, required RPCs, the exact
+   identity, the Gate D readiness foundation, required RPCs, the exact
    unique active cleanup schedule, Auth health, and all application-function
    method boundaries probed server-side with the modern publishable key;
-   public join/recovery routes must reach their handlers and return `405`, while
+   public join/recovery/student-login routes must reach their handlers and return `405`, while
    authenticated routes may reject at the gateway with `401` or at their
    method guard with `405`;
 10. delete temporary secret material in an always-run step.
@@ -104,10 +105,26 @@ JWT API keys are permitted only as a local Supabase fallback.
 
 Expected deploy set:
 
-- `join-cohort`, `manage-join-window`, `recover-student`;
+- `join-cohort`, `student-login`, `manage-join-window`, `recover-student`;
 - `manage-group-identity`, `get-next-item`, `submit-response`, `complete-quest`;
 - `teacher-dashboard`, `teacher-controls`, `export-cohort`.
-- `production-readiness`.
+- `production-readiness` (twelve total).
+
+For the simplified-login upgrade, joining remains closed before the backup.
+The pending migration list must contain the reviewed ordered series beginning
+with `20260810000100_simplified_student_login.sql` and ending with
+`20260810000700_teacher_only_group_leader_transfer.sql`. Configure the
+encrypted student-login signer only after migrations succeed, then deploy
+`join-cohort`, `student-login`, `manage-join-window`, `teacher-controls`, and
+`teacher-dashboard` with the rest of the exact Function set from that same
+commit. Publish the matching frontend only after backend readiness succeeds.
+
+If clean-session acceptance fails, close joining first, retain the failed
+artifact/run evidence, roll back the Pages artifact and Edge Functions to the
+recorded compatible commit, and reassess database compatibility. Restore the
+database only through the separately approved recovery procedure after the
+frontend and Functions are back on the compatible release; never reset or
+repair migration history ad hoc.
 
 Do not run a second migration command manually after a partially failed
 workflow until the release owner has compared the remote migration list with

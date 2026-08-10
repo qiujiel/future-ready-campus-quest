@@ -80,3 +80,27 @@ test("direct private Storage URLs remain unavailable", async ({ page }) => {
   });
   expect(status).toBe(403);
 });
+
+test("student passcodes are not persisted or written to browser logs", async ({
+  page,
+}) => {
+  const passcode = "8642";
+  const consoleMessages: string[] = [];
+  page.on("console", (message) => consoleMessages.push(message.text()));
+
+  await page.goto(
+    "/#/class/40000000-0000-4000-8000-000000000001",
+  );
+  await page.getByLabel("Create a 4-digit passcode").fill(passcode);
+  await page.getByLabel("Confirm passcode").fill(passcode);
+
+  const browserStorage = await page.evaluate(() => ({
+    local: Object.values(localStorage),
+    session: Object.values(sessionStorage),
+  }));
+  expect(JSON.stringify(browserStorage)).not.toContain(passcode);
+
+  await page.goto("/#/join");
+  await expect(page.locator("body")).not.toContainText(passcode);
+  expect(consoleMessages.join("\n")).not.toContain(passcode);
+});

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QuestEntryPage } from "../../src/features/quest/QuestEntryPage";
 import type {
   StudentQuestAttempt,
@@ -217,6 +217,79 @@ it("shows Group Studio while waiting and resumes when a server attempt appears",
       screen.getByRole("heading", { name: "Diagnostic Gate" }),
     ).toBeVisible(),
   );
+});
+
+it("finishes the initial item request before starting reconciliation", async () => {
+  let resolveItem: (value: LearningItemPayload) => void = () => undefined;
+  const itemPending = new Promise<LearningItemPayload>((resolve) => {
+    resolveItem = resolve;
+  });
+  const gateway = journeyGateway();
+  gateway.getNextItem = vi.fn(() => itemPending);
+  const queue = {
+    enqueue: vi.fn(async () => undefined),
+    flush: vi.fn(async () => undefined),
+  };
+
+  render(
+    <QuestEntryPage
+      gateway={gateway}
+      groupGateway={groupGateway()}
+      queue={queue}
+    />,
+  );
+
+  await waitFor(() => expect(gateway.getNextItem).toHaveBeenCalledTimes(1));
+  expect(queue.flush).not.toHaveBeenCalled();
+  await act(async () => resolveItem(item));
+  expect(
+    await screen.findByRole("heading", { name: "Diagnostic Gate" }),
+  ).toBeVisible();
+  await waitFor(() => expect(queue.flush).toHaveBeenCalled());
+});
+
+it("keeps an in-progress answer selected during background reconciliation", async () => {
+  let resolveFlush: () => void = () => undefined;
+  const flushPending = new Promise<void>((resolve) => {
+    resolveFlush = resolve;
+  });
+  let resolveRefresh: (value: LearningItemPayload) => void = () => undefined;
+  const refreshPending = new Promise<LearningItemPayload>((resolve) => {
+    resolveRefresh = resolve;
+  });
+  const gateway = journeyGateway();
+  gateway.getNextItem = vi.fn()
+    .mockResolvedValueOnce(item)
+    .mockImplementationOnce(() => refreshPending);
+  const queue = {
+    enqueue: vi.fn(async () => undefined),
+    flush: vi.fn(() => flushPending),
+  };
+
+  render(
+    <QuestEntryPage
+      gateway={gateway}
+      groupGateway={groupGateway()}
+      queue={queue}
+    />,
+  );
+
+  await screen.findByRole("heading", { name: "Diagnostic Gate" });
+  fireEvent.click(
+    screen.getByRole("radio", { name: "Name the learner goal first" }),
+  );
+  expect(screen.getByRole("button", { name: /confirm response/i }))
+    .toBeEnabled();
+
+  await act(async () => resolveFlush());
+  await waitFor(() => expect(gateway.getNextItem).toHaveBeenCalledTimes(2));
+
+  expect(
+    screen.getByRole("radio", { name: "Name the learner goal first" }),
+  ).toBeChecked();
+  expect(screen.getByRole("button", { name: /confirm response/i }))
+    .toBeEnabled();
+  await act(async () => resolveRefresh(item));
 });
 
 it("explains an expired session without exposing technical details", async () => {

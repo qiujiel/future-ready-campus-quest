@@ -8,12 +8,19 @@ export const APPLICATION_FUNCTION_NAMES = Object.freeze([
   "manage-group-identity",
   "manage-join-window",
   "recover-student",
+  "student-login",
   "submit-response",
   "teacher-controls",
   "teacher-dashboard",
 ]);
 
-const PUBLIC_FUNCTION_NAMES = new Set(["join-cohort", "recover-student"]);
+export const PUBLIC_FUNCTION_NAMES = Object.freeze([
+  "join-cohort",
+  "recover-student",
+  "student-login",
+]);
+
+const PUBLIC_FUNCTION_NAME_SET = new Set(PUBLIC_FUNCTION_NAMES);
 
 async function digest(value: string): Promise<Uint8Array> {
   return new Uint8Array(
@@ -61,7 +68,7 @@ export async function probeFunctionBoundaries({
           },
         },
       );
-      const publicFunction = PUBLIC_FUNCTION_NAMES.has(name);
+      const publicFunction = PUBLIC_FUNCTION_NAME_SET.has(name);
       const boundaryReady = response.status === 405 ||
         (!publicFunction && response.status === 401);
       if (!boundaryReady) {

@@ -75,6 +75,7 @@ jobs:
           FRONTEND_APP_URL: http://127.0.0.1:4173
           JOIN_TOKEN_SIGNING_SECRET: package-only-join-signing-secret-32-bytes-minimum
           RECOVERY_TOKEN_SIGNING_SECRET: package-only-recovery-signing-secret-32-bytes
+          STUDENT_LOGIN_SIGNING_SECRET: package-only-student-login-signing-secret-32-bytes
           PRODUCTION_READINESS_SECRET: package-only-readiness-secret-32-bytes-minimum
         run: |
           printf '%s\n' \
@@ -82,12 +83,13 @@ jobs:
             "FRONTEND_APP_URL=$FRONTEND_APP_URL" \
             "JOIN_TOKEN_SIGNING_SECRET=$JOIN_TOKEN_SIGNING_SECRET" \
             "RECOVERY_TOKEN_SIGNING_SECRET=$RECOVERY_TOKEN_SIGNING_SECRET" \
+            "STUDENT_LOGIN_SIGNING_SECRET=$STUDENT_LOGIN_SIGNING_SECRET" \
             "PRODUCTION_READINESS_SECRET=$PRODUCTION_READINESS_SECRET" \
             > /tmp/campus-quest-functions.env
           pnpm exec supabase functions serve \
             --env-file /tmp/campus-quest-functions.env \
             > /tmp/campus-quest-functions.log 2>&1 &
-          for readiness_function in join-cohort recover-student; do
+          for readiness_function in join-cohort recover-student student-login; do
             response_code=000
             for attempt in $(seq 1 30); do
               response_code="$(curl --silent --output /dev/null \
