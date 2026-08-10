@@ -3,10 +3,6 @@ import { getSupabaseClient } from "../../shared/api/supabase";
 
 export interface GroupStudioGateway {
   rename(groupId: string, displayName: string): Promise<PublicGroupIdentity>;
-  transferEditor(
-    groupId: string,
-    studentId: string,
-  ): Promise<PublicGroupIdentity>;
   uploadImage(
     groupId: string,
     file: File,
@@ -66,16 +62,6 @@ export const supabaseGroupStudioGateway: GroupStudioGateway = {
         action: "rename",
         groupId,
         displayName,
-        requestKey: crypto.randomUUID(),
-      }),
-    );
-  },
-  async transferEditor(groupId, studentId) {
-    return groupFrom(
-      await invokeGroupCommand({
-        action: "transfer-editor",
-        groupId,
-        nextEditorId: studentId,
         requestKey: crypto.randomUUID(),
       }),
     );

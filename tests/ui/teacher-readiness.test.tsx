@@ -353,6 +353,42 @@ it("confirms disabling one group code through the audited control boundary", asy
   expect(changed).toHaveBeenCalled();
 });
 
+it("shows the current leader and confirms assigning another same-group student", async () => {
+  const execute = vi.fn(async () => ({ affected: 1, actionState: "applied" }));
+  render(
+    <ClassroomReadiness report={readiness} controlGateway={{ execute }} />,
+  );
+
+  expect(screen.getByText("Group leader")).toBeVisible();
+  expect(
+    screen.queryByRole("button", {
+      name: /make synthetic learner one group leader/i,
+    }),
+  ).not.toBeInTheDocument();
+
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: /make synthetic learner two group leader/i,
+    }),
+  );
+  expect(execute).not.toHaveBeenCalled();
+  expect(
+    screen.getByText(/selected student will become the sole group-information editor/i),
+  ).toBeVisible();
+
+  fireEvent.click(
+    screen.getByRole("button", { name: /^confirm make group leader$/i }),
+  );
+  await waitFor(() =>
+    expect(execute).toHaveBeenCalledWith({
+      action: "transfer-editor",
+      cohortId,
+      groupId: "60000000-0000-4000-8000-000000000001",
+      studentId: "20000000-0000-4000-8000-000000000002",
+    }),
+  );
+});
+
 it("offers confirmed move, remove, reset, and recovery controls", async () => {
   const execute = vi.fn(async (command) =>
     command.action === "issue-recovery"

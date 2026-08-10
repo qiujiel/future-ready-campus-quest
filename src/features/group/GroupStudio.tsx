@@ -30,7 +30,6 @@ export function GroupStudio({
   prepareImage?: (file: File) => Promise<File>;
 }) {
   const [group, setGroup] = useState(initialGroup);
-  const [canEdit, setCanEdit] = useState(isEditor);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -83,25 +82,6 @@ export function GroupStudio({
     }
   }
 
-  async function transfer(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!group || busy || locked) return;
-    const form = new FormData(event.currentTarget);
-    setBusy(true);
-    try {
-      setGroup(await gateway.transferEditor(
-        group.groupId,
-        String(form.get("nextEditorId") ?? ""),
-      ));
-      setCanEdit(false);
-      setMessage("Editing passed to your teammate");
-    } catch {
-      setMessage("Editing could not be transferred");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <main className="group-studio quest-content">
       <header className="group-studio__header">
@@ -141,12 +121,12 @@ export function GroupStudio({
           </ul>
         </Card>
 
-        <Card title="Shared group identity" eyebrow={canEdit ? "You can edit" : "View only"}>
-          {canEdit ? (
+        <Card title="Shared group identity" eyebrow={isEditor ? "You can edit" : "View only"}>
+          {isEditor ? (
             <div className="quest-stack">
               <p>
-                You are the first explorer here, so you can shape the shared
-                name and image. Pass editing on when you are ready.
+                You are the group leader, so you can shape the shared name and
+                image. Ask your teacher if the group leader needs to change.
               </p>
               <form className="stacked-form" onSubmit={rename}>
                 <label>
@@ -172,33 +152,11 @@ export function GroupStudio({
                   setMessage("Group image ready");
                 }}
               />
-              <form className="stacked-form" onSubmit={transfer}>
-                <label>
-                  Next group editor
-                  <select name="nextEditorId" disabled={locked || busy}>
-                    {members
-                      .filter((member) => member.studentId !== currentStudentId)
-                      .map((member) => (
-                        <option key={member.studentId} value={member.studentId}>
-                          {member.nickname}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  busy={busy}
-                  disabled={locked || members.length < 2}
-                >
-                  Transfer editing
-                </Button>
-              </form>
             </div>
           ) : (
             <p>
-              Your group editor is shaping this space. Everyone’s nickname stays
-              visible while real names remain teacher-only.
+              Your group leader is shaping this space. Everyone’s nickname
+              stays visible while real names remain teacher-only.
             </p>
           )}
         </Card>

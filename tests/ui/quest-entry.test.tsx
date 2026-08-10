@@ -96,9 +96,6 @@ function groupGateway(): GroupStudioGateway {
     async rename(_groupId, displayName) {
       return { ...context.group, displayName };
     },
-    async transferEditor() {
-      return context.group;
-    },
     async uploadImage() {
       return context.group;
     },

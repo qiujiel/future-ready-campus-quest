@@ -70,9 +70,6 @@ const previewGroupGateway: GroupStudioGateway = {
   async rename(_groupId, displayName) {
     return { ...syntheticGroup, displayName };
   },
-  async transferEditor() {
-    return syntheticGroup;
-  },
   async uploadImage(_groupId, _file, onProgress) {
     onProgress(100);
     return {
