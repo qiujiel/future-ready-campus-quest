@@ -58,6 +58,8 @@ async function derivePasscodeHash(
   salt: Uint8Array,
   iterations: number,
 ): Promise<Uint8Array> {
+  const saltBuffer = new ArrayBuffer(salt.byteLength);
+  new Uint8Array(saltBuffer).set(salt);
   const passcodeKey = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(passcode),
@@ -70,7 +72,7 @@ async function derivePasscodeHash(
       {
         name: "PBKDF2",
         hash: "SHA-256",
-        salt,
+        salt: saltBuffer,
         iterations,
       },
       passcodeKey,
