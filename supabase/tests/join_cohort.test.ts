@@ -6,6 +6,7 @@ import {
   type JoinDependencies,
   type StoredJoin,
 } from "../functions/_shared/join-core";
+import { deriveStudentNameLookupHash } from "../functions/_shared/student-credentials-core";
 import type {
   JoinCohortInput,
   SessionTokens,
@@ -222,6 +223,53 @@ it("passes class-scoped private credential material and leader intent only to co
     passcodeIterations: 210_000,
   });
   expect(JSON.stringify(complete.mock.calls)).not.toContain(baseInput.passcode);
+});
+
+it("canonicalizes mixed-case class access before preparation and credential lookup", async () => {
+  const dependencies = createDependencies();
+  const mixedCaseClassAccessId = "ABCDEFAB-CDEF-4ABC-8DEF-ABCDEFABCDEF";
+  const canonicalClassAccessId = "abcdefab-cdef-4abc-8def-abcdefabcdef";
+  const credentialSecret = "0123456789abcdef0123456789abcdef";
+  const expectedLookupHash = await deriveStudentNameLookupHash(
+    canonicalClassAccessId,
+    "Synthetic Learner",
+    credentialSecret,
+  );
+  const prepare = vi.spyOn(dependencies, "prepareJoin");
+  const createCredential = vi.spyOn(dependencies, "createCredential")
+    .mockImplementation(async (classAccessId, displayName) => ({
+      nameLookupHash: await deriveStudentNameLookupHash(
+        classAccessId,
+        displayName,
+        credentialSecret,
+      ),
+      passcode: {
+        salt: "BwcHBwcHBwcHBwcHBwcHBw",
+        hash: "6bs7_7cRveH4ksIlN8Y-XUXqT69lkI68wQDlqS5wAao",
+        iterations: 210_000,
+      },
+    }));
+  const complete = vi.spyOn(dependencies, "completeJoin");
+
+  await joinStudent(
+    { ...baseInput, classAccessId: mixedCaseClassAccessId },
+    dependencies,
+  );
+
+  expect(prepare).toHaveBeenCalledWith(
+    expect.stringMatching(/^[a-f0-9]{64}$/),
+    baseInput.requestKey,
+    canonicalClassAccessId,
+  );
+  expect(createCredential).toHaveBeenCalledWith(
+    canonicalClassAccessId,
+    "Synthetic Learner",
+    baseInput.passcode,
+  );
+  expect(complete).toHaveBeenCalledWith(expect.objectContaining({
+    classAccessId: canonicalClassAccessId,
+    nameLookupHash: expectedLookupHash,
+  }));
 });
 
 it("validates class scope during trusted preparation before creating an Auth user", async () => {

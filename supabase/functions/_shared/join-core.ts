@@ -236,7 +236,7 @@ function parseInput(input: JoinCohortInput): JoinCohortInput {
   }
 
   return {
-    classAccessId: result.data.classAccessId,
+    classAccessId: result.data.classAccessId.toLowerCase(),
     joinCode,
     displayName,
     passcode: result.data.passcode,
