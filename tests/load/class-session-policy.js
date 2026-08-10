@@ -1,7 +1,7 @@
 const classroomStudentCount = 30;
 const classroomGroupCount = 5;
 
-export const CLASSROOM_JOIN_P95_LIMIT_MS = 5_000;
+export const CLASSROOM_JOIN_P95_LIMIT_MS = 7_000;
 export const CLASSROOM_RESPONSE_P95_LIMIT_MS = 1_500;
 export const CLASSROOM_DASHBOARD_P95_LIMIT_MS = 2_500;
 

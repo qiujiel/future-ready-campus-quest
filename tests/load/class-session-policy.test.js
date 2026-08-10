@@ -12,7 +12,7 @@ function passingMetrics(overrides = {}) {
     failedJoins: 0,
     incorrectGroupAssignments: 0,
     duplicateStudentIdentities: 0,
-    p95JoinMs: 4_999,
+    p95JoinMs: 6_999,
     p95ResponseMs: 1_499,
     p95DashboardMs: 2_499,
     duplicateResponses: 0,
@@ -66,17 +66,17 @@ describe("classroom join readiness evidence", () => {
 });
 
 describe("classroom load release gate", () => {
-  it("accepts a fully correct 30-student run below the 5-second join limit", () => {
+  it("accepts a fully correct 30-student run below the 7-second join limit", () => {
     expect(classroomLoadGateFailures(passingMetrics())).toEqual([]);
   });
 
-  it("accepts a join p95 at the inclusive 5-second boundary", () => {
-    expect(classroomLoadGateFailures(passingMetrics({ p95JoinMs: 5_000 })))
+  it("accepts a join p95 at the inclusive 7-second boundary", () => {
+    expect(classroomLoadGateFailures(passingMetrics({ p95JoinMs: 7_000 })))
       .not.toContain("p95JoinMs");
   });
 
-  it("rejects a join p95 above the 5-second boundary", () => {
-    expect(classroomLoadGateFailures(passingMetrics({ p95JoinMs: 5_000.01 })))
+  it("rejects a join p95 above the 7-second boundary", () => {
+    expect(classroomLoadGateFailures(passingMetrics({ p95JoinMs: 7_000.01 })))
       .toContain("p95JoinMs");
   });
 
