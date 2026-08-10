@@ -120,7 +120,6 @@ export async function createLoadFixture({ apiUrl, publishableKey, secretKey }) {
         action: "create-cohort",
         title: "Synthetic 30-student load fixture",
         groupCount: 5,
-        groupCapacity: 6,
         requestKey: crypto.randomUUID(),
       },
     );

@@ -12,6 +12,10 @@ import {
   TeacherControlBoundaryError,
 } from "../_shared/teacher-controls-core.ts";
 import { jsonResponse, readJson } from "../_shared/http.ts";
+import {
+  buildStudentClassUrl,
+  loadTeacherStudentAccessId,
+} from "../_shared/teacher-class-access.ts";
 import type {
   TeacherControlCommand,
 } from "../../../src/shared/api/contracts.ts";
@@ -157,7 +161,14 @@ Deno.serve(async (request) => {
       if (configured.error || configured.data !== true) {
         throw new Error("CONTROL_NOT_AVAILABLE");
       }
-      const studentUrl = `${frontendAppUrl()}/#/join`;
+      const studentAccessId = await loadTeacherStudentAccessId(
+        client,
+        input.cohortId,
+      );
+      const studentUrl = buildStudentClassUrl(
+        frontendAppUrl(),
+        studentAccessId,
+      );
       return jsonResponse({
         affected: 0,
         actionState: "open",

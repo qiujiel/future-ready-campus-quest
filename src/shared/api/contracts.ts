@@ -66,7 +66,6 @@ export interface CreateCohortInput {
   action: "create-cohort";
   title: string;
   groupCount: number;
-  groupCapacity: number;
   requestKey: string;
 }
 

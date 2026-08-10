@@ -15,7 +15,6 @@ import { readAuthenticatedRole } from "./role";
 export interface CreateCohortRequest {
   title: string;
   groupCount: number;
-  groupCapacity: number;
   requestKey: string;
 }
 
@@ -114,7 +113,6 @@ export const supabaseAuthGateway: AuthGateway = {
       action: "create-cohort",
       title: input.title,
       groupCount: input.groupCount,
-      groupCapacity: input.groupCapacity,
       requestKey: input.requestKey,
     });
     const cohortValue = data.cohort;

@@ -48,8 +48,8 @@ function authGateway(): AuthGateway & {
     },
     async openJoinWindow() {
       return {
-        joinUrl: "https://example.invalid/future-ready-campus-quest/#/join",
-        studentUrl: "https://example.invalid/future-ready-campus-quest/#/join",
+        joinUrl: "https://example.invalid/future-ready-campus-quest/#/class/40000000-0000-4000-8000-000000000099",
+        studentUrl: "https://example.invalid/future-ready-campus-quest/#/class/40000000-0000-4000-8000-000000000099",
         expiresAt: "2026-08-06T01:15:00.000Z",
         groups: [
           {
@@ -106,53 +106,66 @@ it("lists existing cohorts and opens their dashboards", async () => {
   expect(open).toHaveAttribute("href", `#/teacher/cohorts/${cohortId}`);
 });
 
-it("takes the teacher directly to a newly created cohort dashboard", async () => {
-  render(<RouterProvider router={setupRouter(authGateway())} />);
+it("creates and opens a class from a two-field setup", async () => {
+  const gateway = authGateway();
+  const createCohort = vi.spyOn(gateway, "createCohort");
+  const openJoinWindow = vi.spyOn(gateway, "openJoinWindow");
+  render(<RouterProvider router={setupRouter(gateway)} />);
 
-  fireEvent.change(await screen.findByLabelText(/cohort title/i), {
+  expect(await screen.findByLabelText(/class name/i)).toBeVisible();
+  expect(screen.getByLabelText(/number of groups/i)).toBeVisible();
+  expect(screen.queryByLabelText(/students per group/i)).not.toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText(/class name/i), {
     target: { value: "Friday seminar" },
   });
-  fireEvent.click(screen.getByRole("button", { name: /create cohort/i }));
+  fireEvent.change(screen.getByLabelText(/number of groups/i), {
+    target: { value: "4" },
+  });
+  fireEvent.click(
+    screen.getByRole("button", { name: /create class and open joining/i }),
+  );
+
+  await waitFor(() => expect(createCohort).toHaveBeenCalledWith({
+    title: "Friday seminar",
+    groupCount: 4,
+    requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+  }));
+  expect(openJoinWindow).toHaveBeenCalledWith(
+    cohortId,
+    expect.stringMatching(/^[0-9a-f-]{36}$/i),
+  );
 
   expect(await screen.findByLabelText("current path")).toHaveTextContent(
     `/teacher/cohorts/${cohortId}`,
   );
 });
 
-it("shows the shared student URL and one code for every group", async () => {
+it("keeps a created class and navigates to its closed dashboard when opening fails", async () => {
   const gateway = authGateway();
+  const createCohort = vi.spyOn(gateway, "createCohort");
+  const openJoinWindow = vi
+    .spyOn(gateway, "openJoinWindow")
+    .mockRejectedValue(new Error("open failed"));
+  const closeJoinWindow = vi.spyOn(gateway, "closeJoinWindow");
   render(<RouterProvider router={setupRouter(gateway)} />);
 
-  fireEvent.change(await screen.findByLabelText(/cohort title/i), {
+  fireEvent.change(await screen.findByLabelText(/class name/i), {
     target: { value: "Friday seminar" },
   });
-  fireEvent.click(screen.getByRole("button", { name: /create cohort/i }));
-
-  // Exercise setup controls directly because the production page navigates
-  // after creation; a supplied navigation callback keeps this focused on the receipt.
-  const view = render(
-    <RouterProvider
-      router={createMemoryRouter(
-        [{ path: "/teacher/setup", element: <TeacherSetupPage gateway={gateway} stayAfterCreate /> }],
-        { initialEntries: ["/teacher/setup"] },
-      )}
-    />,
+  fireEvent.click(
+    screen.getByRole("button", { name: /create class and open joining/i }),
   );
-  fireEvent.change(await screen.findByLabelText(/cohort title/i), {
-    target: { value: "Friday seminar" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: /create cohort/i }));
-  fireEvent.click(await screen.findByRole("button", { name: /open joining/i }));
 
-  expect(await screen.findByText("HSNY46S4")).toBeVisible();
-  expect(screen.getByText("KZDLXW4Q")).toBeVisible();
-  expect(
-    screen.getByRole("link", { name: /student application/i }),
-  ).toHaveAttribute(
-    "href",
-    "https://example.invalid/future-ready-campus-quest/#/join",
+  expect(await screen.findByLabelText("current path")).toHaveTextContent(
+    `/teacher/cohorts/${cohortId}`,
   );
-  view.unmount();
+  expect(createCohort).toHaveBeenCalledTimes(1);
+  expect(openJoinWindow).toHaveBeenCalledTimes(1);
+  expect(closeJoinWindow).toHaveBeenCalledWith(
+    cohortId,
+    expect.stringMatching(/^[0-9a-f-]{36}$/i),
+  );
 });
 
 const conceptAggregates = Array.from({ length: 8 }, (_, index) => ({
@@ -187,7 +200,7 @@ const readiness = {
   joining: {
     open: true,
     expiresAt: "2026-08-06T01:15:00.000Z",
-    studentUrl: "https://example.invalid/future-ready-campus-quest/#/join",
+    studentUrl: "https://example.invalid/future-ready-campus-quest/#/class/40000000-0000-4000-8000-000000000099",
   },
   groups: [
     {

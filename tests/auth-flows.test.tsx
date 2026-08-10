@@ -19,14 +19,15 @@ function createGateway(): AuthGateway & {
   createCalls: Array<{
     title: string;
     groupCount: number;
-    groupCapacity: number;
     requestKey: string;
   }>;
+  openCalls: Array<{ cohortId: string; requestKey: string }>;
   joinCalls: Array<Parameters<AuthGateway["joinCohort"]>[0]>;
 } {
   return {
     signInCalls: [],
     createCalls: [],
+    openCalls: [],
     joinCalls: [],
     async signInTeacher(email, password) {
       this.signInCalls.push({ email, password });
@@ -34,6 +35,15 @@ function createGateway(): AuthGateway & {
     async createCohort(input) {
       this.createCalls.push(input);
       return { cohortId: "40000000-0000-4000-8000-000000000001" };
+    },
+    async openJoinWindow(cohortId, requestKey) {
+      this.openCalls.push({ cohortId, requestKey });
+      return {
+        joinUrl: "https://example.invalid/#/class/40000000-0000-4000-8000-000000000099",
+        studentUrl: "https://example.invalid/#/class/40000000-0000-4000-8000-000000000099",
+        expiresAt: "2026-08-10T12:15:00.000Z",
+        groups: [],
+      };
     },
     async joinCohort(input) {
       this.joinCalls.push(input);
@@ -107,7 +117,7 @@ it("signs a teacher in and continues to cohort setup", async () => {
   );
 });
 
-it("creates a teacher-owned cohort with five groups of six by default", async () => {
+it("creates and opens a class using only its name and number of groups", async () => {
   const gateway = createGateway();
   const router = createMemoryRouter(
     [
@@ -124,20 +134,30 @@ it("creates a teacher-owned cohort with five groups of six by default", async ()
   );
   render(<RouterProvider router={router} />);
 
-  fireEvent.change(screen.getByLabelText(/cohort title/i), {
+  expect(screen.getAllByRole("textbox")).toHaveLength(1);
+  expect(screen.getAllByRole("spinbutton")).toHaveLength(1);
+  expect(screen.queryByLabelText(/students per group/i)).not.toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText(/class name/i), {
     target: { value: "Thursday seminar" },
   });
-  fireEvent.click(screen.getByRole("button", { name: /create cohort/i }));
+  fireEvent.click(
+    screen.getByRole("button", { name: /create class and open joining/i }),
+  );
 
   await waitFor(() => expect(gateway.createCalls).toHaveLength(1));
   expect(gateway.createCalls[0]).toMatchObject({
     title: "Thursday seminar",
     groupCount: 5,
-    groupCapacity: 6,
   });
   expect(gateway.createCalls[0]?.requestKey).toMatch(
     /^[0-9a-f-]{36}$/i,
   );
+  expect(gateway.openCalls).toHaveLength(1);
+  expect(gateway.openCalls[0]).toMatchObject({
+    cohortId: "40000000-0000-4000-8000-000000000001",
+  });
+  expect(gateway.openCalls[0]?.requestKey).toMatch(/^[0-9a-f-]{36}$/i);
 });
 
 it("joins a student from the class route without email or password", async () => {

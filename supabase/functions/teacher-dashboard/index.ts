@@ -9,6 +9,10 @@ import {
   type TeacherDashboardRepository,
   type TrustedReadinessReport,
 } from "../_shared/teacher-dashboard-core.ts";
+import {
+  buildStudentClassUrl,
+  loadTeacherStudentAccessId,
+} from "../_shared/teacher-class-access.ts";
 import type {
   ConceptId,
   SupportState,
@@ -56,10 +60,14 @@ Deno.serve(async (request) => {
       if (!signingSecret || signingSecret.length < 32) {
         throw new Error("JOIN_TOKEN_SIGNING_SECRET is not configured.");
       }
+      const studentAccessId = await loadTeacherStudentAccessId(
+        client,
+        input.cohortId,
+      );
       const readiness = await prepareClassroomReadiness(
         result.data as TrustedReadinessReport,
         signingSecret,
-        `${frontendAppUrl()}/#/join`,
+        buildStudentClassUrl(frontendAppUrl(), studentAccessId),
       );
       return jsonResponse({ readiness }, 200, headers);
     }

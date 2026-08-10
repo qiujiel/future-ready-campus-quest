@@ -8,13 +8,16 @@ import {
   JoinBoundaryError,
 } from "../_shared/join-core.ts";
 import { jsonResponse, readJson } from "../_shared/http.ts";
+import {
+  buildStudentClassUrl,
+  loadTeacherStudentAccessId,
+} from "../_shared/teacher-class-access.ts";
 
 const requestSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("create-cohort"),
     title: z.string().trim().min(2).max(100),
     groupCount: z.number().int().min(1).max(20),
-    groupCapacity: z.number().int().min(1).max(20),
     requestKey: z.uuid(),
   }),
   z.object({
@@ -49,7 +52,7 @@ Deno.serve(async (request) => {
       const result = await client.rpc("create_teacher_cohort", {
         p_title: input.title,
         p_group_count: input.groupCount,
-        p_group_capacity: input.groupCapacity,
+        p_group_capacity: 20,
         p_request_key: input.requestKey,
       });
       if (result.error) throw result.error;
@@ -111,7 +114,14 @@ Deno.serve(async (request) => {
     if (configured.error || configured.data !== true) {
       throw new Error("GROUP_CODES_NOT_AVAILABLE");
     }
-    const studentUrl = `${frontendAppUrl()}/#/join`;
+    const studentAccessId = await loadTeacherStudentAccessId(
+      client,
+      input.cohortId,
+    );
+    const studentUrl = buildStudentClassUrl(
+      frontendAppUrl(),
+      studentAccessId,
+    );
     return jsonResponse(
       {
         joinUrl: studentUrl,

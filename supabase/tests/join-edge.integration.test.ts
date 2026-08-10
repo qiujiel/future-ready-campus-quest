@@ -243,20 +243,6 @@ it("completes a valid join against real Auth and database boundaries", async () 
       .from("user_roles")
       .insert({ user_id: teacherId, role: "teacher" });
     if (role.error) throw role.error;
-    const cohort = await admin
-      .from("cohorts")
-      .insert({
-        teacher_id: teacherId,
-        title: "Synthetic integration cohort",
-        group_count: 2,
-        group_capacity: 2,
-      })
-      .select("id,student_access_id")
-      .single();
-    if (cohort.error) throw cohort.error;
-    cohortId = cohort.data.id;
-    classAccessId = cohort.data.student_access_id;
-
     const teacherClient = createClient(apiUrl, anonKey, {
       auth: { autoRefreshToken: false, persistSession: false },
       global: { headers: { Origin: allowedOrigin } },
@@ -269,6 +255,25 @@ it("completes a valid join against real Auth and database boundaries", async () 
     const teacherRole = await teacherClient.rpc("current_role");
     expect(teacherRole.error).toBeNull();
     expect(teacherRole.data).toBe("teacher");
+    const created = await teacherClient.functions.invoke("manage-join-window", {
+      body: {
+        action: "create-cohort",
+        title: "Synthetic integration class",
+        groupCount: 2,
+        requestKey: crypto.randomUUID(),
+      },
+    });
+    if (created.error) throw created.error;
+    const createdCohort = Array.isArray(created.data.cohort)
+      ? created.data.cohort[0]
+      : created.data.cohort;
+    cohortId = String(createdCohort.id);
+    classAccessId = String(createdCohort.student_access_id);
+    expect(createdCohort).toMatchObject({
+      group_count: 2,
+      group_capacity: 20,
+    });
+
     const opened = await teacherClient.functions.invoke("manage-join-window", {
       body: {
         action: "open",
@@ -278,7 +283,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
     });
     if (opened.error) throw opened.error;
     expect(opened.data).toMatchObject({
-      studentUrl: `${frontendAppUrl}/#/join`,
+      studentUrl: `${frontendAppUrl}/#/class/${classAccessId}`,
       groups: [
         {
           groupNumber: 1,
@@ -292,6 +297,9 @@ it("completes a valid join against real Auth and database boundaries", async () 
         },
       ],
     });
+    expect(new Set(opened.data.groups.map(
+      (group: { joinCode: string }) => group.joinCode,
+    )).size).toBe(2);
     const joinCode = String(opened.data.groups[0].joinCode);
 
     const usersBeforeClassMismatch = await authUserCount();
@@ -349,11 +357,11 @@ it("completes a valid join against real Auth and database boundaries", async () 
     if (readiness.error) throw readiness.error;
     expect(readiness.data.readiness).toMatchObject({
       cohortId,
-      expected: 4,
+      expected: 40,
       joined: 1,
       joining: {
         open: true,
-        studentUrl: `${frontendAppUrl}/#/join`,
+        studentUrl: `${frontendAppUrl}/#/class/${classAccessId}`,
       },
     });
     expect(
@@ -794,10 +802,10 @@ it("completes a valid join against real Auth and database boundaries", async () 
     expect(teacherSummary.data.summary.completed).toBe(1);
 
     const reopened = await teacherClient.functions.invoke(
-      "manage-join-window",
+      "teacher-controls",
       {
         body: {
-          action: "open",
+          action: "open-join",
           cohortId,
           requestKey: crypto.randomUUID(),
         },
@@ -805,6 +813,10 @@ it("completes a valid join against real Auth and database boundaries", async () 
     );
     if (reopened.error) throw reopened.error;
     const reopenedJoinCode = String(reopened.data.groups[0].joinCode);
+    expect(reopened.data.studentUrl).toBe(
+      `${frontendAppUrl}/#/class/${classAccessId}`,
+    );
+    expect(reopenedJoinCode).not.toBe(joinCode);
 
     const disabled = await teacherClient.functions.invoke("teacher-controls", {
       body: {
