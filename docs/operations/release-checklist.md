@@ -133,7 +133,7 @@ it was not required. A blank or assumed `N/A` leaves the item unchecked.
 - [ ] `supabase migration list` is captured before mutation.
 - [ ] Migration dry-run contains only reviewed forward migrations, in timestamp
   order, including `20260810000100_simplified_student_login.sql` through
-  `20260810001000_exact_login_acl_readiness.sql`.
+  `20260810001100_class_scoped_join_preparation.sql`.
 - [ ] `production-backend` approval was granted by `________________` at
   `________________`.
 - [ ] Migration push, eight custom secret updates, and the exact twelve Function deploys

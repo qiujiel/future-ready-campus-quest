@@ -44,7 +44,7 @@ function environment(overrides = {}) {
 function readinessReport(overrides = {}) {
   return {
     requiredMigrationsPresent: true,
-    latestGateDMigration: "20260810001000",
+    latestGateDMigration: "20260810001100",
     requiredFunctionsPresent: true,
     studentLoginObjectsPresent: true,
     studentLoginSecurityReady: true,
@@ -210,7 +210,7 @@ describe("production readiness report", () => {
     const configuration = readPreflightConfiguration(environment());
 
     expect(evaluateReadinessReport(readinessReport(), configuration)).toEqual({
-      latestGateDMigration: "20260810001000",
+      latestGateDMigration: "20260810001100",
       cleanupScheduleReady: true,
       edgeFunctionsReady: 11,
       contentVersion: {
@@ -240,13 +240,13 @@ describe("production readiness report", () => {
     ).toThrow(/required Gate D migrations.*required Gate D functions/i);
   });
 
-  it("rejects a database report that predates the security-readiness migration", () => {
+  it("rejects a database report that predates class-scoped join preparation", () => {
     const configuration = readPreflightConfiguration(environment(), {
       backendOnly: true,
     });
 
     expect(() => evaluateReadinessReport(
-      readinessReport({ latestGateDMigration: "20260810000900" }),
+      readinessReport({ latestGateDMigration: "20260810001000" }),
       configuration,
     )).toThrow(/required Gate D migrations/i);
   });
@@ -281,7 +281,7 @@ describe("production readiness report", () => {
     });
 
     expect(evaluateReadinessReport(readinessReport(), configuration)).toEqual({
-      latestGateDMigration: "20260810001000",
+      latestGateDMigration: "20260810001100",
       cleanupScheduleReady: true,
       edgeFunctionsReady: 11,
       basePath: "/campus-quest/",
