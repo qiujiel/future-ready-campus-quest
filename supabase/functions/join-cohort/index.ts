@@ -90,27 +90,15 @@ function dependencies(
   return {
     async prepareJoin(codeHash, requestKey, classAccessId) {
       return measured("preflight", async () => {
-        const result = await admin.rpc("prepare_student_code_join", {
+        const result = await admin.rpc("prepare_student_class_code_join", {
           p_code_hash: codeHash,
           p_request_key: requestKey,
           p_rate_key_hash: rateKeyHash,
+          p_student_access_id: classAccessId,
         });
         if (result.error) safeRpcError(result.error);
         const row = result.data?.[0] as Record<string, unknown> | undefined;
-        if (!row) throw new Error("JOIN_PREPARE_MISSING");
-
-        const cohortId = typeof row.cohort_id === "string"
-          ? row.cohort_id
-          : "";
-        if (!cohortId) throw new Error("JOIN_PREPARE_SCOPE_MISSING");
-        const classScope = await admin
-          .from("cohorts")
-          .select("id")
-          .eq("id", cohortId)
-          .eq("student_access_id", classAccessId)
-          .maybeSingle();
-        if (classScope.error) throw new Error("JOIN_SCOPE_CHECK_FAILED");
-        if (!classScope.data) {
+        if (!row) {
           throw new JoinBoundaryError("INVALID_JOIN_CODE", 404);
         }
 

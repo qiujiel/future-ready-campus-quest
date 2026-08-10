@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 create extension if not exists pg_cron with schema extensions;
 
-select plan(35);
+select plan(41);
 
 create role readiness_security_owner;
 grant usage, create on schema private to readiness_security_owner;
@@ -16,7 +16,7 @@ select is(
     '00000000-0000-0000-0000-000000000001'::uuid,
     '00000000-0000-0000-0000-000000000002'::uuid
   )->>'latestGateDMigration',
-  '20260810001000',
+  '20260810001100',
   'readiness records the complete simplified-login deployment migration set'
 );
 
@@ -114,6 +114,32 @@ select is(
 );
 
 rollback to savepoint missing_prepare_rpc;
+
+savepoint missing_class_prepare_rpc;
+
+drop function public.prepare_student_class_code_join(text, uuid, text, uuid);
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'requiredFunctionsPresent',
+  'false',
+  'readiness rejects a database missing the class-scoped join-prepare RPC'
+);
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginObjectsPresent',
+  'false',
+  'student-login object readiness requires the class-scoped join-prepare RPC'
+);
+
+rollback to savepoint missing_class_prepare_rpc;
 
 savepoint missing_login_table;
 
@@ -327,6 +353,83 @@ select is(
 );
 
 rollback to savepoint login_rpc_acl_drift;
+
+savepoint class_prepare_rpc_acl_drift;
+
+grant execute on function public.prepare_student_class_code_join(
+  text, uuid, text, uuid
+) to anon;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness rejects browser access to class-scoped join preparation'
+);
+
+rollback to savepoint class_prepare_rpc_acl_drift;
+
+savepoint class_prepare_rpc_invoker_drift;
+
+alter function public.prepare_student_class_code_join(
+  text, uuid, text, uuid
+) security invoker;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness rejects invoker-rights class-scoped join preparation'
+);
+
+rollback to savepoint class_prepare_rpc_invoker_drift;
+
+savepoint class_prepare_rpc_search_path_drift;
+
+alter function public.prepare_student_class_code_join(
+  text, uuid, text, uuid
+) set search_path to public;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness rejects a nonempty class-prepare search path'
+);
+
+rollback to savepoint class_prepare_rpc_search_path_drift;
+
+savepoint class_prepare_rpc_owner_drift;
+
+alter function public.prepare_student_class_code_join(
+  text, uuid, text, uuid
+) owner to readiness_security_owner;
+set role readiness_security_owner;
+grant execute on function public.prepare_student_class_code_join(
+  text, uuid, text, uuid
+) to service_role;
+reset role;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness rejects non-postgres class-prepare ownership even with an exact owner/service ACL'
+);
+
+rollback to savepoint class_prepare_rpc_owner_drift;
 
 savepoint login_rpc_service_acl_drift;
 
