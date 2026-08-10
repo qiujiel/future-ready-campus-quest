@@ -18,9 +18,9 @@ reviewer is required while the disposable-state preflight passes; this is not a
 substitute evidence field and does not waive automated or runtime security
 gates.
 
-## Repository variables and secrets
+## Repository variables
 
-| Name | Purpose |
+| Variable | Purpose |
 | --- | --- |
 | `VITE_SUPABASE_URL` | Public production API URL; must identify `ghohuwwjxgjqnbsauvzq`. |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Public browser key for build and preflight. |
@@ -35,9 +35,16 @@ This `main`-limited environment is used only by the release load gate. Its
 synthetic teacher, cohort, group codes, and student sessions are created for
 one run and removed before exit.
 
-| Variable or secret | Purpose / validation |
+### Variables
+
+| Variable | Purpose / validation |
 | --- | --- |
 | `LOAD_SUPABASE_PROJECT_REF` | Exactly `vadyhuipwbtgbzpeisbn`. |
+
+### Secrets
+
+| Secret | Purpose / validation |
+| --- | --- |
 | `LOAD_SUPABASE_URL` | Dedicated load API URL only. |
 | `LOAD_SUPABASE_PUBLISHABLE_KEY` | Dedicated load browser key only. |
 | `LOAD_SUPABASE_SECRET_KEY` | Modern dedicated load setup/cleanup key only. |
@@ -47,12 +54,26 @@ token, join token, cohort ID, or content-version ID in this environment.
 
 ## `production-backend` environment
 
-This `main`-limited environment has the following exact inventory:
+This `main`-limited environment has the following exact inventory. The public
+repository variables are listed here because the protected workflow consumes
+them in this environment; they remain repository variables, not environment
+secrets.
 
-| Variable or secret | Purpose / validation |
+### Variables
+
+| Variable | Purpose / validation |
 | --- | --- |
 | `PRODUCTION_SUPABASE_PROJECT_REF` | Exactly `ghohuwwjxgjqnbsauvzq`. |
 | `PRODUCTION_FRONTEND_ORIGIN` | Deployed HTTPS browser origin, with no path. |
+| `VITE_SUPABASE_URL` | Consumed repository variable for the exact production API URL. |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Consumed repository variable for the public browser key. |
+| `VITE_BASE_PATH` | Consumed repository variable for the Pages base path. |
+| `LOAD_SUPABASE_PROJECT_REF` | Consumed repository variable; exactly `vadyhuipwbtgbzpeisbn`. |
+
+### Secrets
+
+| Secret | Purpose / validation |
+| --- | --- |
 | `SUPABASE_ACCESS_TOKEN` | CLI authorization for the production organization. |
 | `PRODUCTION_SUPABASE_DB_PASSWORD` | Linked migration access. |
 | `PRODUCTION_SUPABASE_SECRET_KEY` | Modern `sb_secret_` server-only key for preflight and Function administration. |
@@ -63,6 +84,8 @@ This `main`-limited environment has the following exact inventory:
 | `RECOVERY_TOKEN_SIGNING_SECRET` | Recovery-token signing secret. |
 | `STUDENT_LOGIN_SIGNING_SECRET` | Private student-name lookup and returning-login rate-key signer. |
 | `PROTECTED_CONTENT_BANK_JSON` | Encrypted protected-content source for the separate importer only. |
+| `PRODUCTION_TEACHER_EMAIL` | One-time classroom-bootstrap teacher credential. |
+| `PRODUCTION_TEACHER_PASSWORD` | One-time classroom-bootstrap teacher credential. |
 
 `ALLOWED_FRONTEND_ORIGINS` must exactly equal
 `PRODUCTION_FRONTEND_ORIGIN`. `FRONTEND_APP_URL` must combine that origin with
@@ -90,18 +113,40 @@ logs, artifacts, caches, issues, and release records. The backend stores it as
 the encrypted Function secret `FRCQ_SUPABASE_SECRET_KEY` alongside
 `FRCQ_SUPABASE_PUBLISHABLE_KEY`; hosted Functions do not use legacy JWT keys.
 
-## `production-readiness` and `github-pages`
+## `production-readiness` environment
 
-`production-readiness` is a distinct `main`-limited read-only gate. Its
-variables are `PRODUCTION_SUPABASE_PROJECT_REF`, `PRODUCTION_FRONTEND_ORIGIN`,
-`PRODUCTION_CONTENT_VERSION`, `PRODUCTION_SMOKE_TEACHER_ID`, and
-`PRODUCTION_SMOKE_COHORT_ID`; its only secret is
-`PRODUCTION_READINESS_SECRET`. It never receives the production privileged
-secret key.
+`production-readiness` is a distinct `main`-limited read-only gate. It never
+receives the production privileged secret key.
+
+### Variables
+
+| Variable | Purpose |
+| --- | --- |
+| `PRODUCTION_SUPABASE_PROJECT_REF` | Exact production identity. |
+| `PRODUCTION_FRONTEND_ORIGIN` | Expected HTTPS browser origin. |
+| `PRODUCTION_CONTENT_VERSION` | Approved protected-content version key. |
+| `PRODUCTION_SMOKE_TEACHER_ID` | Opaque production smoke-teacher UUID. |
+| `PRODUCTION_SMOKE_COHORT_ID` | Opaque unarchived smoke cohort UUID. |
+
+### Secrets
+
+| Secret | Purpose |
+| --- | --- |
+| `PRODUCTION_READINESS_SECRET` | Authorizes only the readiness endpoint. |
+
+## `github-pages` environment
 
 `github-pages` is a distinct `main`-limited environment. It contains no
 Supabase variable or secret and receives only the Pages write/OIDC permissions
 needed to publish the verified immutable artifact.
+
+### Variables
+
+None.
+
+### Secrets
+
+None.
 
 ## Exclusions and verification
 

@@ -9,6 +9,28 @@ const read = (name) => readFile(
 const productionProjectRef = "ghohuwwjxgjqnbsauvzq";
 const loadProjectRef = "vadyhuipwbtgbzpeisbn";
 
+const section = (source, heading, level = "##") => {
+  const marker = `${level} ${heading}`;
+  const start = source.indexOf(marker);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const suffix = source.slice(start + marker.length);
+  const next = suffix.search(level === "###" ? /\n#{1,3} / : /\n#{1,2} /);
+  return source.slice(start, next < 0 ? source.length : start + marker.length + next);
+};
+
+const expectScope = (source, expected, prohibited = []) => {
+  for (const name of expected) expect(source).toContain(`\`${name}\``);
+  for (const name of prohibited) expect(source).not.toContain(`\`${name}\``);
+};
+
+const inventory = (source, heading) => {
+  const scope = section(source, heading, "###");
+  const tableStart = scope.indexOf("| ");
+  expect(tableStart).toBeGreaterThanOrEqual(0);
+  const tableEnd = scope.indexOf("\n\n", tableStart);
+  return scope.slice(tableStart, tableEnd < 0 ? scope.length : tableEnd);
+};
+
 const disposableAggregateContract = [
   "exactly one Auth account marked by `course-owner-2026-08-08` and no other Auth account",
   "exactly one unarchived `Production Classroom` cohort owned by that marked teacher, exactly five groups, no other cohort, and closed joining/quest start",
@@ -82,6 +104,62 @@ const assertDisposablePolicy = ({ runbook, backend, checklist, readiness, github
   expect(github).toMatch(/ALLOWED_FRONTEND_ORIGINS.*exactly equal.*PRODUCTION_FRONTEND_ORIGIN/is);
   expect(github).toMatch(/FRONTEND_APP_URL.*VITE_BASE_PATH/is);
   expect(github).toMatch(/STUDENT_LOGIN_SIGNING_SECRET.*production-backend.*never.*frontend/is);
+  const loadEnvironment = section(github, "`load-test` environment");
+  const backendEnvironment = section(github, "`production-backend` environment");
+  const readinessEnvironment = section(github, "`production-readiness` environment");
+  const pagesEnvironment = section(github, "`github-pages` environment");
+  const loadVariables = inventory(loadEnvironment, "Variables");
+  const loadSecrets = inventory(loadEnvironment, "Secrets");
+  const backendVariables = inventory(backendEnvironment, "Variables");
+  const backendSecrets = inventory(backendEnvironment, "Secrets");
+  const readinessVariables = inventory(readinessEnvironment, "Variables");
+  const readinessSecrets = inventory(readinessEnvironment, "Secrets");
+  const pagesSecrets = section(pagesEnvironment, "Secrets", "###");
+  expectScope(loadVariables, ["LOAD_SUPABASE_PROJECT_REF"], [
+    "LOAD_SUPABASE_URL",
+    "LOAD_SUPABASE_PUBLISHABLE_KEY",
+    "LOAD_SUPABASE_SECRET_KEY",
+  ]);
+  expectScope(loadSecrets, [
+    "LOAD_SUPABASE_URL",
+    "LOAD_SUPABASE_PUBLISHABLE_KEY",
+    "LOAD_SUPABASE_SECRET_KEY",
+  ], ["LOAD_SUPABASE_PROJECT_REF"]);
+  expectScope(backendVariables, [
+    "PRODUCTION_SUPABASE_PROJECT_REF",
+    "PRODUCTION_FRONTEND_ORIGIN",
+    "VITE_SUPABASE_URL",
+    "VITE_SUPABASE_PUBLISHABLE_KEY",
+    "VITE_BASE_PATH",
+    "LOAD_SUPABASE_PROJECT_REF",
+  ], ["SUPABASE_ACCESS_TOKEN", "PRODUCTION_SUPABASE_DB_PASSWORD"]);
+  expectScope(backendSecrets, [
+    "SUPABASE_ACCESS_TOKEN",
+    "PRODUCTION_SUPABASE_DB_PASSWORD",
+    "PRODUCTION_SUPABASE_SECRET_KEY",
+    "PRODUCTION_READINESS_SECRET",
+    "ALLOWED_FRONTEND_ORIGINS",
+    "FRONTEND_APP_URL",
+    "JOIN_TOKEN_SIGNING_SECRET",
+    "RECOVERY_TOKEN_SIGNING_SECRET",
+    "STUDENT_LOGIN_SIGNING_SECRET",
+    "PROTECTED_CONTENT_BANK_JSON",
+    "PRODUCTION_TEACHER_EMAIL",
+    "PRODUCTION_TEACHER_PASSWORD",
+  ], ["PRODUCTION_SUPABASE_PROJECT_REF", "PRODUCTION_FRONTEND_ORIGIN"]);
+  expectScope(readinessVariables, [
+    "PRODUCTION_SUPABASE_PROJECT_REF",
+    "PRODUCTION_FRONTEND_ORIGIN",
+    "PRODUCTION_CONTENT_VERSION",
+    "PRODUCTION_SMOKE_TEACHER_ID",
+    "PRODUCTION_SMOKE_COHORT_ID",
+  ], ["PRODUCTION_READINESS_SECRET"]);
+  expectScope(readinessSecrets, ["PRODUCTION_READINESS_SECRET"], [
+    "PRODUCTION_SUPABASE_SECRET_KEY",
+    "SUPABASE_ACCESS_TOKEN",
+  ]);
+  expect(pagesSecrets).toMatch(/none/i);
+  expect(pagesSecrets).not.toMatch(/`[A-Z_]+`/);
 
   for (const importControl of [
     "PROTECTED_CONTENT_BANK_JSON",
