@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { execFileSync } from "node:child_process";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -62,6 +63,51 @@ async function authUserCount(): Promise<number> {
   return users.data.users.length;
 }
 
+function seedCredentiallessProfiles(input: {
+  studentId: string;
+  cohortId: string;
+  groupId: string;
+}) {
+  for (const value of Object.values(input)) {
+    if (!/^[a-f0-9-]{36}$/i.test(value)) {
+      throw new Error("Invalid credentialless integration fixture UUID");
+    }
+  }
+  execFileSync(
+    "docker",
+    [
+      "exec",
+      "-i",
+      process.env.TEST_SUPABASE_DB_CONTAINER ??
+        "supabase_db_future-ready-campus-quest",
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      "-v",
+      "ON_ERROR_STOP=1",
+    ],
+    {
+      input: `
+        insert into public.student_private_profiles (
+          student_id, cohort_id, group_id, real_name
+        ) values (
+          '${input.studentId}', '${input.cohortId}', '${input.groupId}',
+          'Legacy Credentialless Learner'
+        );
+        insert into public.student_public_profiles (
+          student_id, cohort_id, group_id, nickname
+        ) values (
+          '${input.studentId}', '${input.cohortId}', '${input.groupId}',
+          'Legacy Explorer'
+        );
+      `,
+      stdio: ["pipe", "ignore", "pipe"],
+    },
+  );
+}
+
 it("rejects an unknown group code before creating a synthetic Auth user", async () => {
   const before = await authUserCount();
   const response = await fetch(`${apiUrl}/functions/v1/join-cohort`, {
@@ -103,6 +149,24 @@ it("rejects anonymous recovery requests without a browser Origin", async () => {
   expect(response.status).toBe(403);
 });
 
+it("rejects returning student login without a browser Origin", async () => {
+  const response = await fetch(`${apiUrl}/functions/v1/student-login`, {
+    method: "POST",
+    headers: {
+      apikey: anonKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      classAccessId: crypto.randomUUID(),
+      displayName: "Synthetic Learner",
+      passcode: "4826",
+      requestKey: crypto.randomUUID(),
+    }),
+  });
+
+  expect(response.status).toBe(403);
+});
+
 it("completes a valid join against real Auth and database boundaries", async () => {
   const admin = createClient(apiUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -120,6 +184,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
   let cohortId: string | undefined;
   let classAccessId: string | undefined;
   let studentId: string | undefined;
+  let credentiallessStudentId: string | undefined;
 
   try {
     const content = await admin.rpc(
@@ -286,6 +351,40 @@ it("completes a valid join against real Auth and database boundaries", async () 
     );
     expect(deniedReadiness.error).not.toBeNull();
 
+    const credentiallessEmail =
+      `${crypto.randomUUID()}@legacy-student.integration.invalid`;
+    const credentiallessPassword = `${crypto.randomUUID()}-Legacy!`;
+    const credentiallessUser = await admin.auth.admin.createUser({
+      email: credentiallessEmail,
+      password: credentiallessPassword,
+      email_confirm: true,
+    });
+    if (credentiallessUser.error || !credentiallessUser.data.user) {
+      throw credentiallessUser.error;
+    }
+    credentiallessStudentId = credentiallessUser.data.user.id;
+    const credentiallessGroupId = String(opened.data.groups[0].groupId);
+    const credentiallessRole = await admin.from("user_roles").insert({
+      user_id: credentiallessStudentId,
+      role: "student",
+    });
+    if (credentiallessRole.error) throw credentiallessRole.error;
+    seedCredentiallessProfiles({
+      studentId: credentiallessStudentId,
+      cohortId,
+      groupId: credentiallessGroupId,
+    });
+    const credentiallessClient = createClient(apiUrl, anonKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: { Origin: allowedOrigin } },
+    });
+    const credentiallessSession = await credentiallessClient.auth
+      .signInWithPassword({
+        email: credentiallessEmail,
+        password: credentiallessPassword,
+      });
+    if (credentiallessSession.error) throw credentiallessSession.error;
+
     const questionBank = await teacherClient.functions.invoke(
       "teacher-dashboard",
       { body: { cohortId, view: "question-bank" } },
@@ -313,7 +412,9 @@ it("completes a valid join against real Auth and database boundaries", async () 
       .select("real_name,cohort_id,group_id")
       .eq("student_id", studentId)
       .single();
-    if (stored.error) throw stored.error;
+    if (stored.error) {
+      throw new Error(`teacher private profile read: ${stored.error.message}`);
+    }
     expect(stored.data.real_name).toBe("Synthetic Integration Learner");
 
     const targetGroupId = String(opened.data.groups[1].groupId);
@@ -348,7 +449,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
       },
     });
     if (launched.error) throw launched.error;
-    expect(launched.data).toMatchObject({ affected: 1, actionState: "launched" });
+    expect(launched.data).toMatchObject({ affected: 2, actionState: "launched" });
 
     const ensuredAttempt = await studentClient.rpc(
       "ensure_student_quest_attempt",
@@ -357,9 +458,163 @@ it("completes a valid join against real Auth and database boundaries", async () 
       throw ensuredAttempt.error ?? new Error("attempt was not created");
     }
     const attemptId = String(ensuredAttempt.data);
+    const credentiallessAttempt = await credentiallessClient.rpc(
+      "ensure_student_quest_attempt",
+    );
+    if (credentiallessAttempt.error || !credentiallessAttempt.data) {
+      throw credentiallessAttempt.error ??
+        new Error("credentialless attempt was not created");
+    }
+
+    const closed = await teacherClient.functions.invoke(
+      "manage-join-window",
+      {
+        body: {
+          action: "close",
+          cohortId,
+          requestKey: crypto.randomUUID(),
+        },
+      },
+    );
+    if (closed.error) throw closed.error;
+    expect(closed.data).toEqual({ closed: true });
+
+    const usersBeforeLogin = await authUserCount();
+    const loginRequest = async (
+      displayName: string,
+      passcode: string,
+      requestedClassAccessId = classAccessId,
+    ) =>
+      await fetch(`${apiUrl}/functions/v1/student-login`, {
+        method: "POST",
+        headers: {
+          Origin: allowedOrigin,
+          apikey: anonKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          classAccessId: requestedClassAccessId,
+          displayName,
+          passcode,
+          requestKey: crypto.randomUUID(),
+        }),
+      });
+    const wrongName = await loginRequest("Unknown Integration Learner", "4826");
+    const wrongNameBody = await wrongName.text();
+    expect(wrongName.status).toBe(401);
+    expect(wrongName.headers.get("server-timing")).toBeNull();
+    const wrongPasscode = await loginRequest(
+      "Synthetic Integration Learner",
+      "1111",
+    );
+    const wrongPasscodeBody = await wrongPasscode.text();
+    expect(wrongPasscode.status).toBe(401);
+    const wrongClass = await loginRequest(
+      "Synthetic Integration Learner",
+      "4826",
+      crypto.randomUUID(),
+    );
+    const wrongClassBody = await wrongClass.text();
+    expect(wrongClass.status).toBe(401);
+    expect(wrongPasscodeBody).toBe(wrongNameBody);
+    expect(wrongClassBody).toBe(wrongNameBody);
+    expect(wrongNameBody).toBe('{"error":"STUDENT_LOGIN_NOT_ACCEPTED"}');
+
+    const credentiallessLogin = await loginRequest(
+      "Legacy Credentialless Learner",
+      "4826",
+    );
+    expect(credentiallessLogin.status).toBe(401);
+    expect(await credentiallessLogin.text()).toBe(wrongNameBody);
+
+    const returningLogin = await loginRequest(
+      "Synthetic Integration Learner",
+      studentPasscode,
+    );
+    const returningPayload = await returningLogin.json();
+    expect(returningLogin.status, JSON.stringify(returningPayload)).toBe(200);
+    expect(returningLogin.headers.get("server-timing")).toBeNull();
+    expect(returningPayload.identity).toMatchObject({
+      studentId,
+      cohortId,
+      groupId: targetGroupId,
+      groupNumber: 2,
+    });
+    expect(JSON.stringify(returningPayload)).not.toContain(studentPasscode);
+    expect(JSON.stringify(returningPayload)).not.toContain(
+      "Synthetic Integration Learner",
+    );
+    expect(returningPayload).not.toHaveProperty("passcodeSalt");
+    expect(returningPayload).not.toHaveProperty("passcodeHash");
+    const returningStudentClient = createClient(apiUrl, anonKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: { Origin: allowedOrigin } },
+    });
+    const returningSession = await returningStudentClient.auth.setSession({
+      access_token: String(returningPayload.accessToken),
+      refresh_token: String(returningPayload.refreshToken),
+    });
+    if (returningSession.error) throw returningSession.error;
+    expect(returningSession.data.user?.id).toBe(studentId);
+    const returningRole = await returningStudentClient.rpc("current_role");
+    expect(returningRole.error).toBeNull();
+    expect(returningRole.data).toBe("student");
+    const savedAttempt = await returningStudentClient
+      .from("quest_attempts")
+      .select("id,student_id")
+      .eq("id", attemptId)
+      .single();
+    if (savedAttempt.error) throw savedAttempt.error;
+    expect(savedAttempt.data).toMatchObject({
+      id: attemptId,
+      student_id: studentId,
+    });
+    expect(await authUserCount()).toBe(usersBeforeLogin);
+
+    const credentiallessRecovery = await teacherClient.functions.invoke(
+      "teacher-controls",
+      {
+        body: {
+          action: "issue-recovery",
+          cohortId,
+          studentId: credentiallessStudentId,
+          requestKey: crypto.randomUUID(),
+        },
+      },
+    );
+    if (credentiallessRecovery.error) throw credentiallessRecovery.error;
+    const recoveryToken = String(credentiallessRecovery.data.recoveryUrl)
+      .split("/#/recover/")[1];
+    expect(recoveryToken).toMatch(/^[A-Za-z0-9_-]+$/);
+    const redeemedCredentialless = await fetch(
+      `${apiUrl}/functions/v1/recover-student`,
+      {
+        method: "POST",
+        headers: {
+          Origin: allowedOrigin,
+          apikey: anonKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "redeem",
+          recoveryToken,
+          requestKey: crypto.randomUUID(),
+        }),
+      },
+    );
+    const redeemedCredentiallessPayload = await redeemedCredentialless.json();
+    expect(
+      redeemedCredentialless.status,
+      JSON.stringify(redeemedCredentiallessPayload),
+    ).toBe(200);
+    expect(redeemedCredentiallessPayload.studentId).toBe(
+      credentiallessStudentId,
+    );
+    expect(await authUserCount()).toBe(usersBeforeLogin);
+
     let reachedReflection = false;
     for (let step = 0; step < 32; step += 1) {
-      const state = await studentClient
+      const state = await returningStudentClient
         .from("quest_attempts")
         .select("status,current_phase,last_accepted_sequence")
         .eq("id", attemptId)
@@ -369,9 +624,10 @@ it("completes a valid join against real Auth and database boundaries", async () 
         reachedReflection = true;
         break;
       }
-      const next = await studentClient.functions.invoke("get-next-item", {
-        body: { attemptId },
-      });
+      const next = await returningStudentClient.functions.invoke(
+        "get-next-item",
+        { body: { attemptId } },
+      );
       if (next.error) throw next.error;
       const item = next.data.item as {
         assignmentId: string;
@@ -383,7 +639,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
         );
       }
       expect(JSON.stringify(item)).not.toContain("correctOptionIds");
-      const submitted = await studentClient.functions.invoke(
+      const submitted = await returningStudentClient.functions.invoke(
         "submit-response",
         {
           body: {
@@ -400,20 +656,24 @@ it("completes a valid join against real Auth and database boundaries", async () 
     }
     expect(reachedReflection).toBe(true);
 
-    const prompt = await studentClient.functions.invoke("complete-quest", {
-      body: { action: "prompt", attemptId },
-    });
+    const prompt = await returningStudentClient.functions.invoke(
+      "complete-quest",
+      { body: { action: "prompt", attemptId } },
+    );
     if (prompt.error) throw prompt.error;
     expect(prompt.data.prompt.conceptId).toMatch(/^C[1-8]$/);
-    const completed = await studentClient.functions.invoke("complete-quest", {
-      body: {
-        action: "complete",
-        attemptId,
-        idempotencyKey: crypto.randomUUID(),
-        reflectionChoice: "apply",
-        reflectionNote: "Synthetic integration reflection.",
+    const completed = await returningStudentClient.functions.invoke(
+      "complete-quest",
+      {
+        body: {
+          action: "complete",
+          attemptId,
+          idempotencyKey: crypto.randomUUID(),
+          reflectionChoice: "apply",
+          reflectionNote: "Synthetic integration reflection.",
+        },
       },
-    });
+    );
     if (completed.error) throw completed.error;
     expect(completed.data.result.attemptId).toBe(attemptId);
 
@@ -423,6 +683,19 @@ it("completes a valid join against real Auth and database boundaries", async () 
     );
     if (teacherSummary.error) throw teacherSummary.error;
     expect(teacherSummary.data.summary.completed).toBe(1);
+
+    const reopened = await teacherClient.functions.invoke(
+      "manage-join-window",
+      {
+        body: {
+          action: "open",
+          cohortId,
+          requestKey: crypto.randomUUID(),
+        },
+      },
+    );
+    if (reopened.error) throw reopened.error;
+    const reopenedJoinCode = String(reopened.data.groups[0].joinCode);
 
     const disabled = await teacherClient.functions.invoke("teacher-controls", {
       body: {
@@ -445,7 +718,7 @@ it("completes a valid join against real Auth and database boundaries", async () 
       },
       body: JSON.stringify({
         classAccessId,
-        joinCode,
+        joinCode: reopenedJoinCode,
         displayName: "Rejected Disabled Learner",
         passcode: "4828",
         wantsLeader: false,
@@ -488,7 +761,24 @@ it("completes a valid join against real Auth and database boundaries", async () 
       { body: { cohortId, view: "readiness" } },
     );
     if (afterRemoval.error) throw afterRemoval.error;
-    expect(afterRemoval.data.readiness.joined).toBe(0);
+    expect(afterRemoval.data.readiness.joined).toBe(1);
+    const removedLogin = await fetch(`${apiUrl}/functions/v1/student-login`, {
+      method: "POST",
+      headers: {
+        Origin: allowedOrigin,
+        apikey: anonKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        classAccessId,
+        displayName: "Synthetic Integration Learner",
+        passcode: studentPasscode,
+        requestKey: crypto.randomUUID(),
+      }),
+    });
+    expect(removedLogin.status).toBe(401);
+    expect(await removedLogin.text()).toBe(wrongNameBody);
+    expect(await authUserCount()).toBe(usersBeforeLogin);
     const removedStudentCohorts = await studentClient
       .from("cohorts")
       .select("id")
@@ -497,6 +787,9 @@ it("completes a valid join against real Auth and database boundaries", async () 
     expect(removedStudentCohorts.data).toEqual([]);
   } finally {
     if (studentId) await admin.auth.admin.deleteUser(studentId, false);
+    if (credentiallessStudentId) {
+      await admin.auth.admin.deleteUser(credentiallessStudentId, false);
+    }
     if (cohortId) await admin.from("cohorts").delete().eq("id", cohortId);
     await admin.auth.admin.deleteUser(teacherId, false);
   }

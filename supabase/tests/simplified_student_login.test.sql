@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(44);
+select plan(50);
 
 select has_column(
   'public',
@@ -45,6 +45,13 @@ select has_function(
   'finish_student_login',
   array['uuid', 'uuid', 'boolean'],
   'the trusted returning-login finalization RPC exists'
+);
+
+select has_function(
+  'public',
+  'load_student_login_identity',
+  array['uuid'],
+  'the narrow returning-login identity RPC exists'
 );
 
 insert into auth.users (
@@ -210,6 +217,16 @@ select ok(
 );
 
 select ok(
+  not has_function_privilege(
+    'anon', 'public.load_student_login_identity(uuid)', 'execute'
+  )
+  and not has_function_privilege(
+    'authenticated', 'public.load_student_login_identity(uuid)', 'execute'
+  ),
+  'browser users cannot load returning-login identity rows'
+);
+
+select ok(
   has_function_privilege(
     'service_role', 'public.begin_student_login(uuid,text,text,uuid)', 'execute'
   )
@@ -222,6 +239,20 @@ select ok(
     'execute'
   ),
   'only the trusted service boundary receives the new login and join RPCs'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role', 'public.load_student_login_identity(uuid)', 'execute'
+  )
+  and not has_table_privilege(
+    'service_role', 'public.student_private_profiles', 'select'
+  )
+  and not has_table_privilege(
+    'service_role', 'public.student_public_profiles', 'select'
+  )
+  and not has_table_privilege('service_role', 'public.groups', 'select'),
+  'the service role gets only the narrow identity RPC, not broad profile reads'
 );
 
 select ok(
@@ -631,6 +662,59 @@ select throws_ok(
   'P0001', 'LOGIN_NOT_AVAILABLE',
   'the 91st shared-network login attempt is rate limited'
 );
+
+select results_eq(
+  $$ select student_id, cohort_id, group_number, nickname
+     from public.load_student_login_identity(
+       '30000000-0000-4000-8000-000000000012'
+     ) $$,
+  $$ values (
+       '30000000-0000-4000-8000-000000000012'::uuid,
+       '40000000-0000-4000-8000-000000000001'::uuid,
+       1::smallint,
+       'Explorer 1'::text
+     ) $$,
+  'the trusted identity RPC returns one active student in its own class'
+);
+
+update public.student_private_profiles
+set removed_at = now()
+where student_id = '30000000-0000-4000-8000-000000000012';
+
+select is_empty(
+  $$ select * from public.load_student_login_identity(
+       '30000000-0000-4000-8000-000000000012'
+     ) $$,
+  'the trusted identity RPC excludes removed students'
+);
+
+update public.student_private_profiles
+set removed_at = null
+where student_id = '30000000-0000-4000-8000-000000000012';
+
+update public.student_public_profiles
+set cohort_id = '40000000-0000-4000-8000-000000000010',
+    group_id = (
+      select id from public.groups
+      where cohort_id = '40000000-0000-4000-8000-000000000010'
+    )
+where student_id = '30000000-0000-4000-8000-000000000012';
+
+select is_empty(
+  $$ select * from public.load_student_login_identity(
+       '30000000-0000-4000-8000-000000000012'
+     ) $$,
+  'the trusted identity RPC rejects cross-class profile mismatches'
+);
+
+update public.student_public_profiles
+set cohort_id = '40000000-0000-4000-8000-000000000001',
+    group_id = (
+      select id from public.groups
+      where cohort_id = '40000000-0000-4000-8000-000000000001'
+        and group_number = 1
+    )
+where student_id = '30000000-0000-4000-8000-000000000012';
 
 set local role authenticated;
 select set_config(
