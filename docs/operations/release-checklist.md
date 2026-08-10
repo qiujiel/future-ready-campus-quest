@@ -113,9 +113,10 @@ it was not required. A blank or assumed `N/A` leaves the item unchecked.
   zero duplicate responses, zero authorized failures, zero accepted unauthorized
   calls, one-time join p95 at or below 7 seconds (at most 7 seconds), response p95 below 1.5 seconds, and dashboard p95 below 2.5 seconds. Record the accepted
   `6,882.59 ms overall` and `1,660.52 ms preflight` one-time initial-entry
-  evidence. Record the measured initial-join latency as a known limitation; do
-  not weaken authentication, validation, rate/capacity controls, replay
-  protection, RLS, isolation, or teacher authorization.
+  evidence. The evidence must come from a new complete live-load run from the
+  exact current approved `main` SHA. Record the measured initial-join latency as
+  a known limitation; do not weaken authentication, validation, rate/capacity
+  controls, replay protection, RLS, isolation, or teacher authorization.
 - [ ] After joining closes, five returning name/passcode logins restore the
   same five student/group identities with zero failures and create zero new
   Auth users.

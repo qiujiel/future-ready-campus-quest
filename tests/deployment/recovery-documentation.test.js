@@ -266,6 +266,10 @@ const assertBackendReleasePolicy = (backend) => {
     "separately designed and validated evidence method",
     "20260810001100_class_scoped_join_preparation.sql",
     "owner-plus-service join/login RPC ACL allowlists",
+    "historical and superseded",
+    "must not be used as evidence for this release",
+    "new complete live-load run",
+    "exact current approved `main` SHA",
   ]);
   assertPatterns(backend, [
     /only accepted recovery path[\s\S]*verified Free-plan encrypted logical/is,
@@ -275,6 +279,8 @@ const assertBackendReleasePolicy = (backend) => {
     /final accepted overall\/preflight p95[\s\S]*6,882\.59[\s\S]*1,660\.52/is,
     /6,882\.59[\s\S]*owner-approved one-time initial-entry limitation/is,
     /zero incorrect group assignments[\s\S]*zero duplicate student\s+identities/is,
+    /Protected Pages run\s+`31243468453`[\s\S]*historical and superseded[\s\S]*must not be used as evidence for this release/is,
+    /new complete live-load run[\s\S]*exact current approved `main` SHA/is,
   ]);
   rejectPatterns(backend, [
     /either[^\n]*provider-managed[^\n]*or/i,
@@ -403,6 +409,8 @@ const assertChecklistPolicy = (checklist) => {
     "1,660.52 ms preflight",
     "response p95 below 1.5 seconds",
     "dashboard p95 below 2.5 seconds",
+    "new complete live-load run",
+    "exact current approved `main` SHA",
     "zero incorrect group assignments",
     "zero duplicate student identities",
     "20260810001100_class_scoped_join_preparation.sql",
@@ -420,6 +428,7 @@ const assertChecklistPolicy = (checklist) => {
     /Internal manifest-to-release binding review 2[^\n]*Reviewer name:[^\n]*UTC:[^\n]*Result:/i,
     /full approved 40-character source SHA[\s\S]*source project ref[\s\S]*2\.110\.0[\s\S]*component-completion flags/is,
     /source counts[\s\S]*target counts[\s\S]*exactly equal/is,
+    /new complete live-load run[\s\S]*exact current approved `main` SHA/is,
   ]);
   rejectPatterns(checklist, [
     /Backup creation time\/recovery-point time/i,
@@ -644,6 +653,10 @@ describe("Free-plan recovery operations", () => {
         "separately held release record",
         "Any later plan change",
         "separately designed and validated evidence method",
+        "historical and superseded",
+        "must not be used as evidence for this release",
+        "new complete live-load run",
+        "exact current approved `main` SHA",
       ].map((phrase) => [assertBackendReleasePolicy, documents.backend, phrase]),
       ...recoveryInputs.map((phrase) => [
         assertGitHubPolicy,
@@ -699,6 +712,8 @@ describe("Free-plan recovery operations", () => {
         "two distinct named people",
         "Any unchecked item means **HOLD**",
         "No operator, owner, approver, or reviewer may waive",
+        "new complete live-load run",
+        "exact current approved `main` SHA",
         ...remoteApprovalLabels,
       ].map((phrase) => [assertChecklistPolicy, documents.checklist, phrase]),
       ...[
