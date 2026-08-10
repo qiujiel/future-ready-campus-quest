@@ -40,6 +40,17 @@ export interface JoinCohortOutput extends SessionTokens {
   identity: StudentIdentity;
 }
 
+export interface StudentLoginInput {
+  classAccessId: string;
+  displayName: string;
+  passcode: string;
+  requestKey: string;
+}
+
+export interface StudentLoginOutput extends SessionTokens {
+  identity: StudentIdentity;
+}
+
 export interface PublicGroupIdentity {
   groupId: string;
   groupNumber: number;
@@ -267,6 +278,7 @@ export type TeacherStudentActivityStatus =
 export interface TeacherRosterStudent {
   studentId: string;
   displayName: string;
+  isGroupLeader: boolean;
   joinedAt: string;
   lastActiveAt: string | null;
   activityStatus: TeacherStudentActivityStatus;

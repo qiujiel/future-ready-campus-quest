@@ -5,6 +5,8 @@ import type {
   ManageJoinWindowInput,
   RecoverStudentInput,
   RecoverStudentOutput,
+  StudentLoginInput,
+  StudentLoginOutput,
   TeacherCohortListItem,
 } from "./contracts";
 import { getSupabaseClient } from "./supabase";
@@ -29,6 +31,7 @@ export interface AuthGateway {
   ): Promise<JoinWindowReceipt>;
   closeJoinWindow?(cohortId: string, requestKey: string): Promise<void>;
   joinCohort(input: JoinCohortInput): Promise<JoinCohortOutput>;
+  loginStudent?(input: StudentLoginInput): Promise<StudentLoginOutput>;
   recoverStudent(input: RecoverStudentInput): Promise<RecoverStudentOutput>;
 }
 

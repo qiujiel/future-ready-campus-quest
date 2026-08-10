@@ -198,6 +198,7 @@ const readiness = {
         {
           studentId: "20000000-0000-4000-8000-000000000001",
           displayName: "Synthetic Learner One",
+          isGroupLeader: true,
           joinedAt: "2026-08-06T01:01:00.000Z",
           lastActiveAt: null,
           activityStatus: "joined" as const,
@@ -206,6 +207,7 @@ const readiness = {
         {
           studentId: "20000000-0000-4000-8000-000000000002",
           displayName: "Synthetic Learner Two",
+          isGroupLeader: false,
           joinedAt: "2026-08-06T01:02:00.000Z",
           lastActiveAt: "2026-08-06T01:04:00.000Z",
           activityStatus: "incomplete" as const,
