@@ -1,5 +1,5 @@
 const DEDICATED_LOAD_PROJECT_REF = "vadyhuipwbtgbzpeisbn";
-const REQUIRED_GATE_D_MIGRATION = "20260810000900";
+const REQUIRED_GATE_D_MIGRATION = "20260810001000";
 
 function required(environment, name) {
   const value = environment[name]?.trim();

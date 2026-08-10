@@ -283,6 +283,9 @@ export function validateProductionFunctionDeploymentScript(script) {
 }
 
 export function validateCanonicalBackendWorkflowSource(source) {
+  if (typeof source !== "string" || source.length === 0) {
+    fail("canonical backend workflow source is required");
+  }
   const digest = createHash("sha256").update(source).digest("hex");
   if (digest !== CANONICAL_BACKEND_WORKFLOW_SHA256) {
     fail("canonical backend workflow source is required");
@@ -884,9 +887,7 @@ export function validateDeploymentConfiguration({
   const rollbackPrepare = rollback?.jobs?.prepare;
   const rollbackDeploy = rollback?.jobs?.deploy;
 
-  if (backendSource !== undefined) {
-    validateCanonicalBackendWorkflowSource(backendSource);
-  }
+  validateCanonicalBackendWorkflowSource(backendSource);
   requireCiSecretScan(ci);
   requireStudentLoginSecretIsolation({ backend, pages });
   requireInputs(backend, ["expected_sha", "production_project_ref"]);

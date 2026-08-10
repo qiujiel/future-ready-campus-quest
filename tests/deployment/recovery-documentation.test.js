@@ -125,7 +125,7 @@ const assertRunbookPolicy = (runbook) => {
     "archive creation/completion time",
     "quiesced recovery point",
     "approved full 40-character source SHA",
-    "20260810000900",
+    "20260810001000",
     "obtain a new",
     "Obtain separate approval to create",
     "After separate restore approval",
@@ -264,8 +264,8 @@ const assertBackendReleasePolicy = (backend) => {
     "attests that no write occurred after the recovery",
     "Any later plan change",
     "separately designed and validated evidence method",
-    "20260810000900_simplified_login_security_readiness.sql",
-    "service-only join/login RPC ownership",
+    "20260810001000_exact_login_acl_readiness.sql",
+    "owner-plus-service join/login RPC ACL allowlists",
   ]);
   assertPatterns(backend, [
     /only accepted recovery path[\s\S]*verified Free-plan encrypted logical/is,
@@ -442,7 +442,7 @@ const assertReadinessReviewPolicy = (review) => {
     "smoke teacher/cohort fixtures",
     "Free-plan pause/availability",
     "complete every item and signature",
-    "20260810000900",
+    "20260810001000",
   ]);
 };
 

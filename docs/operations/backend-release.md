@@ -9,7 +9,7 @@ Reading this document or merging its workflow does not authorize a deployment.
 1. Complete the configuration inventory in `github-environments.md`.
 2. Confirm the release commit is on `main`, signed off by the release owner,
    and contains the reviewed simplified-login migration series through
-   `20260810000700`.
+   `20260810001000`.
 3. For every normal upgrade, this project selected Supabase Free plan, so the
    only accepted recovery path is the verified Free-plan encrypted logical
    package in `free-plan-recovery.md`, with both custody copies read back and
@@ -113,11 +113,12 @@ Expected deploy set:
 For the simplified-login upgrade, joining remains closed before the backup.
 The pending migration list must contain the reviewed ordered series beginning
 with `20260810000100_simplified_student_login.sql` and ending with
-`20260810000900_simplified_login_security_readiness.sql`. The final readiness
+`20260810001000_exact_login_acl_readiness.sql`. The final readiness
 migration verifies the complete chain, class-access column and unique index,
 private credential/attempt table ownership, RLS and browser ACLs, plus the exact
-service-only join/login RPC ownership, definer, search-path, and ACL contract. Configure the
-encrypted student-login signer only after migrations succeed, then deploy
+owner-only private-table and owner-plus-service join/login RPC ACL allowlists,
+including grant-option state. Configure the encrypted student-login signer only
+after migrations succeed, then deploy
 `join-cohort`, `student-login`, `manage-join-window`, `teacher-controls`, and
 `teacher-dashboard` with the rest of the exact Function set from that same
 commit. Publish the matching frontend only after backend readiness succeeds.

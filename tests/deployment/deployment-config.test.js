@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   CANONICAL_PRODUCTION_FUNCTION_DEPLOYMENT_SCRIPT,
@@ -15,6 +17,10 @@ const pinnedSetupNode =
 const productionProjectRef = "ghohuwwjxgjqnbsauvzq";
 const loadProjectRef = "vadyhuipwbtgbzpeisbn";
 const productionUrl = `https://${productionProjectRef}.supabase.co`;
+const canonicalBackendSource = readFileSync(
+  resolve(process.cwd(), ".github", "workflows", "backend-production.yml"),
+  "utf8",
+);
 const identityScript = [
   "if ! printf '%s' \"$EXPECTED_SHA\" | grep -Eq '^[0-9a-f]{40}$'; then",
   "  echo \"expected_sha must be a full lowercase commit SHA\" >&2",
@@ -46,6 +52,7 @@ const identityStep = (configuration) =>
 
 function validConfiguration() {
   return {
+    backendSource: canonicalBackendSource,
     ci: {
       permissions: { contents: "read", "pull-requests": "read" },
       jobs: {
@@ -376,6 +383,18 @@ describe("deployment workflow boundaries", () => {
   it("accepts the canonical production Function deployment entrypoint", () => {
     expect(() => validateDeploymentConfiguration(validConfiguration())).not.toThrow();
   });
+
+  it.each([undefined, ""])(
+    "rejects a missing or empty raw backend workflow source: %s",
+    (backendSource) => {
+      const configuration = validConfiguration();
+      configuration.backendSource = backendSource;
+
+      expect(() => validateDeploymentConfiguration(configuration)).toThrow(
+        /canonical backend workflow source/i,
+      );
+    },
+  );
 
   it.each([
     [

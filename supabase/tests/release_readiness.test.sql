@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 create extension if not exists pg_cron with schema extensions;
 
-select plan(31);
+select plan(35);
 
 create role readiness_security_owner;
 grant usage, create on schema private to readiness_security_owner;
@@ -16,7 +16,7 @@ select is(
     '00000000-0000-0000-0000-000000000001'::uuid,
     '00000000-0000-0000-0000-000000000002'::uuid
   )->>'latestGateDMigration',
-  '20260810000900',
+  '20260810001000',
   'readiness records the complete simplified-login deployment migration set'
 );
 
@@ -227,6 +227,39 @@ select is(
 
 rollback to savepoint login_table_anon_acl_drift;
 
+savepoint login_table_custom_acl_drift;
+
+grant select on private.student_login_credentials
+  to readiness_security_owner;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness rejects custom-role table grants'
+);
+
+rollback to savepoint login_table_custom_acl_drift;
+
+savepoint login_table_service_acl_drift;
+
+grant select on private.student_login_attempts to service_role;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness rejects service-role table grants'
+);
+
+rollback to savepoint login_table_service_acl_drift;
+
 savepoint login_rpc_invoker_drift;
 
 alter function public.begin_student_login(uuid, text, text, uuid)
@@ -311,6 +344,40 @@ select is(
 );
 
 rollback to savepoint login_rpc_service_acl_drift;
+
+savepoint login_rpc_custom_acl_drift;
+
+grant execute on function public.begin_student_login(uuid, text, text, uuid)
+  to readiness_security_owner;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness rejects custom-role RPC grants'
+);
+
+rollback to savepoint login_rpc_custom_acl_drift;
+
+savepoint login_rpc_grant_option_drift;
+
+grant execute on function public.begin_student_login(uuid, text, text, uuid)
+  to service_role with grant option;
+
+select is(
+  public.get_production_readiness_report(
+    'missing-version',
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    '00000000-0000-0000-0000-000000000002'::uuid
+  )->>'studentLoginSecurityReady',
+  'false',
+  'student-login security readiness rejects RPC grant options'
+);
+
+rollback to savepoint login_rpc_grant_option_drift;
 
 select is(
   public.get_production_readiness_report(
