@@ -99,7 +99,7 @@ begin
     where not exists (
       select 1 from public.groups as groups
       where groups.id = receipts.group_id
-        and groups.cohort_id = canonical_cohort_id
+        and groups.cohort_id <> canonical_cohort_id
     )
   ) then
     raise exception using

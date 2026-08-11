@@ -97,14 +97,6 @@ select student_id, cohort_id, group_id, 'Explorer 1'
 from public.student_private_profiles
 where student_id = 'c2000000-0000-4000-8000-000000000001';
 
-update public.groups
-set display_name = 'Approved identity residue',
-    identity_editor_id = 'c2000000-0000-4000-8000-000000000001',
-    identity_locked_at = now(),
-    image_object_path = 'group-images/approved-residue.png'
-where cohort_id = 'c3000000-0000-4000-8000-000000000001'
-  and group_number = 1;
-
 insert into private.group_identity_receipts (
   actor_user_id, request_key, input_payload, group_id,
   group_number, display_name, image_object_path, locked_at
@@ -116,7 +108,7 @@ select
   groups.id, groups.group_number, groups.display_name,
   groups.image_object_path, groups.identity_locked_at
 from public.groups as groups
-where groups.cohort_id = 'c3000000-0000-4000-8000-000000000001'
+where groups.cohort_id = 'c3000000-0000-4000-8000-000000000002'
   and groups.group_number = 1;
 
 insert into public.cohort_join_windows (
@@ -209,6 +201,31 @@ select 'RESET_ROLLBACK_COUNTS=' || concat_ws(',',
 
 delete from public.audit_events where event_type = 'reset.mismatch';
 
+savepoint before_canonical_receipt_reset;
+update private.group_identity_receipts
+set group_id = (
+  select groups.id
+  from public.groups as groups
+  where groups.cohort_id = 'c3000000-0000-4000-8000-000000000001'
+    and groups.group_number = 1
+);
+\\set ON_ERROR_STOP off
+${resetSql}
+\\set reset_canonical_receipt_state :SQLSTATE
+rollback to savepoint before_canonical_receipt_reset;
+\\set ON_ERROR_STOP on
+
+select 'RESET_CANONICAL_RECEIPT_STATE=' || :'reset_canonical_receipt_state';
+
+savepoint before_approved_shape_reset;
+\\set ON_ERROR_STOP off
+${resetSql}
+\\set reset_approved_shape_state :SQLSTATE
+rollback to savepoint before_approved_shape_reset;
+\\set ON_ERROR_STOP on
+
+select 'RESET_APPROVED_SHAPE_STATE=' || :'reset_approved_shape_state';
+
 ${resetSql}
 
 select 'RESET_FINAL=' || jsonb_build_object(
@@ -254,6 +271,8 @@ rollback;
 
   expect(line(output, "RESET_MISMATCH_STATE=")).toBe("P0001");
   expect(line(output, "RESET_ROLLBACK_COUNTS=")).toBe("2,2,4,24,8,1");
+  expect(line(output, "RESET_CANONICAL_RECEIPT_STATE=")).toBe("P0001");
+  expect(line(output, "RESET_APPROVED_SHAPE_STATE=")).toBe("00000");
   expect(JSON.parse(line(output, "RESET_FINAL="))).toEqual({
     authUsers: 1,
     roles: 1,

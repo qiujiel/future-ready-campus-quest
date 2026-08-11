@@ -139,11 +139,11 @@ const safeDiagnostic = Object.freeze({
   canonical_cohort_count: 1,
   canonical_cohort_group_count: 5,
   canonical_group_number_shape_ready: true,
-  noncanonical_group_identity_count: 1,
-  noncanonical_group_identity_without_receipt_count: 1,
+  noncanonical_group_identity_count: 0,
+  noncanonical_group_identity_without_receipt_count: 0,
   group_identity_receipt_count: 1,
-  group_identity_receipt_outside_canonical_count: 0,
-  group_identity_receipt_scope_ready: true,
+  group_identity_receipt_outside_canonical_count: 1,
+  group_identity_receipt_scope_ready: false,
 });
 
 const expectedDiagnosticReceipt = Object.freeze({
@@ -156,11 +156,11 @@ const expectedDiagnosticReceipt = Object.freeze({
   canonicalCohortCount: 1,
   canonicalCohortGroupCount: 5,
   canonicalGroupNumberShapeReady: true,
-  noncanonicalGroupIdentityCount: 1,
-  noncanonicalGroupIdentityWithoutReceiptCount: 1,
+  noncanonicalGroupIdentityCount: 0,
+  noncanonicalGroupIdentityWithoutReceiptCount: 0,
   groupIdentityReceiptCount: 1,
-  groupIdentityReceiptOutsideCanonicalCount: 0,
-  groupIdentityReceiptScopeReady: true,
+  groupIdentityReceiptOutsideCanonicalCount: 1,
+  groupIdentityReceiptScopeReady: false,
 });
 
 function response(body, { status = 201, raw = false } = {}) {
