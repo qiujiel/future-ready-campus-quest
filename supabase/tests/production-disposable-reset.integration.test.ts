@@ -168,6 +168,12 @@ values ('c8000000-0000-4000-8000-000000000001', 'c2000000-0000-4000-8000-0000000
 it("executes the exact atomic reset against the pre-August-10 schema boundary", () => {
   const output = psql(`
 begin;
+truncate table
+  auth.users,
+  public.audit_events,
+  private.join_attempts,
+  storage.objects
+cascade;
 drop table if exists private.student_login_attempts cascade;
 drop table if exists private.student_login_credentials cascade;
 alter table public.cohorts drop column if exists student_access_id cascade;
