@@ -4,7 +4,34 @@ const PRODUCTION_URL = `https://${PRODUCTION_PROJECT_REF}.supabase.co`;
 const TEACHER_MARKER = "course-owner-2026-08-08";
 const FAILURE_MESSAGE = "Disposable production preflight failed";
 
-const DATABASE_QUERY = `with marked_teachers as (
+const OPTIONAL_LOGIN_TABLES = Object.freeze({
+  studentCredentialCount: Object.freeze({
+    presenceField: "student_login_credentials_present",
+    relation: "private.student_login_credentials",
+    aggregateField: "student_credential_count",
+  }),
+  studentLoginAttemptCount: Object.freeze({
+    presenceField: "student_login_attempts_present",
+    relation: "private.student_login_attempts",
+    aggregateField: "student_login_attempt_count",
+  }),
+});
+
+const OPTIONAL_LOGIN_TABLE_PRESENCE_QUERY = `select
+  to_regclass('private.student_login_credentials') is not null
+    as student_login_credentials_present,
+  to_regclass('private.student_login_attempts') is not null
+    as student_login_attempts_present`;
+
+function optionalLoginTableCount(optionalLoginTables, name) {
+  const table = OPTIONAL_LOGIN_TABLES[name];
+  return optionalLoginTables[name]
+    ? `(select count(*)::int from ${table.relation}) as ${table.aggregateField}`
+    : `0::int as ${table.aggregateField}`;
+}
+
+function databaseQuery(optionalLoginTables) {
+  return `with marked_teachers as (
   select users.id
   from auth.users as users
   where users.raw_app_meta_data ->> 'bootstrapAuthorizationId' = $1
@@ -55,11 +82,11 @@ select
   (select count(*)::int from public.quest_results) as quest_result_count,
   (select count(*)::int from public.team_score_snapshots) as team_score_snapshot_count,
   (select count(*)::int from public.student_join_requests) as student_join_request_count,
-  (select count(*)::int from private.student_login_credentials) as student_credential_count,
+  ${optionalLoginTableCount(optionalLoginTables, "studentCredentialCount")},
   (select count(*)::int from auth.sessions as sessions
     where sessions.user_id not in (select id from marked_teachers))
     as non_teacher_session_count,
-  (select count(*)::int from private.student_login_attempts) as student_login_attempt_count,
+  ${optionalLoginTableCount(optionalLoginTables, "studentLoginAttemptCount")},
   (select count(*)::int from private.join_attempts) as join_attempt_count,
   (select count(*)::int from private.session_recovery_tokens) as recovery_attempt_count,
   (select count(*)::int from private.group_identity_receipts) as group_identity_receipt_count,
@@ -73,6 +100,7 @@ select
     as teacher_roster_control_receipt_count,
   (select count(*)::int from storage.objects where bucket_id = 'group-images')
     as group_image_object_count`;
+}
 
 const DATABASE_FIELDS = {
   markedTeacherCount: "marked_teacher_count",
@@ -201,8 +229,24 @@ function databaseSnapshot(body) {
   ]));
 }
 
-export async function fetchDisposableStateSnapshot(configuration, fetchImpl = globalThis.fetch) {
-  if (!hasExpectedIdentity(configuration) || typeof fetchImpl !== "function") fail();
+function optionalLoginTablePresence(body) {
+  const fields = Object.values(OPTIONAL_LOGIN_TABLES).map(({ presenceField }) => presenceField);
+  if (
+    !Array.isArray(body) || body.length !== 1 || !body[0] ||
+    typeof body[0] !== "object" || Array.isArray(body[0]) ||
+    Object.keys(body[0]).length !== fields.length ||
+    !fields.every((field) => Object.hasOwn(body[0], field))
+  ) fail();
+  return Object.freeze(Object.fromEntries(Object.entries(OPTIONAL_LOGIN_TABLES).map(([
+    name,
+    { presenceField },
+  ]) => {
+    if (typeof body[0][presenceField] !== "boolean") fail();
+    return [name, body[0][presenceField]];
+  })));
+}
+
+async function managementDatabaseQuery(configuration, fetchImpl, query, parameters) {
   let response;
   try {
     response = await fetchImpl(
@@ -213,11 +257,7 @@ export async function fetchDisposableStateSnapshot(configuration, fetchImpl = gl
           authorization: `Bearer ${configuration.accessToken}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({
-          query: DATABASE_QUERY,
-          parameters: [TEACHER_MARKER, "teacher", "Production Classroom"],
-          read_only: true,
-        }),
+        body: JSON.stringify({ query, parameters, read_only: true }),
       },
     );
   } catch {
@@ -225,7 +265,27 @@ export async function fetchDisposableStateSnapshot(configuration, fetchImpl = gl
   }
   if (!response?.ok) fail();
   try {
-    return Object.freeze(databaseSnapshot(await response.json()));
+    return await response.json();
+  } catch {
+    fail();
+  }
+}
+
+export async function fetchDisposableStateSnapshot(configuration, fetchImpl = globalThis.fetch) {
+  if (!hasExpectedIdentity(configuration) || typeof fetchImpl !== "function") fail();
+  const optionalLoginTables = optionalLoginTablePresence(await managementDatabaseQuery(
+    configuration,
+    fetchImpl,
+    OPTIONAL_LOGIN_TABLE_PRESENCE_QUERY,
+    [],
+  ));
+  try {
+    return Object.freeze(databaseSnapshot(await managementDatabaseQuery(
+      configuration,
+      fetchImpl,
+      databaseQuery(optionalLoginTables),
+      [TEACHER_MARKER, "teacher", "Production Classroom"],
+    )));
   } catch (error) {
     if (error?.message === FAILURE_MESSAGE) throw error;
     fail();
