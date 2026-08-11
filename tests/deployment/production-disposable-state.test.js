@@ -134,6 +134,26 @@ function providerRow(snapshot = disposable) {
   };
 }
 
+function optionalLoginTablePresence({
+  studentCredentials = true,
+  studentLoginAttempts = true,
+} = {}) {
+  return {
+    student_login_credentials_present: studentCredentials,
+    student_login_attempts_present: studentLoginAttempts,
+  };
+}
+
+function schemaAwareAggregateFetch(snapshot = disposable) {
+  let requestCount = 0;
+  return async () => {
+    requestCount += 1;
+    return response(requestCount === 1
+      ? [optionalLoginTablePresence()]
+      : [providerRow(snapshot)]);
+  };
+}
+
 function expectRedactedFailure(action) {
   try {
     action();
@@ -183,7 +203,7 @@ describe("disposable production state", () => {
     const stderr = [];
 
     await expect(runDisposableStatePreflight(environment, {
-      fetchImpl: async () => response([providerRow(protectedDisposable)]),
+      fetchImpl: schemaAwareAggregateFetch(protectedDisposable),
       writeStdout: (value) => stdout.push(value),
       writeStderr: (value) => stderr.push(value),
     })).rejects.toThrow("Disposable production preflight failed");
@@ -194,7 +214,7 @@ describe("disposable production state", () => {
 
   it("preserves the generic classification failure when receipt output fails", async () => {
     await expect(runDisposableStatePreflight(environment, {
-      fetchImpl: async () => response([providerRow(protectedDisposable)]),
+      fetchImpl: schemaAwareAggregateFetch(protectedDisposable),
       writeStdout: () => {},
       writeStderr: () => { throw new Error("stderr-unavailable"); },
     })).rejects.toThrow("Disposable production preflight failed");
@@ -204,7 +224,7 @@ describe("disposable production state", () => {
     const stderr = [];
 
     await expect(runDisposableStatePreflight(environment, {
-      fetchImpl: async () => response([providerRow()]),
+      fetchImpl: schemaAwareAggregateFetch(),
       writeStdout: () => { throw new Error("stdout-unavailable"); },
       writeStderr: (value) => stderr.push(value),
     })).rejects.toThrow("stdout-unavailable");
@@ -312,29 +332,126 @@ describe("disposable production state", () => {
     }));
   });
 
-  it("reads one aggregate snapshot through the read-only production Management API", async () => {
+  it("reads validated optional table presence before one aggregate snapshot", async () => {
     const requests = [];
     const fetchImpl = async (url, options) => {
       requests.push({ url: String(url), options });
-      return response([providerRow()]);
+      return response(requests.length === 1
+        ? [optionalLoginTablePresence()]
+        : [providerRow()]);
     };
 
     await expect(fetchDisposableStateSnapshot(configuration, fetchImpl))
       .resolves.toEqual(disposable);
-    expect(requests).toHaveLength(1);
+    expect(requests).toHaveLength(2);
     expect(requests[0].url).toBe(
       `https://api.supabase.com/v1/projects/${productionRef}/database/query`,
     );
-    const payload = JSON.parse(requests[0].options.body);
-    expect(payload).toMatchObject({
+    const presencePayload = JSON.parse(requests[0].options.body);
+    const aggregatePayload = JSON.parse(requests[1].options.body);
+    expect(presencePayload).toMatchObject({ read_only: true, parameters: [] });
+    expect(presencePayload.query).toContain("to_regclass('private.student_login_credentials')");
+    expect(presencePayload.query).toContain("to_regclass('private.student_login_attempts')");
+    expect(aggregatePayload).toMatchObject({
       read_only: true,
       parameters: ["course-owner-2026-08-08", "teacher", "Production Classroom"],
     });
-    expect(payload.query).toContain("from auth.sessions as sessions");
-    expect(payload.query).toContain(
+    expect(aggregatePayload.query).toContain("from auth.sessions as sessions");
+    expect(aggregatePayload.query).toContain(
       "where sessions.user_id not in (select id from marked_teachers)",
     );
-    expect(JSON.stringify(requests[0].options.body)).not.toContain(accessToken);
+    expect(JSON.stringify(requests.map(({ options }) => options.body))).not.toContain(accessToken);
+  });
+
+  it("treats validated absent optional login tables as zero without querying them", async () => {
+    const requests = [];
+    const fetchImpl = async (url, options) => {
+      requests.push({ url: String(url), options });
+      return response(requests.length === 1
+        ? [optionalLoginTablePresence({
+          studentCredentials: false,
+          studentLoginAttempts: false,
+        })]
+        : [providerRow()]);
+    };
+
+    await expect(fetchDisposableStateSnapshot(configuration, fetchImpl))
+      .resolves.toEqual(disposable);
+
+    expect(requests).toHaveLength(2);
+    const presencePayload = JSON.parse(requests[0].options.body);
+    const aggregatePayload = JSON.parse(requests[1].options.body);
+    expect(presencePayload).toMatchObject({ read_only: true, parameters: [] });
+    expect(presencePayload.query).toContain("to_regclass('private.student_login_credentials')");
+    expect(presencePayload.query).toContain("to_regclass('private.student_login_attempts')");
+    expect(aggregatePayload.query).toContain("0::int as student_credential_count");
+    expect(aggregatePayload.query).toContain("0::int as student_login_attempt_count");
+    expect(aggregatePayload.query).not.toContain("from private.student_login_credentials");
+    expect(aggregatePayload.query).not.toContain("from private.student_login_attempts");
+  });
+
+  it("counts each validated present optional login table exactly", async () => {
+    let aggregateQuery;
+    const fetchImpl = async (_url, options) => {
+      const { query } = JSON.parse(options.body);
+      if (query.includes("to_regclass")) {
+        return response([optionalLoginTablePresence()]);
+      }
+      aggregateQuery = query;
+      return response([providerRow({
+        ...disposable,
+        studentCredentialCount: 2,
+        studentLoginAttemptCount: 3,
+      })]);
+    };
+
+    await expect(fetchDisposableStateSnapshot(configuration, fetchImpl)).resolves.toEqual({
+      ...disposable,
+      studentCredentialCount: 2,
+      studentLoginAttemptCount: 3,
+    });
+    expect(aggregateQuery.match(/from private\.student_login_credentials/g)).toHaveLength(1);
+    expect(aggregateQuery.match(/from private\.student_login_attempts/g)).toHaveLength(1);
+  });
+
+  it("counts a present optional credential table while zeroing an absent login attempt table", async () => {
+    let aggregateQuery;
+    const fetchImpl = async (_url, options) => {
+      const { query } = JSON.parse(options.body);
+      if (query.includes("to_regclass")) {
+        return response([optionalLoginTablePresence({ studentLoginAttempts: false })]);
+      }
+      aggregateQuery = query;
+      return response([providerRow({
+        ...disposable,
+        studentCredentialCount: 4,
+      })]);
+    };
+
+    await expect(fetchDisposableStateSnapshot(configuration, fetchImpl)).resolves.toEqual({
+      ...disposable,
+      studentCredentialCount: 4,
+    });
+    expect(aggregateQuery.match(/from private\.student_login_credentials/g)).toHaveLength(1);
+    expect(aggregateQuery).toContain("0::int as student_login_attempt_count");
+    expect(aggregateQuery).not.toContain("from private.student_login_attempts");
+  });
+
+  it("fails closed on an ambiguous optional login table presence result", async () => {
+    let requestCount = 0;
+
+    await expectRedactedAsyncFailure(() => fetchDisposableStateSnapshot(
+      configuration,
+      async () => {
+        requestCount += 1;
+        return response([{
+          ...optionalLoginTablePresence(),
+          unexpected_optional_relation: true,
+        }]);
+      },
+    ));
+
+    expect(requestCount).toBe(1);
   });
 
   it("rejects malformed Management API aggregate responses without details", async () => {
