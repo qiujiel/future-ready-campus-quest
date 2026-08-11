@@ -125,6 +125,14 @@ function aggregate(value) {
   return value;
 }
 
+function aggregateCounts(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") fail();
+  return Object.fromEntries(Object.entries(DATABASE_FIELDS).map(([name]) => [
+    name,
+    aggregate(snapshot[name]),
+  ]));
+}
+
 function hasExpectedIdentity(configuration) {
   return configuration?.releaseMode === "disposable-upgrade" &&
     configuration.projectRef === PRODUCTION_PROJECT_REF &&
@@ -146,13 +154,8 @@ export function readDisposableStateConfiguration(environment) {
 }
 
 export function evaluateDisposableStateSnapshot(snapshot, configuration) {
-  if (!hasExpectedIdentity(configuration) || !snapshot || typeof snapshot !== "object") {
-    fail();
-  }
-  const counts = Object.fromEntries(Object.entries(DATABASE_FIELDS).map(([name]) => [
-    name,
-    aggregate(snapshot[name]),
-  ]));
+  if (!hasExpectedIdentity(configuration)) fail();
+  const counts = aggregateCounts(snapshot);
   if (
     counts.markedTeacherCount !== 1 ||
     counts.otherAuthUserCount !== 0 ||
@@ -174,6 +177,16 @@ export function evaluateDisposableStateSnapshot(snapshot, configuration) {
     releaseMode: configuration.releaseMode,
     replaceableState: true,
     ...counts,
+  });
+}
+
+export function createDisposableStateFailureReceipt(snapshot, configuration) {
+  if (!hasExpectedIdentity(configuration)) fail();
+  return Object.freeze({
+    projectRef: configuration.projectRef,
+    releaseMode: configuration.releaseMode,
+    replaceableState: false,
+    ...aggregateCounts(snapshot),
   });
 }
 
@@ -217,4 +230,31 @@ export async function fetchDisposableStateSnapshot(configuration, fetchImpl = gl
     if (error?.message === FAILURE_MESSAGE) throw error;
     fail();
   }
+}
+
+export async function runDisposableStatePreflight(
+  environment,
+  {
+    fetchImpl = globalThis.fetch,
+    writeStdout = (value) => process.stdout.write(value),
+    writeStderr = (value) => process.stderr.write(value),
+  } = {},
+) {
+  const configuration = readDisposableStateConfiguration(environment);
+  const snapshot = await fetchDisposableStateSnapshot(configuration, fetchImpl);
+  let evidence;
+  try {
+    evidence = evaluateDisposableStateSnapshot(snapshot, configuration);
+  } catch (error) {
+    try {
+      writeStderr(`${JSON.stringify(
+        createDisposableStateFailureReceipt(snapshot, configuration),
+      )}\n`);
+    } catch {
+      // Preserve the generic classifier failure when diagnostic output fails.
+    }
+    throw error;
+  }
+  writeStdout(`${JSON.stringify(evidence, null, 2)}\n`);
+  return evidence;
 }
