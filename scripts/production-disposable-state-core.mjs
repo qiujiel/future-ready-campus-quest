@@ -139,6 +139,43 @@ const DATABASE_FIELDS = {
   groupImageObjectCount: "group_image_object_count",
 };
 
+const APPROVED_SETUP_RESIDUE_COUNTS = Object.freeze({
+  markedTeacherCount: 1,
+  otherAuthUserCount: 1,
+  productionClassroomCount: 1,
+  otherCohortCount: 1,
+  productionClassroomGroupCount: 5,
+  joinWindowCount: 4,
+  sessionControlCount: 0,
+  openJoiningCount: 0,
+  openQuestStartCount: 0,
+  cohortGroupJoinCodeCount: 24,
+  auditEventCount: 7,
+  studentPrivateProfileCount: 1,
+  studentPublicProfileCount: 1,
+  questAttemptCount: 0,
+  phaseProgressCount: 0,
+  studentResponseCount: 0,
+  conceptEvidenceCount: 0,
+  attemptItemCount: 0,
+  questReflectionCount: 0,
+  questResultCount: 0,
+  teamScoreSnapshotCount: 0,
+  studentJoinRequestCount: 1,
+  studentCredentialCount: 0,
+  nonTeacherSessionCount: 1,
+  studentLoginAttemptCount: 0,
+  joinAttemptCount: 1,
+  recoveryAttemptCount: 0,
+  groupIdentityReceiptCount: 1,
+  groupMediaAssetCount: 0,
+  cohortQuestLaunchCount: 0,
+  cohortQuestLaunchReceiptCount: 0,
+  teacherControlAuditCount: 0,
+  teacherRosterControlReceiptCount: 0,
+  groupImageObjectCount: 0,
+});
+
 function fail() {
   throw new Error(FAILURE_MESSAGE);
 }
@@ -184,7 +221,7 @@ export function readDisposableStateConfiguration(environment) {
 export function evaluateDisposableStateSnapshot(snapshot, configuration) {
   if (!hasExpectedIdentity(configuration)) fail();
   const counts = aggregateCounts(snapshot);
-  if (
+  const canonicalState =
     counts.markedTeacherCount !== 1 ||
     counts.otherAuthUserCount !== 0 ||
     counts.productionClassroomCount !== 1 ||
@@ -192,18 +229,20 @@ export function evaluateDisposableStateSnapshot(snapshot, configuration) {
     counts.productionClassroomGroupCount !== 5 ||
     counts.openJoiningCount !== 0 ||
     counts.openQuestStartCount !== 0
-  ) fail();
-  for (const [name, value] of Object.entries(counts)) {
-    if (![
-      "markedTeacherCount",
-      "productionClassroomCount",
-      "productionClassroomGroupCount",
-    ].includes(name) && value !== 0) fail();
-  }
+      ? false
+      : Object.entries(counts).every(([name, value]) => [
+        "markedTeacherCount",
+        "productionClassroomCount",
+        "productionClassroomGroupCount",
+      ].includes(name) || value === 0);
+  const approvedSetupResidue = Object.entries(APPROVED_SETUP_RESIDUE_COUNTS)
+    .every(([name, value]) => counts[name] === value);
+  if (!canonicalState && !approvedSetupResidue) fail();
   return Object.freeze({
     projectRef: configuration.projectRef,
     releaseMode: configuration.releaseMode,
     replaceableState: true,
+    preservedSetupResidue: approvedSetupResidue,
     ...counts,
   });
 }
