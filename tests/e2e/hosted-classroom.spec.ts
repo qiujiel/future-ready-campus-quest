@@ -26,6 +26,43 @@ function monitor(page: Page, errors: string[]) {
   });
 }
 
+async function openClassroomSetup(page: Page) {
+  const groupTable = page.getByRole("table", {
+    name: "Group codes and students",
+  });
+  if (!(await groupTable.isVisible())) {
+    await page.getByText("Classroom setup and group codes", {
+      exact: true,
+    }).click();
+  }
+  await expect(groupTable).toBeVisible();
+  return groupTable;
+}
+
+async function openStudentRoster(page: Page) {
+  await openClassroomSetup(page);
+  const readiness = page.getByRole("region", {
+    name: "Classroom readiness",
+  });
+  if (!(await readiness.isVisible())) {
+    await page.getByText("Student roster and controls", {
+      exact: true,
+    }).click();
+  }
+  await expect(readiness).toBeVisible();
+  return readiness;
+}
+
+async function openSessionControls(page: Page) {
+  await openClassroomSetup(page);
+  const controls = page.getByRole("region", { name: "Session controls" });
+  if (!(await controls.isVisible())) {
+    await page.getByText("Live session controls", { exact: true }).click();
+  }
+  await expect(controls).toBeVisible();
+  return controls;
+}
+
 async function joinStudent(
   context: BrowserContext,
   classUrl: string,
@@ -280,19 +317,16 @@ test("runs a clean teacher and two isolated students through recoverable class e
       name: "Create class and open joining",
     }).click();
     await expect(
-      teacherPage.getByRole("heading", { name: "Class learning dashboard" }),
+      teacherPage.getByRole("heading", { name: className }),
     ).toBeVisible();
 
-    const readiness = teacherPage.getByRole("region", {
-      name: "Classroom readiness",
-    });
-    await expect(readiness.getByText("open", { exact: true })).toBeVisible();
-    const classLink = readiness.getByRole("link", {
+    const groupTable = await openClassroomSetup(teacherPage);
+    const classLink = teacherPage.getByRole("link", {
       name: "Student application",
     });
     const classUrl = await classLink.getAttribute("href");
     expect(classUrl).toMatch(/#\/class\/[0-9a-f-]{36}$/i);
-    const rows = await readiness.locator("tbody tr").allTextContents();
+    const rows = await groupTable.locator("tbody tr").allTextContents();
     const codes = new Map<number, string>();
     for (const row of rows) {
       const match = row.match(/Group\s*(\d+)\s*([2-9A-HJ-NP-Z]{8})/);
@@ -352,6 +386,7 @@ test("runs a clean teacher and two isolated students through recoverable class e
     await studentContexts[1].close();
 
     await teacherPage.reload();
+    const readiness = await openStudentRoster(teacherPage);
     const leaderRow = readiness.getByRole("row").filter({
       hasText: "Synthetic Leader",
     });
@@ -359,9 +394,10 @@ test("runs a clean teacher and two isolated students through recoverable class e
     await expect(readiness.getByRole("row").filter({ hasText: "Synthetic Member" }))
       .not.toContainText("Group leader");
 
-    await teacherPage.getByRole("button", { name: "Launch quest" }).click();
+    const sessionControls = await openSessionControls(teacherPage);
+    await sessionControls.getByRole("button", { name: "Launch quest" }).click();
     await teacherPage.getByRole("button", {
-      name: "Confirm launch quest for Current cohort",
+      name: `Confirm launch quest for ${className}`,
       exact: true,
     }).click();
     await expect(studentPages[0].getByRole("heading", { name: "Diagnostic Gate" }))
@@ -378,14 +414,15 @@ test("runs a clean teacher and two isolated students through recoverable class e
       stateBeforeContextLoss.lastAcceptedSequence,
     ]);
 
-    await teacherPage.getByRole("button", { name: "Close joining" }).click();
+    await sessionControls.getByRole("button", { name: "Close joining" }).click();
     await teacherPage.getByRole("button", {
-      name: "Confirm close class joining for Current cohort",
+      name: `Confirm close class joining for ${className}`,
       exact: true,
     }).click();
     await expect(
-      teacherPage.getByRole("region", { name: "Classroom readiness" })
-        .getByText("closed", { exact: true }),
+      teacherPage.locator("details.teacher-secondary-section > p").filter({
+        hasText: "Joining is closed.",
+      }),
     ).toBeVisible();
 
     await studentContexts[0].close();
@@ -421,9 +458,9 @@ test("runs a clean teacher and two isolated students through recoverable class e
     )).resolves.toEqual({ status: 404, error: "COHORT_NOT_AVAILABLE" });
 
     await teacherPage.reload();
+    const refreshedReadiness = await openStudentRoster(teacherPage);
     await expect(
-      teacherPage.getByRole("region", { name: "Classroom readiness" })
-        .getByRole("row").filter({ hasText: "Synthetic Leader" }),
+      refreshedReadiness.getByRole("row").filter({ hasText: "Synthetic Leader" }),
     ).toContainText("Incomplete");
 
     expect(errors).toEqual([]);

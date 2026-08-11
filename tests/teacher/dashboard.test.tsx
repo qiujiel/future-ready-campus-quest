@@ -85,9 +85,10 @@ describe("teacher dashboard", () => {
     );
     resolveSummary?.(summary);
     expect(
-      await screen.findByRole("heading", { name: /class learning dashboard/i }),
+      await screen.findByRole("heading", { name: /current class/i }),
     ).toBeVisible();
-    expect(screen.getByText(/learning evidence is arriving/i)).toBeVisible();
+    expect(screen.getByRole("heading", { name: /team results/i })).toBeVisible();
+    expect(screen.getByRole("row", { name: /future makers.*88/i })).toBeVisible();
   });
 
   it("distinguishes empty, active, and completed cohort states", () => {

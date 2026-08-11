@@ -97,7 +97,8 @@ export const supabaseAuthGateway: AuthGateway = {
   async listCohorts() {
     const result = await getSupabaseClient()
       .from("cohorts")
-      .select("id,title,group_count,group_capacity,created_at")
+      .select("id,title,group_count,group_capacity,created_at,archived_at")
+      .is("archived_at", null)
       .order("created_at", { ascending: false });
     if (result.error) throw new Error("Cohorts could not be loaded.");
     return (result.data ?? []).map((cohort) => ({

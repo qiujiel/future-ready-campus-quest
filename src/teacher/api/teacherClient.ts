@@ -14,6 +14,7 @@ export interface TeacherGateway {
     cohortId: string,
     studentId: string,
   ): Promise<TeacherStudentDetail>;
+  removeClass?(cohortId: string, requestKey: string): Promise<void>;
 }
 
 export class TeacherGatewayError extends Error {
@@ -84,5 +85,21 @@ export const supabaseTeacherGateway: TeacherGateway = {
     }
     const data = response.data as { student: TeacherStudentDetail };
     return data.student;
+  },
+  async removeClass(cohortId, requestKey) {
+    const client = getSupabaseClient();
+    const archived = await client.rpc("archive_teacher_cohort", {
+      p_cohort_id: cohortId,
+      p_request_key: requestKey,
+    });
+    if (archived.error) throw new TeacherGatewayError("CLASS_NOT_REMOVED");
+    const anonymized = await client.rpc("purge_archived_cohort", {
+      p_cohort_id: cohortId,
+      p_confirmation: `PURGE ${cohortId}`,
+      p_request_key: requestKey,
+    });
+    if (anonymized.error) {
+      throw new TeacherGatewayError("CLASS_REMOVED_CLEANUP_INCOMPLETE");
+    }
   },
 };
