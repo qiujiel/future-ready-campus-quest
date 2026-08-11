@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -10,7 +10,7 @@ const resetSql = readFileSync(
 );
 
 function psql(sql: string): string {
-  return execFileSync(
+  const result = spawnSync(
     "docker",
     [
       "exec",
@@ -25,8 +25,13 @@ function psql(sql: string): string {
       "-v",
       "ON_ERROR_STOP=1",
     ],
-    { input: sql, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+    { input: sql, encoding: "utf8" },
   );
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error("Local reset integration command failed");
+  }
+  return `${result.stdout}\n${result.stderr}`;
 }
 
 function line(output: string, prefix: string): string {
@@ -273,6 +278,8 @@ rollback;
   expect(line(output, "RESET_ROLLBACK_COUNTS=")).toBe("2,2,4,24,8,1");
   expect(line(output, "RESET_CANONICAL_RECEIPT_STATE=")).toBe("P0001");
   expect(line(output, "RESET_APPROVED_SHAPE_STATE=")).toBe("00000");
+  expect(output).toContain("[FRCQ_RESET_PHASE=aggregate]");
+  expect(output).toContain("[FRCQ_RESET_PHASE=groups]");
   expect(JSON.parse(line(output, "RESET_FINAL="))).toEqual({
     authUsers: 1,
     roles: 1,
