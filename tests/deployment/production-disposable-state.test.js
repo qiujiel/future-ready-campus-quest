@@ -70,7 +70,31 @@ const expectedEvidence = {
   projectRef: productionRef,
   releaseMode: "disposable-upgrade",
   replaceableState: true,
+  preservedSetupResidue: false,
   ...disposable,
+};
+
+const approvedSetupResidue = {
+  ...disposable,
+  otherAuthUserCount: 1,
+  otherCohortCount: 1,
+  joinWindowCount: 4,
+  cohortGroupJoinCodeCount: 24,
+  auditEventCount: 7,
+  studentPrivateProfileCount: 1,
+  studentPublicProfileCount: 1,
+  studentJoinRequestCount: 1,
+  nonTeacherSessionCount: 1,
+  joinAttemptCount: 1,
+  groupIdentityReceiptCount: 1,
+};
+
+const expectedApprovedSetupEvidence = {
+  projectRef: productionRef,
+  releaseMode: "disposable-upgrade",
+  replaceableState: true,
+  preservedSetupResidue: true,
+  ...approvedSetupResidue,
 };
 
 const protectedDisposable = {
@@ -187,6 +211,34 @@ describe("disposable production state", () => {
   it("accepts only the exact closed replaceable classroom fixture", () => {
     expect(evaluateDisposableStateSnapshot(disposable, configuration))
       .toEqual(expectedEvidence);
+  });
+
+  it("accepts the exact approved harmless setup residue without deleting it", () => {
+    expect(evaluateDisposableStateSnapshot(approvedSetupResidue, configuration))
+      .toEqual(expectedApprovedSetupEvidence);
+  });
+
+  it.each(Object.keys(approvedSetupResidue))(
+    "rejects setup residue when %s drifts from the approved count",
+    (name) => {
+      expectRedactedFailure(() => evaluateDisposableStateSnapshot({
+        ...approvedSetupResidue,
+        [name]: approvedSetupResidue[name] + 1,
+      }, configuration));
+    },
+  );
+
+  it.each([
+    ["student credential", "studentCredentialCount"],
+    ["student response", "studentResponseCount"],
+    ["quest result", "questResultCount"],
+    ["quest reflection", "questReflectionCount"],
+    ["group upload", "groupMediaAssetCount"],
+  ])("still rejects protected %s data alongside setup residue", (_label, name) => {
+    expectRedactedFailure(() => evaluateDisposableStateSnapshot({
+      ...approvedSetupResidue,
+      [name]: 1,
+    }, configuration));
   });
 
   it("creates a redaction-safe receipt from a validated protected snapshot", () => {
