@@ -218,6 +218,16 @@ describe("disposable production state", () => {
       .toEqual(expectedApprovedSetupEvidence);
   });
 
+  it("accepts approved setup residue after its transient join attempt expires", () => {
+    expect(evaluateDisposableStateSnapshot({
+      ...approvedSetupResidue,
+      joinAttemptCount: 0,
+    }, configuration)).toEqual({
+      ...expectedApprovedSetupEvidence,
+      joinAttemptCount: 0,
+    });
+  });
+
   it.each(Object.keys(approvedSetupResidue))(
     "rejects setup residue when %s drifts from the approved count",
     (name) => {
