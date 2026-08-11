@@ -18,6 +18,7 @@ on:
         default: disposable-upgrade
         options:
           - disposable-upgrade
+          - in-place-upgrade
           - bootstrap
       bootstrap_authorization_id:
         description: Redaction-safe bootstrap authorization identifier

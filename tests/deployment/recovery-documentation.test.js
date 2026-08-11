@@ -180,6 +180,7 @@ const assertDisposablePolicy = ({ runbook, backend, checklist, readiness, github
   expect(runbook).toMatch(/student.*response.*upload.*unmarked account.*unexpected classroom state.*stops working/is);
 
   expect(backend).toContain("`disposable-upgrade`");
+  expect(backend).toContain("`in-place-upgrade`");
   expect(backend).toContain("`bootstrap`");
   expect(backend).toMatch(/`disposable-upgrade` requires the bootstrap identifier to be empty/i);
   expect(backend).toMatch(/disposable-state preflight.*before.*production link.*migration.*secret update.*Function deployment/is);
@@ -193,6 +194,7 @@ const assertDisposablePolicy = ({ runbook, backend, checklist, readiness, github
   expect(backend).toMatch(/at or below 7 seconds/i);
 
   expect(checklist).toContain("`disposable-upgrade`");
+  expect(checklist).toContain("`in-place-upgrade`");
   expect(checklist).toMatch(/for `disposable-upgrade`, the aggregate disposable-state preflight.*before mutation/is);
   expect(checklist).toMatch(/for the separately authorized `bootstrap` path, the strict empty-bootstrap\s+preflight completes before mutation/i);
   expect(checklist).toMatch(/\| Operational\/privacy incident contact \| `________________` \|/);
@@ -212,7 +214,7 @@ const assertDisposablePolicy = ({ runbook, backend, checklist, readiness, github
   expect(readiness).toMatch(/repository completion does not authorize deployment/i);
   expect(readiness).not.toMatch(/backup evidence|restore rehearsal|independent reviewer/i);
 
-  expect(github).toMatch(/`disposable-upgrade` and `bootstrap` are the only backend dispatch modes/i);
+  expect(github).toMatch(/`disposable-upgrade`, `in-place-upgrade`, and `bootstrap` are the only backend\s+dispatch modes/i);
   expect(github).toMatch(/no backup.*database connection string.*Storage administration key.*encryption key.*protected manifest/is);
   expect(github).toMatch(/production-backend.*main/is);
   expect(github).toMatch(/no second human\s+reviewer is required while the\s+disposable-state preflight passes/i);
