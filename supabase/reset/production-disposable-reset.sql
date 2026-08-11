@@ -3,6 +3,7 @@ declare
   actual jsonb;
   canonical_cohort_id uuid;
   marked_teacher_id uuid;
+  phase text := 'lock';
 begin
   perform pg_advisory_xact_lock(
     hashtextextended('approved-disposable-reset-2026-08-11', 0)
@@ -22,6 +23,7 @@ begin
     private.teacher_roster_control_receipts, storage.objects
     in share row exclusive mode;
 
+  phase := 'schema';
   if to_regclass('private.student_login_credentials') is not null
     or to_regclass('private.student_login_attempts') is not null
   then
@@ -29,6 +31,7 @@ begin
       errcode = 'P0001', message = 'reset precondition rejected';
   end if;
 
+  phase := 'teacher';
   select users.id
   into marked_teacher_id
   from auth.users as users
@@ -50,6 +53,7 @@ begin
       errcode = 'P0001', message = 'reset precondition rejected';
   end if;
 
+  phase := 'cohort';
   select cohorts.id
   into canonical_cohort_id
   from public.cohorts as cohorts
@@ -71,6 +75,7 @@ begin
       errcode = 'P0001', message = 'reset precondition rejected';
   end if;
 
+  phase := 'groups';
   if (
     select array_agg(groups.group_number order by groups.group_number)
     from public.groups as groups
@@ -106,6 +111,7 @@ begin
       errcode = 'P0001', message = 'reset precondition rejected';
   end if;
 
+  phase := 'aggregate';
   with marked_teachers as (
     select marked_teacher_id as id
   ), production_classrooms as (
@@ -223,6 +229,7 @@ begin
       errcode = 'P0001', message = 'reset precondition rejected';
   end if;
 
+  phase := 'normalize_groups';
   update public.groups
   set display_name = 'Group ' || group_number::text,
       identity_editor_id = null,
@@ -230,14 +237,22 @@ begin
       image_object_path = null
   where cohort_id = canonical_cohort_id;
 
+  phase := 'delete_join_codes';
   delete from public.cohort_group_join_codes;
+  phase := 'delete_join_windows';
   delete from public.cohort_join_windows;
+  phase := 'delete_audit';
   delete from public.audit_events;
+  phase := 'delete_attempts';
   delete from private.join_attempts;
+  phase := 'delete_receipts';
   delete from private.group_identity_receipts;
+  phase := 'delete_cohorts';
   delete from public.cohorts where id <> canonical_cohort_id;
+  phase := 'delete_users';
   delete from auth.users where id <> marked_teacher_id;
 
+  phase := 'verify';
   with marked_teachers as (
     select users.id
     from auth.users as users
@@ -391,5 +406,8 @@ begin
     raise exception using
       errcode = 'P0001', message = 'reset verification rejected';
   end if;
+exception when others then
+  raise exception using
+    errcode = 'P0001', message = '[FRCQ_RESET_PHASE=' || phase || ']';
 end
 $reset$;

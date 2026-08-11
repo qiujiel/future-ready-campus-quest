@@ -7,6 +7,24 @@ const LOAD_PROJECT_REF = "vadyhuipwbtgbzpeisbn";
 const AUTHORIZATION_ID = "approved-disposable-reset-2026-08-11";
 const TEACHER_MARKER = "course-owner-2026-08-08";
 const FAILURE_MESSAGE = "Production disposable reset failed";
+const RESET_PHASES = new Set([
+  "lock",
+  "schema",
+  "teacher",
+  "cohort",
+  "groups",
+  "aggregate",
+  "normalize_groups",
+  "delete_join_codes",
+  "delete_join_windows",
+  "delete_audit",
+  "delete_attempts",
+  "delete_receipts",
+  "delete_cohorts",
+  "delete_users",
+  "verify",
+]);
+const RESET_PHASE_MARKER = /\[FRCQ_RESET_PHASE=([^\]\r\n]+)\]/g;
 
 const FIELDS = Object.freeze({
   markedTeacherCount: "marked_teacher_count",
@@ -190,8 +208,9 @@ select
     select 1
     from private.group_identity_receipts as receipts
     where not exists (
-      select 1 from canonical_groups as groups
+      select 1 from public.groups as groups
       where groups.id = receipts.group_id
+        and groups.cohort_id not in (select id from canonical_cohorts)
     )
   ) as group_identity_receipt_scope_ready;`;
 
@@ -329,9 +348,23 @@ async function attemptMutation(configuration, fetchImpl, mutationQuery) {
       `https://api.supabase.com/v1/projects/${configuration.projectRef}/database/query`,
       request(configuration, mutationQuery, false),
     );
-    return response?.ok === true;
+    if (response?.ok === true) return Object.freeze({ succeeded: true });
+    let body;
+    try {
+      body = await response?.text();
+    } catch {
+      return Object.freeze({ succeeded: false });
+    }
+    if (typeof body !== "string") {
+      return Object.freeze({ succeeded: false });
+    }
+    const matches = [...body.matchAll(RESET_PHASE_MARKER)];
+    if (matches.length !== 1 || !RESET_PHASES.has(matches[0][1])) {
+      return Object.freeze({ succeeded: false });
+    }
+    return Object.freeze({ succeeded: false, phase: matches[0][1] });
   } catch {
-    return false;
+    return Object.freeze({ succeeded: false });
   }
 }
 
@@ -409,17 +442,20 @@ export async function runProductionDisposableReset(
   } catch {
     fail();
   }
-  const mutationSucceeded = await attemptMutation(
+  const mutation = await attemptMutation(
     configuration,
     fetchImpl,
     mutationQuery,
   );
-  if (!mutationSucceeded) {
+  if (!mutation.succeeded) {
     const diagnostic = await diagnose(configuration, fetchImpl);
-    writeStdout(`${JSON.stringify(diagnostic)}\n`);
+    writeStdout(`${JSON.stringify({
+      ...(mutation.phase ? { phase: mutation.phase } : {}),
+      ...diagnostic,
+    })}\n`);
   }
   const aggregate = await verify(configuration, fetchImpl);
-  if (!mutationSucceeded) fail();
+  if (!mutation.succeeded) fail();
   if (JSON.stringify(aggregate) !== JSON.stringify(Object.fromEntries(
     Object.entries(FIELDS).map(([name, field]) => [name, CANONICAL_AFTER[field]]),
   ))) fail();

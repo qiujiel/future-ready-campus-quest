@@ -143,7 +143,7 @@ const safeDiagnostic = Object.freeze({
   noncanonical_group_identity_without_receipt_count: 0,
   group_identity_receipt_count: 1,
   group_identity_receipt_outside_canonical_count: 1,
-  group_identity_receipt_scope_ready: false,
+  group_identity_receipt_scope_ready: true,
 });
 
 const expectedDiagnosticReceipt = Object.freeze({
@@ -160,8 +160,35 @@ const expectedDiagnosticReceipt = Object.freeze({
   noncanonicalGroupIdentityWithoutReceiptCount: 0,
   groupIdentityReceiptCount: 1,
   groupIdentityReceiptOutsideCanonicalCount: 1,
-  groupIdentityReceiptScopeReady: false,
+  groupIdentityReceiptScopeReady: true,
 });
+
+const resetPhases = Object.freeze([
+  "lock",
+  "schema",
+  "teacher",
+  "cohort",
+  "groups",
+  "aggregate",
+  "normalize_groups",
+  "delete_join_codes",
+  "delete_join_windows",
+  "delete_audit",
+  "delete_attempts",
+  "delete_receipts",
+  "delete_cohorts",
+  "delete_users",
+  "verify",
+]);
+
+function phaseFailure(phase, extra = "") {
+  return response(
+    JSON.stringify({
+      message: `database query failed [FRCQ_RESET_PHASE=${phase}] ${extra}`,
+    }),
+    { status: 500, raw: true },
+  );
+}
 
 function response(body, { status = 201, raw = false } = {}) {
   return new Response(raw ? body : JSON.stringify(body), {
@@ -250,6 +277,17 @@ describe("production disposable reset", () => {
     expect(calls[0].body.query).toContain("image_object_path = null");
     expect(calls[0].body.query).toContain("student_login_credentials') is null");
     expect(calls[0].body.query).toContain("student_login_attempts') is null");
+    expect(calls[0].body.query).toContain("phase text := 'lock'");
+    for (const phase of resetPhases.slice(1)) {
+      expect(calls[0].body.query).toContain(`phase := '${phase}'`);
+    }
+    expect(calls[0].body.query).toContain("exception when others then");
+    expect(calls[0].body.query).toContain(
+      "message = '[FRCQ_RESET_PHASE=' || phase || ']'",
+    );
+    expect(calls[0].body.query).not.toMatch(
+      /sqlerrm|get stacked diagnostics|pg_exception_context/i,
+    );
     expect(calls[0].body.query).toMatch(/"other_auth_user_count":\s*1/);
     expect(calls[0].body.query).toMatch(/"cohort_group_join_code_count":\s*24/);
     expect(calls[0].body.query).toMatch(/"student_join_request_count":\s*1/);
@@ -286,9 +324,13 @@ describe("production disposable reset", () => {
   });
 
   it.each([
-    ["a non-OK provider response", response({ provider: "secret" }, { status: 500 })],
-    ["a lost mutation response", new Error("provider secret")],
-  ])("verifies canonical state but rejects after %s", async (_name, mutationResponse) => {
+    ["a known phase response", phaseFailure("aggregate"), "aggregate"],
+    ["a lost mutation response", new Error("provider secret"), undefined],
+  ])("verifies canonical state but rejects after %s", async (
+    _name,
+    mutationResponse,
+    expectedPhase,
+  ) => {
     const { calls, fetchImpl } = resetFetch({ mutationResponse });
     const output = [];
     await expect(runProductionDisposableReset(environment, {
@@ -308,6 +350,54 @@ describe("production disposable reset", () => {
     expect(calls[1].body.query).toContain(
       "group_identity_receipt_outside_canonical_count",
     );
+    expect(calls[1].body.query).toContain(
+      "groups.cohort_id not in (select id from canonical_cohorts)",
+    );
+    expect(output).toEqual([`${JSON.stringify({
+      ...(expectedPhase ? { phase: expectedPhase } : {}),
+      ...expectedDiagnosticReceipt,
+    })}\n`]);
+  });
+
+  it.each(resetPhases)(
+    "emits only the allowlisted %s transaction phase",
+    async (phase) => {
+      const { fetchImpl } = resetFetch({
+        mutationResponse: phaseFailure(phase, "private-provider-detail"),
+      });
+      const output = [];
+      await expect(runProductionDisposableReset(environment, {
+        fetchImpl,
+        writeStdout: (value) => output.push(value),
+      })).rejects.toThrow("Production disposable reset failed");
+      expect(JSON.parse(output.join(""))).toEqual({
+        phase,
+        ...expectedDiagnosticReceipt,
+      });
+      expect(output.join("")).not.toContain("private-provider-detail");
+    },
+  );
+
+  it.each([
+    ["an unknown phase", phaseFailure("credentials")],
+    [
+      "a malformed phase marker",
+      phaseFailure("aggregate] [FRCQ_RESET_PHASE=teacher"),
+    ],
+    [
+      "a spoofed partial phase",
+      phaseFailure("aggregate-unauthorized"),
+    ],
+  ])("ignores %s while retaining safe aggregate diagnostics", async (
+    _name,
+    mutationResponse,
+  ) => {
+    const { fetchImpl } = resetFetch({ mutationResponse });
+    const output = [];
+    await expect(runProductionDisposableReset(environment, {
+      fetchImpl,
+      writeStdout: (value) => output.push(value),
+    })).rejects.toThrow("Production disposable reset failed");
     expect(output).toEqual([
       `${JSON.stringify(expectedDiagnosticReceipt)}\n`,
     ]);
@@ -323,10 +413,13 @@ describe("production disposable reset", () => {
       "00000000-0000-4000-8000-000000000001",
       "receipt-payload-secret",
     ];
-    const mutationResponse = response({
-      provider: unsafeValues,
-      raw: { payload: "receipt-payload-secret" },
-    }, { status: 500 });
+    const mutationResponse = phaseFailure(
+      "aggregate",
+      JSON.stringify({
+        provider: unsafeValues,
+        raw: { payload: "receipt-payload-secret" },
+      }),
+    );
     const { fetchImpl } = resetFetch({ mutationResponse });
     const output = [];
 
@@ -336,12 +429,17 @@ describe("production disposable reset", () => {
     })).rejects.toThrow("Production disposable reset failed");
 
     const serializedOutput = output.join("");
-    expect(serializedOutput).toBe(`${JSON.stringify(expectedDiagnosticReceipt)}\n`);
+    expect(serializedOutput).toBe(`${JSON.stringify({
+      phase: "aggregate",
+      ...expectedDiagnosticReceipt,
+    })}\n`);
     for (const unsafeValue of unsafeValues) {
       expect(serializedOutput).not.toContain(unsafeValue);
     }
-    expect(Object.values(JSON.parse(serializedOutput)).every(
-      (value) => typeof value === "boolean" || Number.isInteger(value),
+    const parsed = JSON.parse(serializedOutput);
+    expect(parsed.phase).toBe("aggregate");
+    expect(Object.entries(parsed).filter(([name]) => name !== "phase").every(
+      ([, value]) => typeof value === "boolean" || Number.isInteger(value),
     )).toBe(true);
   });
 
