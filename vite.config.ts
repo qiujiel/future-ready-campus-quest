@@ -6,22 +6,28 @@ function normalizeBasePath(value: string | undefined): string {
   return `/${base.replace(/^\/+|\/+$/g, "")}${base === "/" ? "" : "/"}`;
 }
 
-function contentSecurityPolicy(
+export function contentSecurityPolicy(
   supabaseUrl: string | undefined,
   development: boolean,
 ): string {
   const connectSources = new Set(["'self'"]);
   const imageSources = new Set(["'self'", "data:", "blob:"]);
+  const styleSources = new Set(["'self'"]);
+
   if (supabaseUrl) {
     const url = new URL(supabaseUrl);
     connectSources.add(url.origin);
     connectSources.add(`${url.protocol === "https:" ? "wss:" : "ws:"}//${url.host}`);
     imageSources.add(url.origin);
   }
+
   if (development) {
     connectSources.add("ws://localhost:*");
     connectSources.add("ws://127.0.0.1:*");
+    // Vite injects imported CSS through a style element while serving locally.
+    styleSources.add("'unsafe-inline'");
   }
+
   return [
     "default-src 'self'",
     "base-uri 'self'",
@@ -30,7 +36,7 @@ function contentSecurityPolicy(
     `img-src ${[...imageSources].join(" ")}`,
     "object-src 'none'",
     "script-src 'self'",
-    "style-src 'self'",
+    `style-src ${[...styleSources].join(" ")}`,
     "form-action 'self'",
     "worker-src 'self' blob:",
   ].join("; ");

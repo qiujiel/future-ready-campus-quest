@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import {
   createMemoryRouter,
+  MemoryRouter,
   RouterProvider,
   useLocation,
 } from "react-router-dom";
@@ -309,17 +310,30 @@ it("shows group assignments and student readiness details", async () => {
     getReadiness(): Promise<unknown>;
   };
 
-  render(<TeacherShell cohortId={cohortId} gateway={gateway} />);
+  render(
+    <MemoryRouter>
+      <TeacherShell cohortId={cohortId} gateway={gateway} />
+    </MemoryRouter>,
+  );
 
+  fireEvent.click(
+    await screen.findByText(/classroom setup and group codes/i),
+  );
+  fireEvent.click(screen.getByText(/student roster and controls/i));
+
+  const readinessPanel = (await screen.findByRole("heading", {
+    name: /classroom readiness/i,
+  })).closest("section")!;
+  expect(within(readinessPanel).getByText("Synthetic Learner One")).toBeVisible();
+  expect(within(readinessPanel).getByText("Synthetic Learner Two")).toBeVisible();
+  expect(within(readinessPanel).getByText(/2 of 6 students joined/i)).toBeVisible();
+  expect(within(readinessPanel).getAllByText(/incomplete/i)).toHaveLength(2);
+  expect(within(readinessPanel).getByText(/not started/i)).toBeVisible();
   expect(
-    await screen.findByRole("heading", { name: /classroom readiness/i }),
+    within(screen.getByRole("table", {
+      name: /group codes and students/i,
+    })).getByText("HSNY46S4"),
   ).toBeVisible();
-  expect(screen.getByText("Synthetic Learner One")).toBeVisible();
-  expect(screen.getByText("Synthetic Learner Two")).toBeVisible();
-  expect(screen.getByText(/2 of 6 students joined/i)).toBeVisible();
-  expect(screen.getAllByText(/incomplete/i)).toHaveLength(2);
-  expect(screen.getByText(/not started/i)).toBeVisible();
-  await waitFor(() => expect(screen.getAllByText("HSNY46S4")).toHaveLength(2));
 });
 
 it("confirms disabling one group code through the audited control boundary", async () => {

@@ -48,7 +48,7 @@ it("has no serious accessibility violations across the teacher dashboard", async
       />
     </MemoryRouter>,
   );
-  await view.findByRole("heading", { name: /class learning dashboard/i });
+  await view.findByRole("heading", { name: /current class/i });
 
   const result = await axe(view.container);
   expect(

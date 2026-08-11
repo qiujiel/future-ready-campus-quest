@@ -245,6 +245,19 @@ export interface MissedItemAggregate {
   misconceptionTags: Array<{ tag: string; count: number }>;
 }
 
+export interface TeacherMissedQuestion {
+  itemId: string;
+  incorrectResponses: number;
+  responses: number;
+}
+
+export interface TeacherConceptFocus {
+  conceptId: ConceptId;
+  missedStudents: number;
+  studentCount: number;
+  missedQuestions: TeacherMissedQuestion[];
+}
+
 export interface TeacherTeamScore {
   groupId: string;
   groupNumber: number;
@@ -252,6 +265,7 @@ export interface TeacherTeamScore {
   score: number | null;
   completedMembers: number;
   enrolledMembers: number;
+  conceptFocus?: TeacherConceptFocus | null;
 }
 
 export interface TeacherDashboardSummary {
@@ -261,6 +275,7 @@ export interface TeacherDashboardSummary {
   completed: number;
   conceptAggregates: ConceptAggregate[];
   mostMissed: MissedItemAggregate[];
+  classFocus?: TeacherConceptFocus | null;
   teamScores: TeacherTeamScore[];
   generatedAt: string;
 }

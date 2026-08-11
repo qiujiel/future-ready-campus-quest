@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(7);
+select plan(8);
 
 select has_column(
   'public',
@@ -60,6 +60,70 @@ select ok(
     'execute'
   ),
   'scheduled cleanup is restricted to the service role'
+);
+
+insert into auth.users (
+  id,
+  instance_id,
+  aud,
+  role,
+  email,
+  encrypted_password,
+  email_confirmed_at,
+  raw_app_meta_data,
+  raw_user_meta_data,
+  created_at,
+  updated_at
+)
+values (
+  'e1000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated',
+  'authenticated',
+  'retention-teacher@example.invalid',
+  '',
+  now(),
+  '{}',
+  '{}',
+  now(),
+  now()
+);
+
+insert into public.user_roles (user_id, role)
+values ('e1000000-0000-0000-0000-000000000001', 'teacher');
+
+insert into public.cohorts (
+  id,
+  teacher_id,
+  title,
+  group_count,
+  group_capacity,
+  archived_at
+)
+values (
+  'e3000000-0000-0000-0000-000000000001',
+  'e1000000-0000-0000-0000-000000000001',
+  'Archived retention fixture',
+  1,
+  4,
+  now()
+);
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  'e1000000-0000-0000-0000-000000000001',
+  true
+);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+
+select lives_ok(
+  $$select public.purge_archived_cohort(
+      'e3000000-0000-0000-0000-000000000001',
+      'PURGE e3000000-0000-0000-0000-000000000001',
+      'e4000000-0000-0000-0000-000000000001'
+    )$$,
+  'an archived class can be anonymized through the browser-safe purge path'
 );
 
 select * from finish();

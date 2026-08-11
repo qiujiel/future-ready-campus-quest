@@ -1,21 +1,13 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import type {
-  ConceptId,
   TeacherDashboardSummary,
 } from "../../shared/api/contracts";
 import {
   supabaseTeacherGateway,
   type TeacherGateway,
 } from "../../teacher/api/teacherClient";
-import { CohortOverview } from "./CohortOverview";
-import { ClassroomReadiness } from "./ClassroomReadiness";
-import { ConceptHeatmap } from "./ConceptHeatmap";
-import { GroupDrilldown } from "./GroupDrilldown";
-import { MostMissedItems } from "./MostMissedItems";
-import { QuestionBank } from "./QuestionBank";
-import { SessionControls } from "./SessionControls";
-import { ExportPanel } from "./ExportPanel";
+import { SimplifiedTeacherBoard } from "./SimplifiedTeacherBoard";
 import { StudentDrilldown } from "./StudentDrilldown";
 
 function TeacherStudentRoute({
@@ -66,9 +58,6 @@ export function TeacherShell({
     Awaited<ReturnType<NonNullable<TeacherGateway["getReadiness"]>>> | null
   >(null);
   const [error, setError] = useState(false);
-  const [selectedConcept, setSelectedConcept] = useState<ConceptId | null>(
-    (params.conceptId as ConceptId | undefined) ?? null,
-  );
 
   useEffect(() => {
     let active = true;
@@ -100,10 +89,6 @@ export function TeacherShell({
       active = false;
     };
   }, [cohortId, gateway]);
-
-  function selectConcept(conceptId: ConceptId) {
-    setSelectedConcept(conceptId);
-  }
 
   async function refreshReadiness() {
     if (!gateway.getReadiness) return;
@@ -137,10 +122,10 @@ export function TeacherShell({
       </main>
     );
   }
-  const visibleTeams = params.groupId
-    ? summary.teamScores.filter((team) => team.groupId === params.groupId)
-    : summary.teamScores;
-  if (params.groupId && visibleTeams.length === 0) {
+  if (
+    params.groupId &&
+    !summary.teamScores.some((team) => team.groupId === params.groupId)
+  ) {
     return (
       <main className="teacher-shell">
         <p role="alert">Group evidence is not available.</p>
@@ -150,46 +135,17 @@ export function TeacherShell({
 
   return (
     <main className="teacher-shell">
-      <header className="teacher-header">
-        <div>
-          <p className="eyebrow">Teacher workspace</p>
-          <h1>Class learning dashboard</h1>
-        </div>
-        <p>
-          Updated <time dateTime={summary.generatedAt}>{new Date(summary.generatedAt).toLocaleTimeString()}</time>
-        </p>
-      </header>
-      <CohortOverview
-        enrolled={summary.enrolled}
-        active={summary.active}
-        completed={summary.completed}
+      <SimplifiedTeacherBoard
+        gateway={gateway}
+        summary={{
+          ...summary,
+          teamScores: params.groupId
+            ? summary.teamScores.filter((team) => team.groupId === params.groupId)
+            : summary.teamScores,
+        }}
+        readiness={readiness}
+        onReadinessChanged={refreshReadiness}
       />
-      {readiness ? (
-        <ClassroomReadiness
-          report={readiness}
-          onChanged={refreshReadiness}
-        />
-      ) : null}
-      <div className="teacher-dashboard-grid">
-        <ConceptHeatmap
-          concepts={summary.conceptAggregates}
-          onSelect={selectConcept}
-        />
-        <MostMissedItems items={summary.mostMissed} />
-      </div>
-      <GroupDrilldown
-        cohortId={summary.cohortId}
-        teams={visibleTeams}
-        conceptFilter={selectedConcept ?? undefined}
-      />
-      <SessionControls
-        cohortId={summary.cohortId}
-        cohortTitle="Current cohort"
-        activeStudents={summary.active}
-        onChanged={refreshReadiness}
-      />
-      <QuestionBank cohortId={summary.cohortId} gateway={gateway} />
-      <ExportPanel cohortId={summary.cohortId} />
     </main>
   );
 }
