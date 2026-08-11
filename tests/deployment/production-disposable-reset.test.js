@@ -233,17 +233,29 @@ describe("production disposable reset", () => {
     expect(output).toEqual([`${JSON.stringify(expectedReceipt)}\n`]);
   });
 
-  it.each([
-    ["an opaque success body", response("not-json", { raw: true })],
-    ["a non-OK provider response", response({ provider: "secret" }, { status: 500 })],
-    ["a lost mutation response", new Error("provider secret")],
-  ])("always verifies canonical state after %s", async (_name, mutationResponse) => {
-    const { calls, fetchImpl } = resetFetch({ mutationResponse });
+  it("ignores an opaque mutation body after a successful HTTP status", async () => {
+    const { calls, fetchImpl } = resetFetch({
+      mutationResponse: response("not-json", { raw: true }),
+    });
     await expect(runProductionDisposableReset(environment, {
       fetchImpl,
       writeStdout: () => {},
     }))
       .resolves.toEqual(expectedReceipt);
+    expect(calls).toHaveLength(2);
+    expect(calls[1].body.read_only).toBe(true);
+  });
+
+  it.each([
+    ["a non-OK provider response", response({ provider: "secret" }, { status: 500 })],
+    ["a lost mutation response", new Error("provider secret")],
+  ])("verifies canonical state but rejects after %s", async (_name, mutationResponse) => {
+    const { calls, fetchImpl } = resetFetch({ mutationResponse });
+    await expect(runProductionDisposableReset(environment, {
+      fetchImpl,
+      writeStdout: () => {},
+    }))
+      .rejects.toThrow("Production disposable reset failed");
     expect(calls).toHaveLength(2);
     expect(calls[1].body.read_only).toBe(true);
   });

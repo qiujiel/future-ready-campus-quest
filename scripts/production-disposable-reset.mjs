@@ -196,12 +196,13 @@ function request(configuration, query, readOnly) {
 
 async function attemptMutation(configuration, fetchImpl, mutationQuery) {
   try {
-    await fetchImpl(
+    const response = await fetchImpl(
       `https://api.supabase.com/v1/projects/${configuration.projectRef}/database/query`,
       request(configuration, mutationQuery, false),
     );
+    return response?.ok === true;
   } catch {
-    // A lost response is an indeterminate commit; verification below is authoritative.
+    return false;
   }
 }
 
@@ -260,8 +261,13 @@ export async function runProductionDisposableReset(
   } catch {
     fail();
   }
-  await attemptMutation(configuration, fetchImpl, mutationQuery);
+  const mutationSucceeded = await attemptMutation(
+    configuration,
+    fetchImpl,
+    mutationQuery,
+  );
   const aggregate = await verify(configuration, fetchImpl);
+  if (!mutationSucceeded) fail();
   if (JSON.stringify(aggregate) !== JSON.stringify(Object.fromEntries(
     Object.entries(FIELDS).map(([name, field]) => [name, CANONICAL_AFTER[field]]),
   ))) fail();
