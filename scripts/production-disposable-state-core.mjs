@@ -246,9 +246,13 @@ export async function runDisposableStatePreflight(
   try {
     evidence = evaluateDisposableStateSnapshot(snapshot, configuration);
   } catch (error) {
-    writeStderr(`${JSON.stringify(
-      createDisposableStateFailureReceipt(snapshot, configuration),
-    )}\n`);
+    try {
+      writeStderr(`${JSON.stringify(
+        createDisposableStateFailureReceipt(snapshot, configuration),
+      )}\n`);
+    } catch {
+      // Preserve the generic classifier failure when diagnostic output fails.
+    }
     throw error;
   }
   writeStdout(`${JSON.stringify(evidence, null, 2)}\n`);

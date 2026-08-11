@@ -192,6 +192,14 @@ describe("disposable production state", () => {
     expect(stderr).toEqual([`${JSON.stringify(expectedFailureReceipt)}\n`]);
   });
 
+  it("preserves the generic classification failure when receipt output fails", async () => {
+    await expect(runDisposableStatePreflight(environment, {
+      fetchImpl: async () => response([providerRow(protectedDisposable)]),
+      writeStdout: () => {},
+      writeStderr: () => { throw new Error("stderr-unavailable"); },
+    })).rejects.toThrow("Disposable production preflight failed");
+  });
+
   it("does not emit a failure receipt after a successful classification", async () => {
     const stderr = [];
 
