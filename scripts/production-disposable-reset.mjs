@@ -86,6 +86,115 @@ const CANONICAL_AFTER = Object.freeze({
   student_login_attempts_absent: true,
 });
 
+const DIAGNOSTIC_FIELDS = Object.freeze({
+  studentLoginCredentialsAbsent: "student_login_credentials_absent",
+  studentLoginAttemptsAbsent: "student_login_attempts_absent",
+  markedTeacherCount: "marked_teacher_count",
+  markedTeacherUnique: "marked_teacher_unique",
+  canonicalClassroomCandidateCount: "canonical_classroom_candidate_count",
+  canonicalClassroomCapacityReady: "canonical_classroom_capacity_ready",
+  canonicalCohortCount: "canonical_cohort_count",
+  canonicalCohortGroupCount: "canonical_cohort_group_count",
+  canonicalGroupNumberShapeReady: "canonical_group_number_shape_ready",
+  noncanonicalGroupIdentityCount: "noncanonical_group_identity_count",
+  noncanonicalGroupIdentityWithoutReceiptCount:
+    "noncanonical_group_identity_without_receipt_count",
+  groupIdentityReceiptCount: "group_identity_receipt_count",
+  groupIdentityReceiptOutsideCanonicalCount:
+    "group_identity_receipt_outside_canonical_count",
+  groupIdentityReceiptScopeReady: "group_identity_receipt_scope_ready",
+});
+
+const DIAGNOSTIC_BOOLEAN_FIELDS = new Set([
+  "student_login_credentials_absent",
+  "student_login_attempts_absent",
+  "marked_teacher_unique",
+  "canonical_classroom_capacity_ready",
+  "canonical_group_number_shape_ready",
+  "group_identity_receipt_scope_ready",
+]);
+
+const DIAGNOSTIC_QUERY = `with marked_teachers as (
+  select users.id
+  from auth.users as users
+  where users.raw_app_meta_data ->> 'bootstrapAuthorizationId' = '${TEACHER_MARKER}'
+    and users.raw_app_meta_data ->> 'role' = 'teacher'
+    and exists (
+      select 1 from public.user_roles as roles
+      where roles.user_id = users.id and roles.role = 'teacher'
+    )
+), canonical_classroom_candidates as (
+  select cohorts.id, cohorts.group_capacity
+  from public.cohorts as cohorts
+  where cohorts.teacher_id in (select id from marked_teachers)
+    and cohorts.title = 'Production Classroom'
+    and cohorts.group_count = 5
+    and cohorts.archived_at is null
+), canonical_cohorts as (
+  select candidates.id
+  from canonical_classroom_candidates as candidates
+  where candidates.group_capacity = 6
+), canonical_groups as (
+  select groups.id, groups.group_number, groups.display_name,
+    groups.identity_editor_id, groups.identity_locked_at,
+    groups.image_object_path
+  from public.groups as groups
+  where groups.cohort_id in (select id from canonical_cohorts)
+), noncanonical_identity_groups as (
+  select groups.id
+  from canonical_groups as groups
+  where groups.display_name <> 'Group ' || groups.group_number::text
+    or groups.identity_editor_id is not null
+    or groups.identity_locked_at is not null
+    or groups.image_object_path is not null
+)
+select
+  to_regclass('private.student_login_credentials') is null
+    as student_login_credentials_absent,
+  to_regclass('private.student_login_attempts') is null
+    as student_login_attempts_absent,
+  (select count(*)::int from marked_teachers) as marked_teacher_count,
+  (select count(*) = 1 from marked_teachers) as marked_teacher_unique,
+  (select count(*)::int from canonical_classroom_candidates)
+    as canonical_classroom_candidate_count,
+  (select count(*) = 1 and bool_and(group_capacity = 6)
+   from canonical_classroom_candidates)
+    as canonical_classroom_capacity_ready,
+  (select count(*)::int from canonical_cohorts) as canonical_cohort_count,
+  (select count(*)::int from canonical_groups)
+    as canonical_cohort_group_count,
+  coalesce(
+    (select array_agg(groups.group_number order by groups.group_number)
+     from canonical_groups as groups
+     where groups.group_number between 1 and 5),
+    array[]::smallint[]
+  ) = array[1, 2, 3, 4, 5]::smallint[]
+    as canonical_group_number_shape_ready,
+  (select count(*)::int from noncanonical_identity_groups)
+    as noncanonical_group_identity_count,
+  (select count(*)::int
+   from noncanonical_identity_groups as groups
+   where not exists (
+     select 1 from private.group_identity_receipts as receipts
+     where receipts.group_id = groups.id
+   )) as noncanonical_group_identity_without_receipt_count,
+  (select count(*)::int from private.group_identity_receipts)
+    as group_identity_receipt_count,
+  (select count(*)::int
+   from private.group_identity_receipts as receipts
+   where not exists (
+     select 1 from canonical_groups as groups
+     where groups.id = receipts.group_id
+   )) as group_identity_receipt_outside_canonical_count,
+  not exists (
+    select 1
+    from private.group_identity_receipts as receipts
+    where not exists (
+      select 1 from canonical_groups as groups
+      where groups.id = receipts.group_id
+    )
+  ) as group_identity_receipt_scope_ready;`;
+
 function fail() {
   throw new Error(FAILURE_MESSAGE);
 }
@@ -183,6 +292,26 @@ function parseAggregate(body) {
   return Object.freeze(aggregate);
 }
 
+function parseDiagnostic(body) {
+  if (!Array.isArray(body) || body.length !== 1 || !body[0] ||
+    typeof body[0] !== "object" || Array.isArray(body[0]) ||
+    Object.keys(body[0]).length !== Object.keys(DIAGNOSTIC_FIELDS).length) {
+    fail();
+  }
+  const diagnostic = {};
+  for (const [name, field] of Object.entries(DIAGNOSTIC_FIELDS)) {
+    if (!Object.hasOwn(body[0], field)) fail();
+    const value = body[0][field];
+    if (DIAGNOSTIC_BOOLEAN_FIELDS.has(field)) {
+      if (typeof value !== "boolean") fail();
+    } else if (!Number.isInteger(value) || value < 0) {
+      fail();
+    }
+    diagnostic[name] = value;
+  }
+  return Object.freeze(diagnostic);
+}
+
 function request(configuration, query, readOnly) {
   return {
     method: "POST",
@@ -219,6 +348,25 @@ async function verify(configuration, fetchImpl) {
   if (!response?.ok) fail();
   try {
     return parseAggregate(await response.json());
+  } catch (error) {
+    if (error?.message === FAILURE_MESSAGE) throw error;
+    fail();
+  }
+}
+
+async function diagnose(configuration, fetchImpl) {
+  let response;
+  try {
+    response = await fetchImpl(
+      `https://api.supabase.com/v1/projects/${configuration.projectRef}/database/query`,
+      request(configuration, DIAGNOSTIC_QUERY, true),
+    );
+  } catch {
+    fail();
+  }
+  if (!response?.ok) fail();
+  try {
+    return parseDiagnostic(await response.json());
   } catch (error) {
     if (error?.message === FAILURE_MESSAGE) throw error;
     fail();
@@ -266,6 +414,10 @@ export async function runProductionDisposableReset(
     fetchImpl,
     mutationQuery,
   );
+  if (!mutationSucceeded) {
+    const diagnostic = await diagnose(configuration, fetchImpl);
+    writeStdout(`${JSON.stringify(diagnostic)}\n`);
+  }
   const aggregate = await verify(configuration, fetchImpl);
   if (!mutationSucceeded) fail();
   if (JSON.stringify(aggregate) !== JSON.stringify(Object.fromEntries(

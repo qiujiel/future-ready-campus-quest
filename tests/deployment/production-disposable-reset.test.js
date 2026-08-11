@@ -129,6 +129,40 @@ const expectedReceipt = Object.freeze({
   studentLoginAttemptsAbsent: true,
 });
 
+const safeDiagnostic = Object.freeze({
+  student_login_credentials_absent: true,
+  student_login_attempts_absent: true,
+  marked_teacher_count: 1,
+  marked_teacher_unique: true,
+  canonical_classroom_candidate_count: 1,
+  canonical_classroom_capacity_ready: true,
+  canonical_cohort_count: 1,
+  canonical_cohort_group_count: 5,
+  canonical_group_number_shape_ready: true,
+  noncanonical_group_identity_count: 1,
+  noncanonical_group_identity_without_receipt_count: 1,
+  group_identity_receipt_count: 1,
+  group_identity_receipt_outside_canonical_count: 0,
+  group_identity_receipt_scope_ready: true,
+});
+
+const expectedDiagnosticReceipt = Object.freeze({
+  studentLoginCredentialsAbsent: true,
+  studentLoginAttemptsAbsent: true,
+  markedTeacherCount: 1,
+  markedTeacherUnique: true,
+  canonicalClassroomCandidateCount: 1,
+  canonicalClassroomCapacityReady: true,
+  canonicalCohortCount: 1,
+  canonicalCohortGroupCount: 5,
+  canonicalGroupNumberShapeReady: true,
+  noncanonicalGroupIdentityCount: 1,
+  noncanonicalGroupIdentityWithoutReceiptCount: 1,
+  groupIdentityReceiptCount: 1,
+  groupIdentityReceiptOutsideCanonicalCount: 0,
+  groupIdentityReceiptScopeReady: true,
+});
+
 function response(body, { status = 201, raw = false } = {}) {
   return new Response(raw ? body : JSON.stringify(body), {
     status,
@@ -139,13 +173,18 @@ function response(body, { status = 201, raw = false } = {}) {
 function resetFetch({
   mutationResponse = response("opaque provider response", { raw: true }),
   verificationResponse = response([canonicalAfter]),
+  diagnosticResponse = response([safeDiagnostic]),
 } = {}) {
   const calls = [];
   return {
     calls,
     fetchImpl: async (url, options) => {
       calls.push({ url, options, body: JSON.parse(options.body) });
-      const candidate = calls.length === 1 ? mutationResponse : verificationResponse;
+      const candidate = calls.length === 1
+        ? mutationResponse
+        : calls.length === 2 && !mutationResponse.ok
+          ? diagnosticResponse
+          : verificationResponse;
       if (candidate instanceof Error) throw candidate;
       return candidate;
     },
@@ -251,13 +290,76 @@ describe("production disposable reset", () => {
     ["a lost mutation response", new Error("provider secret")],
   ])("verifies canonical state but rejects after %s", async (_name, mutationResponse) => {
     const { calls, fetchImpl } = resetFetch({ mutationResponse });
+    const output = [];
     await expect(runProductionDisposableReset(environment, {
       fetchImpl,
-      writeStdout: () => {},
+      writeStdout: (value) => output.push(value),
     }))
       .rejects.toThrow("Production disposable reset failed");
-    expect(calls).toHaveLength(2);
-    expect(calls[1].body.read_only).toBe(true);
+    expect(calls).toHaveLength(3);
+    expect(calls.slice(1).map((call) => call.body.read_only)).toEqual([
+      true,
+      true,
+    ]);
+    expect(calls[1].body.query).toContain("canonical_group_number_shape_ready");
+    expect(calls[1].body.query).toContain(
+      "noncanonical_group_identity_without_receipt_count",
+    );
+    expect(calls[1].body.query).toContain(
+      "group_identity_receipt_outside_canonical_count",
+    );
+    expect(output).toEqual([
+      `${JSON.stringify(expectedDiagnosticReceipt)}\n`,
+    ]);
+  });
+
+  it("never logs provider bodies, thrown values, credentials, identifiers, names, codes, or receipt payloads on mutation failure", async () => {
+    const unsafeValues = [
+      accessToken,
+      "private-provider-detail",
+      "student@example.invalid",
+      "Student Private Name",
+      "GROUP-CODE-SECRET",
+      "00000000-0000-4000-8000-000000000001",
+      "receipt-payload-secret",
+    ];
+    const mutationResponse = response({
+      provider: unsafeValues,
+      raw: { payload: "receipt-payload-secret" },
+    }, { status: 500 });
+    const { fetchImpl } = resetFetch({ mutationResponse });
+    const output = [];
+
+    await expect(runProductionDisposableReset(environment, {
+      fetchImpl,
+      writeStdout: (value) => output.push(value),
+    })).rejects.toThrow("Production disposable reset failed");
+
+    const serializedOutput = output.join("");
+    expect(serializedOutput).toBe(`${JSON.stringify(expectedDiagnosticReceipt)}\n`);
+    for (const unsafeValue of unsafeValues) {
+      expect(serializedOutput).not.toContain(unsafeValue);
+    }
+    expect(Object.values(JSON.parse(serializedOutput)).every(
+      (value) => typeof value === "boolean" || Number.isInteger(value),
+    )).toBe(true);
+  });
+
+  it.each([
+    ["a non-OK diagnostic response", response({ provider: "secret" }, { status: 500 })],
+    ["a malformed diagnostic response", response([{ ...safeDiagnostic, leaked: "secret" }])],
+    ["a diagnostic network failure", new Error("provider diagnostic secret")],
+  ])("fails closed without output after %s", async (_name, diagnosticResponse) => {
+    const { fetchImpl } = resetFetch({
+      mutationResponse: response({ provider: "secret" }, { status: 500 }),
+      diagnosticResponse,
+    });
+    const output = [];
+    await expect(runProductionDisposableReset(environment, {
+      fetchImpl,
+      writeStdout: (value) => output.push(value),
+    })).rejects.toThrow("Production disposable reset failed");
+    expect(output).toEqual([]);
   });
 
   it("rejects a final aggregate that does not preserve the canonical teacher and five groups", async () => {
