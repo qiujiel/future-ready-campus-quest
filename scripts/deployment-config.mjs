@@ -155,6 +155,17 @@ const BOOTSTRAP_PREFLIGHT_STEP = {
 const PRODUCTION_PROJECT_REF = "ghohuwwjxgjqnbsauvzq";
 const LOAD_PROJECT_REF = "vadyhuipwbtgbzpeisbn";
 const PRODUCTION_URL = `https://${PRODUCTION_PROJECT_REF}.supabase.co`;
+const DISPOSABLE_RESET_AUTHORIZATION_ID =
+  "approved-disposable-reset-2026-08-11";
+const DISPOSABLE_RESET_IDENTITY_LINES = Object.freeze([
+  'test "$EXPECTED_SHA" = "$GITHUB_SHA"',
+  'test "$EXPECTED_SHA" = "$(printf \'%s\' "$EXPECTED_SHA" | tr \'[:upper:]\' \'[:lower:]\')"',
+  'printf \'%s\' "$EXPECTED_SHA" | grep -Eq \'^[0-9a-f]{40}$\'',
+  `test "$PRODUCTION_SUPABASE_PROJECT_REF" = "${PRODUCTION_PROJECT_REF}"`,
+  `test "$LOAD_SUPABASE_PROJECT_REF" = "${LOAD_PROJECT_REF}"`,
+  'test "$PRODUCTION_SUPABASE_PROJECT_REF" != "$LOAD_SUPABASE_PROJECT_REF"',
+  `test "$RESET_AUTHORIZATION_ID" = "${DISPOSABLE_RESET_AUTHORIZATION_ID}"`,
+]);
 const DISPOSABLE_STATE_PREFLIGHT_STEP = {
   name: "Verify disposable production state",
   if: "${{ inputs.release_mode == 'disposable-upgrade' }}",
@@ -918,9 +929,7 @@ export function validateProductionDisposableResetConfiguration(workflow) {
   const serialized = JSON.stringify(workflow ?? {});
   const inputs = workflowDispatchInputs(workflow);
   const steps = job?.steps ?? [];
-  const identityStep = steps.find((step) =>
-    String(step?.run ?? "").includes("approved-disposable-reset-2026-08-11")
-  );
+  const identityStep = steps[0];
   const verificationStep = steps.find((step) =>
     String(step?.run ?? "").includes("pnpm test:functions")
   );
@@ -940,10 +949,22 @@ export function validateProductionDisposableResetConfiguration(workflow) {
     !Object.values(inputs).every((input) =>
       input?.required === true && input?.type === "string"
     ) ||
-    !serialized.includes("^[0-9a-f]{40}$") ||
-    !serialized.includes(PRODUCTION_PROJECT_REF) ||
-    !serialized.includes(LOAD_PROJECT_REF) ||
-    !serialized.includes("approved-disposable-reset-2026-08-11") ||
+    !isDeepStrictEqual(job?.env, {
+      PRODUCTION_SUPABASE_PROJECT_REF:
+        "${{ inputs.production_project_ref }}",
+      LOAD_SUPABASE_PROJECT_REF: "${{ vars.LOAD_SUPABASE_PROJECT_REF }}",
+      RESET_AUTHORIZATION_ID: "${{ inputs.reset_authorization_id }}",
+    }) ||
+    identityStep?.name !== "Validate exact approved production reset" ||
+    !isDeepStrictEqual(identityStep?.env, {
+      EXPECTED_SHA: "${{ inputs.expected_sha }}",
+    }) ||
+    !isDeepStrictEqual(
+      String(identityStep?.run ?? "").trim().split("\n").map((line) =>
+        line.trim()
+      ),
+      DISPOSABLE_RESET_IDENTITY_LINES,
+    ) ||
     !serialized.includes("pnpm install --frozen-lockfile") ||
     !identityStep || !verificationStep || !mutationStep
   ) {

@@ -1,5 +1,6 @@
-import { pathToFileURL } from "node:url";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const PRODUCTION_PROJECT_REF = "ghohuwwjxgjqnbsauvzq";
 const LOAD_PROJECT_REF = "vadyhuipwbtgbzpeisbn";
@@ -13,6 +14,8 @@ const FIELDS = Object.freeze({
   productionClassroomCount: "production_classroom_count",
   otherCohortCount: "other_cohort_count",
   productionClassroomGroupCount: "production_classroom_group_count",
+  canonicalGroupCount: "canonical_group_count",
+  canonicalGroupsReady: "canonical_groups_ready",
   joinWindowCount: "join_window_count",
   sessionControlCount: "session_control_count",
   openJoiningCount: "open_joining_count",
@@ -44,20 +47,22 @@ const FIELDS = Object.freeze({
   studentLoginAttemptsAbsent: "student_login_attempts_absent",
 });
 
-const APPROVED_BEFORE = Object.freeze({
+const CANONICAL_AFTER = Object.freeze({
   marked_teacher_count: 1,
-  other_auth_user_count: 1,
+  other_auth_user_count: 0,
   production_classroom_count: 1,
-  other_cohort_count: 1,
+  other_cohort_count: 0,
   production_classroom_group_count: 5,
-  join_window_count: 4,
+  canonical_group_count: 5,
+  canonical_groups_ready: true,
+  join_window_count: 0,
   session_control_count: 0,
   open_joining_count: 0,
   open_quest_start_count: 0,
-  cohort_group_join_code_count: 24,
-  audit_event_count: 7,
-  student_private_profile_count: 1,
-  student_public_profile_count: 1,
+  cohort_group_join_code_count: 0,
+  audit_event_count: 0,
+  student_private_profile_count: 0,
+  student_public_profile_count: 0,
   quest_attempt_count: 0,
   phase_progress_count: 0,
   student_response_count: 0,
@@ -66,11 +71,11 @@ const APPROVED_BEFORE = Object.freeze({
   quest_reflection_count: 0,
   quest_result_count: 0,
   team_score_snapshot_count: 0,
-  student_join_request_count: 1,
-  non_teacher_session_count: 1,
-  join_attempt_count: 1,
+  student_join_request_count: 0,
+  non_teacher_session_count: 0,
+  join_attempt_count: 0,
   recovery_attempt_count: 0,
-  group_identity_receipt_count: 1,
+  group_identity_receipt_count: 0,
   group_media_asset_count: 0,
   cohort_quest_launch_count: 0,
   cohort_quest_launch_receipt_count: 0,
@@ -79,21 +84,6 @@ const APPROVED_BEFORE = Object.freeze({
   group_image_object_count: 0,
   student_login_credentials_absent: true,
   student_login_attempts_absent: true,
-});
-
-const CANONICAL_AFTER = Object.freeze({
-  ...APPROVED_BEFORE,
-  other_auth_user_count: 0,
-  other_cohort_count: 0,
-  join_window_count: 0,
-  cohort_group_join_code_count: 0,
-  audit_event_count: 0,
-  student_private_profile_count: 0,
-  student_public_profile_count: 0,
-  student_join_request_count: 0,
-  non_teacher_session_count: 0,
-  join_attempt_count: 0,
-  group_identity_receipt_count: 0,
 });
 
 function fail() {
@@ -121,6 +111,7 @@ function aggregateExpression() {
   join marked_teachers on marked_teachers.id = cohorts.teacher_id
   where cohorts.title = 'Production Classroom'
     and cohorts.group_count = 5
+    and cohorts.group_capacity = 6
     and cohorts.archived_at is null
 )
 select jsonb_build_object(
@@ -129,6 +120,8 @@ select jsonb_build_object(
   'production_classroom_count', (select count(*)::int from production_classrooms),
   'other_cohort_count', (select count(*)::int from public.cohorts) - (select count(*)::int from production_classrooms),
   'production_classroom_group_count', (select count(*)::int from public.groups where cohort_id in (select id from production_classrooms)),
+  'canonical_group_count', (select count(*)::int from public.groups as groups where groups.cohort_id in (select id from production_classrooms) and groups.group_number between 1 and 5 and groups.display_name = 'Group ' || groups.group_number::text and groups.identity_editor_id is null and groups.identity_locked_at is null and groups.image_object_path is null),
+  'canonical_groups_ready', 5 = (select count(*)::int from public.groups as groups where groups.cohort_id in (select id from production_classrooms) and groups.group_number between 1 and 5 and groups.display_name = 'Group ' || groups.group_number::text and groups.identity_editor_id is null and groups.identity_locked_at is null and groups.image_object_path is null),
   'join_window_count', (select count(*)::int from public.cohort_join_windows),
   'session_control_count', (select count(*)::int from public.cohort_session_controls),
   'open_joining_count', (select count(*)::int from public.cohort_join_windows where closed_at is null),
@@ -161,74 +154,12 @@ select jsonb_build_object(
 ) as aggregate`;
 }
 
-const MUTATION_QUERY = `begin;
-select pg_advisory_xact_lock(hashtextextended('${AUTHORIZATION_ID}', 0));
-lock table auth.users, auth.sessions, public.user_roles, public.cohorts,
-  public.groups, public.cohort_join_windows, public.cohort_session_controls,
-  public.cohort_group_join_codes, public.audit_events,
-  public.student_private_profiles, public.student_public_profiles,
-  public.quest_attempts, public.phase_progress, public.student_responses,
-  public.concept_evidence, public.attempt_items, public.quest_reflections,
-  public.quest_results, public.team_score_snapshots, public.student_join_requests,
-  private.join_attempts, private.session_recovery_tokens,
-  private.group_identity_receipts, private.group_media_assets,
-  public.cohort_quest_launches, private.cohort_quest_launch_receipts,
-  private.teacher_control_audit, private.teacher_roster_control_receipts,
-  storage.objects in share row exclusive mode;
-do $$
-declare
-  actual jsonb;
-begin
-  ${aggregateExpression().replace("select jsonb_build_object", "select jsonb_build_object").replace(" as aggregate", " into actual")};
-  if actual <> '${JSON.stringify(APPROVED_BEFORE)}'::jsonb then
-    raise exception 'reset precondition rejected';
-  end if;
-end
-$$;
-delete from public.cohort_group_join_codes;
-delete from public.cohort_join_windows;
-delete from public.audit_events;
-delete from private.join_attempts;
-delete from private.group_identity_receipts;
-delete from public.cohorts
-where id not in (
-  select cohorts.id
-  from public.cohorts as cohorts
-  join auth.users as users on users.id = cohorts.teacher_id
-  join public.user_roles as roles on roles.user_id = users.id and roles.role = 'teacher'
-  where users.raw_app_meta_data ->> 'bootstrapAuthorizationId' = '${TEACHER_MARKER}'
-    and users.raw_app_meta_data ->> 'role' = 'teacher'
-    and cohorts.title = 'Production Classroom'
-    and cohorts.group_count = 5
-    and cohorts.archived_at is null
-);
-delete from auth.users
-where id not in (
-  select users.id
-  from auth.users as users
-  join public.user_roles as roles on roles.user_id = users.id and roles.role = 'teacher'
-  where users.raw_app_meta_data ->> 'bootstrapAuthorizationId' = '${TEACHER_MARKER}'
-    and users.raw_app_meta_data ->> 'role' = 'teacher'
-);
-do $$
-declare
-  actual jsonb;
-begin
-  ${aggregateExpression().replace(" as aggregate", " into actual")};
-  if actual <> '${JSON.stringify(CANONICAL_AFTER)}'::jsonb then
-    raise exception 'reset verification rejected';
-  end if;
-end
-$$;
-commit;
-select true as reset_applied;`;
-
 const VERIFICATION_QUERY = `with snapshot as (
 ${aggregateExpression()}
 )
 select
 ${Object.entries(FIELDS).map(([, field]) =>
-  field.endsWith("_absent")
+  field.endsWith("_absent") || field.endsWith("_ready")
     ? `  (aggregate ->> '${field}')::boolean as ${field}`
     : `  (aggregate ->> '${field}')::int as ${field}`,
 ).join(",\n")}
@@ -242,7 +173,7 @@ function parseAggregate(body) {
   for (const [name, field] of Object.entries(FIELDS)) {
     if (!Object.hasOwn(body[0], field)) fail();
     const value = body[0][field];
-    if (field.endsWith("_absent")) {
+    if (field.endsWith("_absent") || field.endsWith("_ready")) {
       if (typeof value !== "boolean") fail();
     } else if (!Number.isInteger(value) || value < 0) {
       fail();
@@ -252,33 +183,43 @@ function parseAggregate(body) {
   return Object.freeze(aggregate);
 }
 
-function parseMutation(body) {
-  if (!Array.isArray(body) || body.length !== 1 || !body[0] ||
-    typeof body[0] !== "object" || Array.isArray(body[0]) ||
-    Object.keys(body[0]).length !== 1 || body[0].reset_applied !== true) fail();
+function request(configuration, query, readOnly) {
+  return {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${configuration.accessToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ query, parameters: [], read_only: readOnly }),
+  };
 }
 
-async function query(configuration, fetchImpl, queryText, readOnly) {
+async function attemptMutation(configuration, fetchImpl, mutationQuery) {
+  try {
+    await fetchImpl(
+      `https://api.supabase.com/v1/projects/${configuration.projectRef}/database/query`,
+      request(configuration, mutationQuery, false),
+    );
+  } catch {
+    // A lost response is an indeterminate commit; verification below is authoritative.
+  }
+}
+
+async function verify(configuration, fetchImpl) {
   let response;
   try {
     response = await fetchImpl(
       `https://api.supabase.com/v1/projects/${configuration.projectRef}/database/query`,
-      {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${configuration.accessToken}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ query: queryText, parameters: [], read_only: readOnly }),
-      },
+      request(configuration, VERIFICATION_QUERY, true),
     );
   } catch {
     fail();
   }
   if (!response?.ok) fail();
   try {
-    return await response.json();
-  } catch {
+    return parseAggregate(await response.json());
+  } catch (error) {
+    if (error?.message === FAILURE_MESSAGE) throw error;
     fail();
   }
 }
@@ -300,19 +241,27 @@ export function readProductionDisposableResetConfiguration(environment) {
 export async function runProductionDisposableReset(
   environment,
   {
+    baseDirectory = process.cwd(),
     fetchImpl = globalThis.fetch,
     writeStdout = (value) => process.stdout.write(value),
   } = {},
 ) {
   const configuration = readProductionDisposableResetConfiguration(environment);
   if (typeof fetchImpl !== "function") fail();
-  parseMutation(await query(configuration, fetchImpl, MUTATION_QUERY, false));
-  const aggregate = parseAggregate(await query(
-    configuration,
-    fetchImpl,
-    VERIFICATION_QUERY,
-    true,
-  ));
+  let mutationQuery;
+  try {
+    mutationQuery = await readFile(
+      resolve(
+        baseDirectory,
+        "supabase/reset/production-disposable-reset.sql",
+      ),
+      "utf8",
+    );
+  } catch {
+    fail();
+  }
+  await attemptMutation(configuration, fetchImpl, mutationQuery);
+  const aggregate = await verify(configuration, fetchImpl);
   if (JSON.stringify(aggregate) !== JSON.stringify(Object.fromEntries(
     Object.entries(FIELDS).map(([name, field]) => [name, CANONICAL_AFTER[field]]),
   ))) fail();

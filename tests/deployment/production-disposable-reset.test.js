@@ -16,6 +16,15 @@ const productionRef = "ghohuwwjxgjqnbsauvzq";
 const loadRef = "vadyhuipwbtgbzpeisbn";
 const authorizationId = "approved-disposable-reset-2026-08-11";
 const accessToken = "management-token-value";
+const identityCommands = Object.freeze([
+  'test "$EXPECTED_SHA" = "$GITHUB_SHA"',
+  'test "$EXPECTED_SHA" = "$(printf \'%s\' "$EXPECTED_SHA" | tr \'[:upper:]\' \'[:lower:]\')"',
+  'printf \'%s\' "$EXPECTED_SHA" | grep -Eq \'^[0-9a-f]{40}$\'',
+  `test "$PRODUCTION_SUPABASE_PROJECT_REF" = "${productionRef}"`,
+  `test "$LOAD_SUPABASE_PROJECT_REF" = "${loadRef}"`,
+  'test "$PRODUCTION_SUPABASE_PROJECT_REF" != "$LOAD_SUPABASE_PROJECT_REF"',
+  `test "$RESET_AUTHORIZATION_ID" = "${authorizationId}"`,
+]);
 
 const environment = Object.freeze({
   PRODUCTION_SUPABASE_PROJECT_REF: productionRef,
@@ -74,6 +83,8 @@ const canonicalAfter = Object.freeze({
   non_teacher_session_count: 0,
   join_attempt_count: 0,
   group_identity_receipt_count: 0,
+  canonical_group_count: 5,
+  canonical_groups_ready: true,
 });
 
 const expectedReceipt = Object.freeze({
@@ -85,6 +96,8 @@ const expectedReceipt = Object.freeze({
   productionClassroomCount: 1,
   otherCohortCount: 0,
   productionClassroomGroupCount: 5,
+  canonicalGroupCount: 5,
+  canonicalGroupsReady: true,
   joinWindowCount: 0,
   sessionControlCount: 0,
   openJoiningCount: 0,
@@ -116,20 +129,25 @@ const expectedReceipt = Object.freeze({
   studentLoginAttemptsAbsent: true,
 });
 
-function response(body, { status = 201 } = {}) {
-  return new Response(JSON.stringify(body), {
+function response(body, { status = 201, raw = false } = {}) {
+  return new Response(raw ? body : JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
   });
 }
 
-function resetFetch({ mutation = [{ reset_applied: true }], verification = [canonicalAfter] } = {}) {
+function resetFetch({
+  mutationResponse = response("opaque provider response", { raw: true }),
+  verificationResponse = response([canonicalAfter]),
+} = {}) {
   const calls = [];
   return {
     calls,
     fetchImpl: async (url, options) => {
       calls.push({ url, options, body: JSON.parse(options.body) });
-      return response(calls.length === 1 ? mutation : verification);
+      const candidate = calls.length === 1 ? mutationResponse : verificationResponse;
+      if (candidate instanceof Error) throw candidate;
+      return candidate;
     },
   };
 }
@@ -158,6 +176,10 @@ describe("production disposable reset", () => {
   it("uses one locked transactional mutation only for the approved residue, then one aggregate verification", async () => {
     const { calls, fetchImpl } = resetFetch();
     const output = [];
+    const exactMutationSql = await readFile(resolve(
+      root,
+      "supabase/reset/production-disposable-reset.sql",
+    ), "utf8");
 
     await expect(runProductionDisposableReset(environment, {
       fetchImpl,
@@ -172,17 +194,27 @@ describe("production disposable reset", () => {
     expect(calls.map((call) => call.body.read_only)).toEqual([false, true]);
     expect(calls[0].body.parameters).toEqual([]);
     expect(calls[1].body.parameters).toEqual([]);
-    expect(calls[0].body.query).toMatch(/^begin;/i);
+    expect(calls[0].body.query).toBe(exactMutationSql);
+    expect(calls[0].body.query.trim()).toMatch(/^do \$reset\$[\s\S]*\$reset\$;$/i);
+    expect(calls[0].body.query).not.toMatch(/^begin;|\ncommit;|select true as reset_applied/i);
     expect(calls[0].body.query).toContain("pg_advisory_xact_lock");
     expect(calls[0].body.query).toContain("lock table auth.users");
     expect(calls[0].body.query).toContain("public.cohorts");
-    expect(calls[0].body.query).toContain("storage.objects in share row exclusive mode");
+    expect(calls[0].body.query).toMatch(
+      /storage\.objects\s+in share row exclusive mode/,
+    );
+    expect(calls[0].body.query).toContain("cohorts.group_capacity = 6");
+    expect(calls[0].body.query).toContain("groups.group_number between 1 and 5");
+    expect(calls[0].body.query).toContain("display_name = 'Group ' || group_number::text");
+    expect(calls[0].body.query).toContain("identity_editor_id = null");
+    expect(calls[0].body.query).toContain("identity_locked_at = null");
+    expect(calls[0].body.query).toContain("image_object_path = null");
     expect(calls[0].body.query).toContain("student_login_credentials') is null");
     expect(calls[0].body.query).toContain("student_login_attempts') is null");
-    expect(calls[0].body.query).toContain('"other_auth_user_count":1');
-    expect(calls[0].body.query).toContain('"cohort_group_join_code_count":24');
-    expect(calls[0].body.query).toContain('"student_join_request_count":1');
-    expect(calls[0].body.query).toContain('"group_identity_receipt_count":1');
+    expect(calls[0].body.query).toMatch(/"other_auth_user_count":\s*1/);
+    expect(calls[0].body.query).toMatch(/"cohort_group_join_code_count":\s*24/);
+    expect(calls[0].body.query).toMatch(/"student_join_request_count":\s*1/);
+    expect(calls[0].body.query).toMatch(/"group_identity_receipt_count":\s*1/);
     expect(calls[0].body.query).toContain("delete from public.cohort_group_join_codes");
     expect(calls[0].body.query).toContain("delete from public.cohort_join_windows");
     expect(calls[0].body.query).toContain("delete from public.audit_events");
@@ -190,7 +222,6 @@ describe("production disposable reset", () => {
     expect(calls[0].body.query).toContain("delete from private.group_identity_receipts");
     expect(calls[0].body.query).toContain("delete from public.cohorts");
     expect(calls[0].body.query).toContain("delete from auth.users");
-    expect(calls[0].body.query).toContain("commit;");
     expect(calls[0].body.query).not.toContain("delete from public.groups");
     expect(calls[0].body.query).not.toContain("delete from auth.sessions");
     expect(calls[0].body.query).not.toContain("delete from storage.objects");
@@ -202,38 +233,42 @@ describe("production disposable reset", () => {
     expect(output).toEqual([`${JSON.stringify(expectedReceipt)}\n`]);
   });
 
-  it("fails closed on an unapproved transactional aggregate without outputting provider data", async () => {
-    const sensitive = "student@example.test";
-    const { fetchImpl } = resetFetch({ mutation: [{ ...approvedBefore, email: sensitive }] });
-    const stdout = [];
-    const stderr = [];
+  it.each([
+    ["an opaque success body", response("not-json", { raw: true })],
+    ["a non-OK provider response", response({ provider: "secret" }, { status: 500 })],
+    ["a lost mutation response", new Error("provider secret")],
+  ])("always verifies canonical state after %s", async (_name, mutationResponse) => {
+    const { calls, fetchImpl } = resetFetch({ mutationResponse });
     await expect(runProductionDisposableReset(environment, {
       fetchImpl,
-      writeStdout: (value) => stdout.push(value),
-      writeStderr: (value) => stderr.push(value),
-    })).rejects.toThrow("Production disposable reset failed");
-    expect(stdout).toEqual([]);
-    expect(stderr).toEqual([]);
-    expect(JSON.stringify({ stdout, stderr })).not.toContain(sensitive);
-    expect(JSON.stringify({ stdout, stderr })).not.toContain(accessToken);
+      writeStdout: () => {},
+    }))
+      .resolves.toEqual(expectedReceipt);
+    expect(calls).toHaveLength(2);
+    expect(calls[1].body.read_only).toBe(true);
   });
 
   it("rejects a final aggregate that does not preserve the canonical teacher and five groups", async () => {
     const { fetchImpl } = resetFetch({
-      verification: [{ ...canonicalAfter, production_classroom_group_count: 4 }],
+      verificationResponse: response([{
+        ...canonicalAfter,
+        production_classroom_group_count: 4,
+      }]),
     });
     await expect(runProductionDisposableReset(environment, { fetchImpl }))
       .rejects.toThrow("Production disposable reset failed");
   });
 
   it.each([
-    ["non-OK Management API response", async () => response({ provider: "secret" }, { status: 500 })],
-    ["network failure", async () => { throw new Error("provider secret"); }],
-    ["malformed Management API result", async () => response([{ ...canonicalAfter, unexpected: 1 }])],
-  ])("reports %s with one generic redacted error", async (_name, fetchImpl) => {
+    ["non-OK verification response", response({ provider: "secret" }, { status: 500 })],
+    ["network verification failure", new Error("provider secret")],
+    ["malformed verification result", response([{ ...canonicalAfter, unexpected: 1 }])],
+  ])("reports %s with one generic redacted error", async (_name, verificationResponse) => {
+    const { fetchImpl } = resetFetch({ verificationResponse });
     await expect(runProductionDisposableReset(environment, { fetchImpl }))
       .rejects.toThrow("Production disposable reset failed");
-    await expect(runProductionDisposableReset(environment, { fetchImpl }))
+    const retry = resetFetch({ verificationResponse }).fetchImpl;
+    await expect(runProductionDisposableReset(environment, { fetchImpl: retry }))
       .rejects.not.toThrow(/provider secret|management-token-value/);
   });
 
@@ -244,11 +279,21 @@ describe("production disposable reset", () => {
     ), "utf8"));
     const serialized = JSON.stringify(workflow);
     const job = workflow.jobs.reset;
+    const identityStep = job.steps[0];
 
     expect(job.if).toBe("github.ref == 'refs/heads/main'");
     expect(job.environment).toBe("production-backend");
     expect(job.permissions).toEqual({ contents: "read" });
     expect(workflow.concurrency.group).toBe("campus-quest-production-backend");
+    expect(job.env).toEqual({
+      PRODUCTION_SUPABASE_PROJECT_REF: "${{ inputs.production_project_ref }}",
+      LOAD_SUPABASE_PROJECT_REF: "${{ vars.LOAD_SUPABASE_PROJECT_REF }}",
+      RESET_AUTHORIZATION_ID: "${{ inputs.reset_authorization_id }}",
+    });
+    expect(identityStep.name).toBe("Validate exact approved production reset");
+    expect(identityStep.env).toEqual({ EXPECTED_SHA: "${{ inputs.expected_sha }}" });
+    expect(identityStep.run.trim().split("\n").map((line) => line.trim()))
+      .toEqual(identityCommands);
     expect(serialized).toContain("^[0-9a-f]{40}$");
     expect(serialized).toContain(productionRef);
     expect(serialized).toContain(loadRef);
@@ -281,6 +326,23 @@ describe("production disposable reset", () => {
     ["an unpinned action", (workflow) => {
       workflow.jobs.reset.steps[1].uses = "actions/checkout@v6";
     }],
+    ["the identity step name", (workflow) => {
+      workflow.jobs.reset.steps[0].name = "Validate something";
+    }],
+    ["the expected SHA input mapping", (workflow) => {
+      workflow.jobs.reset.steps[0].env.EXPECTED_SHA = "${{ github.sha }}";
+    }],
+    ["the production input mapping", (workflow) => {
+      workflow.jobs.reset.env.PRODUCTION_SUPABASE_PROJECT_REF =
+        "${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}";
+    }],
+    ["the load variable mapping", (workflow) => {
+      workflow.jobs.reset.env.LOAD_SUPABASE_PROJECT_REF =
+        "${{ inputs.production_project_ref }}";
+    }],
+    ["the authorization input mapping", (workflow) => {
+      workflow.jobs.reset.env.RESET_AUTHORIZATION_ID = "${{ github.run_id }}";
+    }],
   ])("rejects workflow protection drift: %s", async (_label, mutate) => {
     const workflow = load(await readFile(resolve(
       root,
@@ -291,4 +353,20 @@ describe("production disposable reset", () => {
       /deployment configuration invalid/i,
     );
   });
+
+  it.each(identityCommands.map((command) => [command]))(
+    "rejects removing identity guard: %s",
+    async (command) => {
+      const workflow = load(await readFile(resolve(
+        root,
+        ".github/workflows/production-disposable-reset.yml",
+      ), "utf8"));
+      workflow.jobs.reset.steps[0].run = workflow.jobs.reset.steps[0].run
+        .split("\n")
+        .filter((line) => line.trim() !== command)
+        .join("\n");
+      expect(() => validateProductionDisposableResetConfiguration(workflow))
+        .toThrow(/deployment configuration invalid/i);
+    },
+  );
 });
