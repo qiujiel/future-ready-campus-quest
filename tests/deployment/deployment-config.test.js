@@ -84,7 +84,7 @@ function validConfiguration() {
               required: true,
               type: "choice",
               default: "disposable-upgrade",
-              options: ["disposable-upgrade", "bootstrap"],
+              options: ["disposable-upgrade", "in-place-upgrade", "bootstrap"],
             },
             bootstrap_authorization_id: {
               description: "Redaction-safe bootstrap authorization identifier",

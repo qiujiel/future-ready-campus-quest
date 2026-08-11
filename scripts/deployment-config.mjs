@@ -59,7 +59,7 @@ const REQUIRED_PRODUCTION_FUNCTIONS = Object.freeze([
 const PRODUCTION_FUNCTION_DEPLOYMENT_ENTRYPOINT =
   "node scripts/deploy-production-functions.mjs";
 const CANONICAL_BACKEND_WORKFLOW_SHA256 =
-  "964d04a1fdd6e2cf81220507bcd9e1c4cd8b90ce9fbc1cf436d75e98bb3816d7";
+  "67a87de68a5d677920d0fdf06cdc03fa26dd13099160507a465f187bd5eaea0b";
 export const CANONICAL_PRODUCTION_FUNCTION_DEPLOYMENT_SCRIPT = [
   'import { spawnSync } from "node:child_process";',
   "",
@@ -89,7 +89,7 @@ const RELEASE_INPUT_DEFINITIONS = {
     required: true,
     type: "choice",
     default: "disposable-upgrade",
-    options: ["disposable-upgrade", "bootstrap"],
+    options: ["disposable-upgrade", "in-place-upgrade", "bootstrap"],
   },
   bootstrap_authorization_id: {
     description: "Redaction-safe bootstrap authorization identifier",

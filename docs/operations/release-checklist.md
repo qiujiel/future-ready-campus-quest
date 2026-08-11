@@ -18,14 +18,16 @@ does not authorize deployment.
 
 - [ ] Dispatch uses the exact approved 40-character `main` SHA and exact
   production project ref; the load project is not a target.
-- [ ] `release_mode` is `disposable-upgrade` and the bootstrap identifier is
-  empty, or it is the separately authorized `bootstrap` path.
+- [ ] `release_mode` is `disposable-upgrade` or `in-place-upgrade` with an empty
+  bootstrap identifier, or it is the separately authorized `bootstrap` path.
 - [ ] For `disposable-upgrade`, the aggregate disposable-state preflight completes before mutation and
   proves the exact marked owner, closed five-group classroom, zero protected
   user/application state, zero `group-images` objects, and no query, aggregate,
   identity, or project-target error.
 - [ ] For the separately authorized `bootstrap` path, the strict empty-bootstrap
   preflight completes before mutation.
+- [ ] For `in-place-upgrade`, the reviewed migrations are forward-only and
+  preserve existing classroom data; every common release gate remains required.
 - [ ] Any nonzero or unverifiable result stops the release; no data is deleted
   to make the preflight pass.
 - [ ] Joining is closed and new quest starts are paused.
@@ -54,8 +56,8 @@ does not authorize deployment.
 ## Outcome
 
 Any unchecked item means **HOLD**. When protected state exists, stop using
-`disposable-upgrade`, preserve the state, and obtain an owner-approved
-data-bearing recovery strategy before another backend deployment.
+`disposable-upgrade` and preserve the state. Use `in-place-upgrade` only when the
+reviewed release preserves that state and every common release gate passes.
 
 - [ ] **GO** — every applicable gate passed.
 - [ ] **HOLD** — blocker/owner: `________________________________________`.

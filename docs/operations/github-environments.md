@@ -7,11 +7,15 @@ project is `vadyhuipwbtgbzpeisbn` and is prohibited as a production target.
 
 ## Backend dispatch
 
-`disposable-upgrade` and `bootstrap` are the only backend dispatch modes.
+`disposable-upgrade`, `in-place-upgrade`, and `bootstrap` are the only backend
+dispatch modes.
 `disposable-upgrade` has an empty bootstrap identifier and runs the aggregate
 disposable-state preflight before mutation. `bootstrap` retains its canonical
 authorization identifier and strict empty-state preflight. Neither path has
 backup or restore inputs.
+`in-place-upgrade` keeps the bootstrap identifier empty, preserves existing
+classroom data, and retains all common exact-SHA/project, automated test,
+migration dry-run/order, protected credential, Function, and readiness gates.
 
 The `production-backend` environment is limited to `main`. No second human
 reviewer is required while the disposable-state preflight passes; this is not a

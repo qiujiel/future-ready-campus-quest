@@ -16,6 +16,11 @@ const disposableUpgrade = {
   bootstrapAuthorizationId: "",
 };
 
+const inPlaceUpgrade = {
+  releaseMode: "in-place-upgrade",
+  bootstrapAuthorizationId: "",
+};
+
 describe("production release authorization", () => {
   it("accepts bootstrap only with a canonical bootstrap authorization identifier", () => {
     expect(validateReleaseAuthorization(bootstrap, { now })).toEqual({
@@ -43,6 +48,20 @@ describe("production release authorization", () => {
     });
   });
 
+  it("accepts in-place-upgrade with a blank bootstrap authorization identifier", () => {
+    expect(validateReleaseAuthorization(inPlaceUpgrade, { now })).toEqual({
+      releaseMode: "in-place-upgrade",
+      bootstrapAuthorizationId: "",
+    });
+  });
+
+  it("rejects a bootstrap authorization ID in in-place-upgrade mode", () => {
+    expect(() => validateReleaseAuthorization({
+      ...inPlaceUpgrade,
+      bootstrapAuthorizationId: bootstrap.bootstrapAuthorizationId,
+    }, { now })).toThrow(/in-place-upgrade.*bootstrap/i);
+  });
+
   it("rejects a bootstrap authorization ID in disposable-upgrade mode", () => {
     expect(() => validateReleaseAuthorization({
       ...disposableUpgrade,
@@ -50,7 +69,7 @@ describe("production release authorization", () => {
     }, { now })).toThrow(/disposable-upgrade.*bootstrap/i);
   });
 
-  it.each(["", "Bootstrap", "initial", "upgrade", "disposable-upgrade "])(
+  it.each(["", "Bootstrap", "initial", "upgrade", "disposable-upgrade ", "in-place-upgrade "])(
     "rejects noncanonical release mode %j",
     (releaseMode) => {
       expect(() => validateReleaseAuthorization({

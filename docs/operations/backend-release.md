@@ -8,12 +8,14 @@ dedicated load project `vadyhuipwbtgbzpeisbn` is never an allowed target.
 
 Dispatch `Release Production Backend` with the exact approved 40-character
 `main` SHA, the exact production project ref `ghohuwwjxgjqnbsauvzq`, and one
-of two modes: `bootstrap` or `disposable-upgrade`.
+of three modes: `bootstrap`, `disposable-upgrade`, or `in-place-upgrade`.
 
 - `bootstrap` retains the canonical bootstrap authorization identifier and its
   strict empty-production preflight.
 - `disposable-upgrade` requires the bootstrap identifier to be empty and the
   aggregate disposable-state preflight to pass.
+- `in-place-upgrade` requires the bootstrap identifier to be empty and preserves
+  existing classroom data while retaining every common release gate.
 
 There are no backup, archive, custody, or restore-rehearsal dispatch inputs.
 Never enter a password, token, URL, protected manifest, or secret as a workflow
@@ -28,6 +30,12 @@ aggregates, mismatched identities, query errors, and every protected-state
 category listed in `free-plan-recovery.md`. A failed check stops the job before
 mutation; the job never deletes state to qualify.
 
+For `in-place-upgrade`, existing classroom state is preserved. Use it only for
+reviewed forward-only migrations that do not reset, delete, anonymize, or repair
+migration history. Exact SHA/ref/URL checks, automated tests, migration list and
+dry run, ordered apply, protected credentials, exact Function deployment, and
+backend readiness remain mandatory.
+
 The workflow then preserves its existing controls: exact SHA/ref/URL checks,
 repository and secret scans, migration list and migration dry run, one ordered
 forward-only migration push, protected environment credentials, secret
@@ -35,9 +43,9 @@ isolation, exact Function-set deployment, RLS and authorization tests, and
 backend readiness. Do not run a second migration command manually after a
 failure. There is no reset, deletion, or migration-history repair.
 
-Keep joining closed and new quest starts paused during the release. If a later
-release contains any user or unexpected classroom state, leave the release on
-HOLD until an owner-approved data-bearing recovery strategy exists.
+Keep joining closed and new quest starts paused during the release. If existing
+classroom state must be preserved, do not use `disposable-upgrade`; use the
+owner-approved `in-place-upgrade` path only for a reviewed preserving release.
 
 ## Protected-content import
 

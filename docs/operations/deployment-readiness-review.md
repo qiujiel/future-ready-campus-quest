@@ -16,8 +16,10 @@ query fails, identity differs, or the target is the load project.
 The protected job logs only aggregate counts and the classification. It must
 prove the marked owner and closed five-group production classroom, zero student
 and protected application state, and zero private `group-images` objects. It
-never deletes state to qualify. Once state exists, the owner must choose and
-approve a data-bearing recovery strategy before another deployment.
+never deletes state to qualify. Once classroom state exists, a reviewed
+`in-place-upgrade` may preserve it while retaining every common exact-SHA,
+project identity, automated test, migration dry-run/order, protected credential,
+Function deployment, and readiness gate.
 
 ## Controls that remain mandatory
 

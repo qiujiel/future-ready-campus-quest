@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url";
 
 const BOOTSTRAP_ID =
   /^frcq-bootstrap-([0-9]{8}T[0-9]{6}Z)-[a-f0-9]{8}$/;
-const MODES = new Set(["bootstrap", "disposable-upgrade"]);
+const MODES = new Set(["bootstrap", "disposable-upgrade", "in-place-upgrade"]);
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
 const REMOVED_RECOVERY_FIELDS = [
   "backupEvidenceId",
@@ -40,7 +40,7 @@ function validateBootstrapAuthorizationId(value, now) {
 export function validateReleaseAuthorization(input, { now = new Date() } = {}) {
   const releaseMode = input?.releaseMode;
   if (!MODES.has(releaseMode)) {
-    fail("release mode must be bootstrap or disposable-upgrade");
+    fail("release mode must be bootstrap, disposable-upgrade, or in-place-upgrade");
   }
   if (REMOVED_RECOVERY_FIELDS.some((name) => name in (input ?? {}))) {
     fail("recovery evidence is not supported");
@@ -57,7 +57,7 @@ export function validateReleaseAuthorization(input, { now = new Date() } = {}) {
   }
 
   if (input?.bootstrapAuthorizationId !== "") {
-    fail("disposable-upgrade bootstrap authorization ID must be empty");
+    fail(`${releaseMode} bootstrap authorization ID must be empty`);
   }
   return Object.freeze({
     releaseMode,
