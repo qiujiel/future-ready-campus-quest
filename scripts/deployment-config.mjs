@@ -155,6 +155,17 @@ const BOOTSTRAP_PREFLIGHT_STEP = {
 const PRODUCTION_PROJECT_REF = "ghohuwwjxgjqnbsauvzq";
 const LOAD_PROJECT_REF = "vadyhuipwbtgbzpeisbn";
 const PRODUCTION_URL = `https://${PRODUCTION_PROJECT_REF}.supabase.co`;
+const DISPOSABLE_RESET_AUTHORIZATION_ID =
+  "approved-disposable-reset-2026-08-11";
+const DISPOSABLE_RESET_IDENTITY_LINES = Object.freeze([
+  'test "$EXPECTED_SHA" = "$GITHUB_SHA"',
+  'test "$EXPECTED_SHA" = "$(printf \'%s\' "$EXPECTED_SHA" | tr \'[:upper:]\' \'[:lower:]\')"',
+  'printf \'%s\' "$EXPECTED_SHA" | grep -Eq \'^[0-9a-f]{40}$\'',
+  `test "$PRODUCTION_SUPABASE_PROJECT_REF" = "${PRODUCTION_PROJECT_REF}"`,
+  `test "$LOAD_SUPABASE_PROJECT_REF" = "${LOAD_PROJECT_REF}"`,
+  'test "$PRODUCTION_SUPABASE_PROJECT_REF" != "$LOAD_SUPABASE_PROJECT_REF"',
+  `test "$RESET_AUTHORIZATION_ID" = "${DISPOSABLE_RESET_AUTHORIZATION_ID}"`,
+]);
 const DISPOSABLE_STATE_PREFLIGHT_STEP = {
   name: "Verify disposable production state",
   if: "${{ inputs.release_mode == 'disposable-upgrade' }}",
@@ -913,6 +924,77 @@ export function validateProductionClassroomNatFixConfiguration(workflow) {
   requirePinnedActions([workflow]);
 }
 
+export function validateProductionDisposableResetConfiguration(workflow) {
+  const job = workflow?.jobs?.reset;
+  const serialized = JSON.stringify(workflow ?? {});
+  const inputs = workflowDispatchInputs(workflow);
+  const steps = job?.steps ?? [];
+  const identityStep = steps[0];
+  const verificationStep = steps.find((step) =>
+    String(step?.run ?? "").includes("pnpm test:functions")
+  );
+  const mutationStep = steps.find((step) =>
+    String(step?.run ?? "") === "node scripts/production-disposable-reset.mjs"
+  );
+  if (
+    environmentName(job) !== "production-backend" ||
+    job?.if !== "github.ref == 'refs/heads/main'" ||
+    workflow?.concurrency?.group !== "campus-quest-production-backend" ||
+    workflow?.concurrency?.["cancel-in-progress"] !== false ||
+    !isDeepStrictEqual(Object.keys(inputs).sort(), [
+      "expected_sha",
+      "production_project_ref",
+      "reset_authorization_id",
+    ]) ||
+    !Object.values(inputs).every((input) =>
+      input?.required === true && input?.type === "string"
+    ) ||
+    !isDeepStrictEqual(job?.env, {
+      PRODUCTION_SUPABASE_PROJECT_REF:
+        "${{ inputs.production_project_ref }}",
+      LOAD_SUPABASE_PROJECT_REF: "${{ vars.LOAD_SUPABASE_PROJECT_REF }}",
+      RESET_AUTHORIZATION_ID: "${{ inputs.reset_authorization_id }}",
+    }) ||
+    identityStep?.name !== "Validate exact approved production reset" ||
+    !isDeepStrictEqual(identityStep?.env, {
+      EXPECTED_SHA: "${{ inputs.expected_sha }}",
+    }) ||
+    !isDeepStrictEqual(
+      String(identityStep?.run ?? "").trim().split("\n").map((line) =>
+        line.trim()
+      ),
+      DISPOSABLE_RESET_IDENTITY_LINES,
+    ) ||
+    !serialized.includes("pnpm install --frozen-lockfile") ||
+    !identityStep || !verificationStep || !mutationStep
+  ) {
+    fail("production disposable reset requires the exact protected identity and checks");
+  }
+  const identityIndex = steps.indexOf(identityStep);
+  const verificationIndex = steps.indexOf(verificationStep);
+  const mutationIndex = steps.indexOf(mutationStep);
+  if (identityIndex < 0 || verificationIndex <= identityIndex ||
+    mutationIndex <= verificationIndex ||
+    !["pnpm check:repo", "pnpm check:deployment", "pnpm lint", "pnpm typecheck", "pnpm test", "pnpm test:functions"].every(
+      (command) => String(verificationStep.run).includes(command),
+    )) {
+    fail("production disposable reset must verify the approved source before mutation");
+  }
+  if (!isDeepStrictEqual(mutationStep.env, {
+    PRODUCTION_SUPABASE_PROJECT_REF: "${{ inputs.production_project_ref }}",
+    LOAD_SUPABASE_PROJECT_REF: "${{ vars.LOAD_SUPABASE_PROJECT_REF }}",
+    RESET_AUTHORIZATION_ID: "${{ inputs.reset_authorization_id }}",
+    SUPABASE_ACCESS_TOKEN: "${{ secrets.SUPABASE_ACCESS_TOKEN }}",
+  })) {
+    fail("production disposable reset mutation must receive only approved identity and management access");
+  }
+  if (/(?:upload|download)-artifact|PRODUCTION_SUPABASE_SECRET_KEY|PRODUCTION_SUPABASE_DB_PASSWORD|LOAD_SUPABASE_SECRET_KEY|SERVICE_ROLE|ANON_KEY/i.test(serialized)) {
+    fail("production disposable reset must not expose artifacts or application credentials");
+  }
+  requireContentsReadOnly(job, "production disposable reset");
+  requirePinnedActions([workflow]);
+}
+
 export function validateProductionJoinLatencyFixConfiguration(workflow) {
   const job = workflow?.jobs?.deploy_fix;
   const serialized = JSON.stringify(workflow ?? {});
@@ -1050,6 +1132,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     loadTestBootstrap,
     productionClassroomNatFix,
     productionJoinLatencyFix,
+    productionDisposableReset,
   ] = await Promise.all([
     readWorkflow("ci.yml"),
     readFile(resolve(workflowDirectory, "backend-production.yml"), "utf8"),
@@ -1061,6 +1144,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     readWorkflow("load-test-bootstrap.yml"),
     readWorkflow("production-classroom-nat-fix.yml"),
     readWorkflow("production-join-latency-fix.yml"),
+    readWorkflow("production-disposable-reset.yml"),
   ]);
   return {
     ci,
@@ -1074,6 +1158,7 @@ export async function loadDeploymentConfiguration(baseDirectory) {
     loadTestBootstrap,
     productionClassroomNatFix,
     productionJoinLatencyFix,
+    productionDisposableReset,
   };
 }
 
@@ -1095,6 +1180,9 @@ async function main() {
   );
   validateProductionJoinLatencyFixConfiguration(
     configuration.productionJoinLatencyFix,
+  );
+  validateProductionDisposableResetConfiguration(
+    configuration.productionDisposableReset,
   );
   process.stdout.write("Deployment workflow boundaries passed.\n");
 }
