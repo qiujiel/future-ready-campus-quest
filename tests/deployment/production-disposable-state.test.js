@@ -391,11 +391,13 @@ describe("disposable production state", () => {
   });
 
   it("counts each validated present optional login table exactly", async () => {
+    let aggregateQuery;
     const fetchImpl = async (_url, options) => {
       const { query } = JSON.parse(options.body);
       if (query.includes("to_regclass")) {
         return response([optionalLoginTablePresence()]);
       }
+      aggregateQuery = query;
       return response([providerRow({
         ...disposable,
         studentCredentialCount: 2,
@@ -408,6 +410,31 @@ describe("disposable production state", () => {
       studentCredentialCount: 2,
       studentLoginAttemptCount: 3,
     });
+    expect(aggregateQuery.match(/from private\.student_login_credentials/g)).toHaveLength(1);
+    expect(aggregateQuery.match(/from private\.student_login_attempts/g)).toHaveLength(1);
+  });
+
+  it("counts a present optional credential table while zeroing an absent login attempt table", async () => {
+    let aggregateQuery;
+    const fetchImpl = async (_url, options) => {
+      const { query } = JSON.parse(options.body);
+      if (query.includes("to_regclass")) {
+        return response([optionalLoginTablePresence({ studentLoginAttempts: false })]);
+      }
+      aggregateQuery = query;
+      return response([providerRow({
+        ...disposable,
+        studentCredentialCount: 4,
+      })]);
+    };
+
+    await expect(fetchDisposableStateSnapshot(configuration, fetchImpl)).resolves.toEqual({
+      ...disposable,
+      studentCredentialCount: 4,
+    });
+    expect(aggregateQuery.match(/from private\.student_login_credentials/g)).toHaveLength(1);
+    expect(aggregateQuery).toContain("0::int as student_login_attempt_count");
+    expect(aggregateQuery).not.toContain("from private.student_login_attempts");
   });
 
   it("fails closed on an ambiguous optional login table presence result", async () => {
