@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createDisposableStateFailureReceipt,
   evaluateDisposableStateSnapshot,
   fetchDisposableStateSnapshot,
   readDisposableStateConfiguration,
+  runDisposableStatePreflight,
 } from "../../scripts/production-disposable-state-core.mjs";
 
 const productionRef = "ghohuwwjxgjqnbsauvzq";
@@ -69,6 +71,21 @@ const expectedEvidence = {
   releaseMode: "disposable-upgrade",
   replaceableState: true,
   ...disposable,
+};
+
+const protectedDisposable = {
+  ...disposable,
+  studentCredentialCount: 1,
+  email: "student@example.test",
+  providerResponse: "sensitive-provider-response",
+};
+
+const expectedFailureReceipt = {
+  projectRef: productionRef,
+  releaseMode: "disposable-upgrade",
+  replaceableState: false,
+  ...disposable,
+  studentCredentialCount: 1,
 };
 
 function response(body, { status = 201 } = {}) {
@@ -150,6 +167,57 @@ describe("disposable production state", () => {
   it("accepts only the exact closed replaceable classroom fixture", () => {
     expect(evaluateDisposableStateSnapshot(disposable, configuration))
       .toEqual(expectedEvidence);
+  });
+
+  it("creates a redaction-safe receipt from a validated protected snapshot", () => {
+    expect(createDisposableStateFailureReceipt(protectedDisposable, configuration))
+      .toEqual(expectedFailureReceipt);
+    expect(JSON.stringify(createDisposableStateFailureReceipt(protectedDisposable, configuration)))
+      .not.toContain("student@example.test");
+    expect(JSON.stringify(createDisposableStateFailureReceipt(protectedDisposable, configuration)))
+      .not.toContain("sensitive-provider-response");
+  });
+
+  it("emits the redaction-safe receipt to stderr when classification fails", async () => {
+    const stdout = [];
+    const stderr = [];
+
+    await expect(runDisposableStatePreflight(environment, {
+      fetchImpl: async () => response([providerRow(protectedDisposable)]),
+      writeStdout: (value) => stdout.push(value),
+      writeStderr: (value) => stderr.push(value),
+    })).rejects.toThrow("Disposable production preflight failed");
+
+    expect(stdout).toEqual([]);
+    expect(stderr).toEqual([`${JSON.stringify(expectedFailureReceipt)}\n`]);
+  });
+
+  it("does not emit a failure receipt after a successful classification", async () => {
+    const stderr = [];
+
+    await expect(runDisposableStatePreflight(environment, {
+      fetchImpl: async () => response([providerRow()]),
+      writeStdout: () => { throw new Error("stdout-unavailable"); },
+      writeStderr: (value) => stderr.push(value),
+    })).rejects.toThrow("stdout-unavailable");
+
+    expect(stderr).toEqual([]);
+  });
+
+  it.each([
+    ["configuration", { ...environment, RELEASE_MODE: "upgrade" }, async () => response([providerRow()])],
+    ["network", environment, async () => { throw new Error("sensitive-provider-response"); }],
+    ["malformed response", environment, async () => response({ error: "sensitive-provider-response" })],
+  ])("emits no receipt before a validated snapshot: %s", async (_label, runEnvironment, fetchImpl) => {
+    const stderr = [];
+
+    await expect(runDisposableStatePreflight(runEnvironment, {
+      fetchImpl,
+      writeStdout: () => {},
+      writeStderr: (value) => stderr.push(value),
+    })).rejects.toThrow("Disposable production preflight failed");
+
+    expect(stderr).toEqual([]);
   });
 
   it.each([
