@@ -104,6 +104,54 @@ const CANONICAL_AFTER = Object.freeze({
   student_login_attempts_absent: true,
 });
 
+const PRE_MUTATION_EXPECTED = Object.freeze({
+  marked_teacher_count: 1,
+  other_auth_user_count: 1,
+  production_classroom_count: 1,
+  other_cohort_count: 1,
+  production_classroom_group_count: 5,
+  join_window_count: 4,
+  session_control_count: 0,
+  open_joining_count: 0,
+  open_quest_start_count: 0,
+  cohort_group_join_code_count: 24,
+  audit_event_count: 7,
+  student_private_profile_count: 1,
+  student_public_profile_count: 1,
+  quest_attempt_count: 0,
+  phase_progress_count: 0,
+  student_response_count: 0,
+  concept_evidence_count: 0,
+  attempt_item_count: 0,
+  quest_reflection_count: 0,
+  quest_result_count: 0,
+  team_score_snapshot_count: 0,
+  student_join_request_count: 1,
+  non_teacher_session_count: 1,
+  join_attempt_count: 1,
+  recovery_attempt_count: 0,
+  group_identity_receipt_count: 1,
+  group_media_asset_count: 0,
+  cohort_quest_launch_count: 0,
+  cohort_quest_launch_receipt_count: 0,
+  teacher_control_audit_count: 0,
+  teacher_roster_control_receipt_count: 0,
+  group_image_object_count: 0,
+  student_login_credentials_absent: true,
+  student_login_attempts_absent: true,
+});
+
+const PRE_MUTATION_READINESS_FIELDS = Object.freeze(Object.fromEntries(
+  Object.entries(FIELDS).flatMap(([name, field]) =>
+    Object.hasOwn(PRE_MUTATION_EXPECTED, field)
+      ? [[
+        `preMutation${name[0].toUpperCase()}${name.slice(1)}Ready`,
+        `pre_mutation_${field}_ready`,
+      ]]
+      : []
+  ),
+));
+
 const DIAGNOSTIC_FIELDS = Object.freeze({
   studentLoginCredentialsAbsent: "student_login_credentials_absent",
   studentLoginAttemptsAbsent: "student_login_attempts_absent",
@@ -121,6 +169,7 @@ const DIAGNOSTIC_FIELDS = Object.freeze({
   groupIdentityReceiptOutsideCanonicalCount:
     "group_identity_receipt_outside_canonical_count",
   groupIdentityReceiptScopeReady: "group_identity_receipt_scope_ready",
+  ...PRE_MUTATION_READINESS_FIELDS,
 });
 
 const DIAGNOSTIC_BOOLEAN_FIELDS = new Set([
@@ -130,6 +179,7 @@ const DIAGNOSTIC_BOOLEAN_FIELDS = new Set([
   "canonical_classroom_capacity_ready",
   "canonical_group_number_shape_ready",
   "group_identity_receipt_scope_ready",
+  ...Object.values(PRE_MUTATION_READINESS_FIELDS),
 ]);
 
 const DIAGNOSTIC_QUERY = `with marked_teachers as (
@@ -165,6 +215,8 @@ const DIAGNOSTIC_QUERY = `with marked_teachers as (
     or groups.identity_editor_id is not null
     or groups.identity_locked_at is not null
     or groups.image_object_path is not null
+), pre_mutation_snapshot as (
+${aggregateExpression()}
 )
 select
   to_regclass('private.student_login_credentials') is null
@@ -212,7 +264,17 @@ select
       where groups.id = receipts.group_id
         and groups.cohort_id not in (select id from canonical_cohorts)
     )
-  ) as group_identity_receipt_scope_ready;`;
+  ) as group_identity_receipt_scope_ready,
+${Object.entries(PRE_MUTATION_READINESS_FIELDS).map(([name, readinessField]) => {
+  const field = FIELDS[name
+    .replace(/^preMutation/, "")
+    .replace(/Ready$/, "")
+    .replace(/^./, (character) => character.toLowerCase())];
+  const expected = PRE_MUTATION_EXPECTED[field];
+  const cast = typeof expected === "boolean" ? "boolean" : "int";
+  return `  (select (aggregate ->> '${field}')::${cast} = ${expected}
+   from pre_mutation_snapshot) as ${readinessField}`;
+}).join(",\n")};`;
 
 function fail() {
   throw new Error(FAILURE_MESSAGE);

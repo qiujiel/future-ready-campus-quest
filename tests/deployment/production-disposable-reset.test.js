@@ -129,6 +129,50 @@ const expectedReceipt = Object.freeze({
   studentLoginAttemptsAbsent: true,
 });
 
+const aggregateReadinessFields = Object.freeze([
+  ["preMutationMarkedTeacherCountReady", "pre_mutation_marked_teacher_count_ready"],
+  ["preMutationOtherAuthUserCountReady", "pre_mutation_other_auth_user_count_ready"],
+  ["preMutationProductionClassroomCountReady", "pre_mutation_production_classroom_count_ready"],
+  ["preMutationOtherCohortCountReady", "pre_mutation_other_cohort_count_ready"],
+  ["preMutationProductionClassroomGroupCountReady", "pre_mutation_production_classroom_group_count_ready"],
+  ["preMutationJoinWindowCountReady", "pre_mutation_join_window_count_ready"],
+  ["preMutationSessionControlCountReady", "pre_mutation_session_control_count_ready"],
+  ["preMutationOpenJoiningCountReady", "pre_mutation_open_joining_count_ready"],
+  ["preMutationOpenQuestStartCountReady", "pre_mutation_open_quest_start_count_ready"],
+  ["preMutationCohortGroupJoinCodeCountReady", "pre_mutation_cohort_group_join_code_count_ready"],
+  ["preMutationAuditEventCountReady", "pre_mutation_audit_event_count_ready"],
+  ["preMutationStudentPrivateProfileCountReady", "pre_mutation_student_private_profile_count_ready"],
+  ["preMutationStudentPublicProfileCountReady", "pre_mutation_student_public_profile_count_ready"],
+  ["preMutationQuestAttemptCountReady", "pre_mutation_quest_attempt_count_ready"],
+  ["preMutationPhaseProgressCountReady", "pre_mutation_phase_progress_count_ready"],
+  ["preMutationStudentResponseCountReady", "pre_mutation_student_response_count_ready"],
+  ["preMutationConceptEvidenceCountReady", "pre_mutation_concept_evidence_count_ready"],
+  ["preMutationAttemptItemCountReady", "pre_mutation_attempt_item_count_ready"],
+  ["preMutationQuestReflectionCountReady", "pre_mutation_quest_reflection_count_ready"],
+  ["preMutationQuestResultCountReady", "pre_mutation_quest_result_count_ready"],
+  ["preMutationTeamScoreSnapshotCountReady", "pre_mutation_team_score_snapshot_count_ready"],
+  ["preMutationStudentJoinRequestCountReady", "pre_mutation_student_join_request_count_ready"],
+  ["preMutationNonTeacherSessionCountReady", "pre_mutation_non_teacher_session_count_ready"],
+  ["preMutationJoinAttemptCountReady", "pre_mutation_join_attempt_count_ready"],
+  ["preMutationRecoveryAttemptCountReady", "pre_mutation_recovery_attempt_count_ready"],
+  ["preMutationGroupIdentityReceiptCountReady", "pre_mutation_group_identity_receipt_count_ready"],
+  ["preMutationGroupMediaAssetCountReady", "pre_mutation_group_media_asset_count_ready"],
+  ["preMutationCohortQuestLaunchCountReady", "pre_mutation_cohort_quest_launch_count_ready"],
+  ["preMutationCohortQuestLaunchReceiptCountReady", "pre_mutation_cohort_quest_launch_receipt_count_ready"],
+  ["preMutationTeacherControlAuditCountReady", "pre_mutation_teacher_control_audit_count_ready"],
+  ["preMutationTeacherRosterControlReceiptCountReady", "pre_mutation_teacher_roster_control_receipt_count_ready"],
+  ["preMutationGroupImageObjectCountReady", "pre_mutation_group_image_object_count_ready"],
+  ["preMutationStudentLoginCredentialsAbsentReady", "pre_mutation_student_login_credentials_absent_ready"],
+  ["preMutationStudentLoginAttemptsAbsentReady", "pre_mutation_student_login_attempts_absent_ready"],
+]);
+
+const safeAggregateReadiness = Object.freeze(Object.fromEntries(
+  aggregateReadinessFields.map(([, field]) => [field, true]),
+));
+const expectedAggregateReadiness = Object.freeze(Object.fromEntries(
+  aggregateReadinessFields.map(([name]) => [name, true]),
+));
+
 const safeDiagnostic = Object.freeze({
   student_login_credentials_absent: true,
   student_login_attempts_absent: true,
@@ -144,6 +188,7 @@ const safeDiagnostic = Object.freeze({
   group_identity_receipt_count: 1,
   group_identity_receipt_outside_canonical_count: 1,
   group_identity_receipt_scope_ready: true,
+  ...safeAggregateReadiness,
 });
 
 const expectedDiagnosticReceipt = Object.freeze({
@@ -161,6 +206,7 @@ const expectedDiagnosticReceipt = Object.freeze({
   groupIdentityReceiptCount: 1,
   groupIdentityReceiptOutsideCanonicalCount: 1,
   groupIdentityReceiptScopeReady: true,
+  ...expectedAggregateReadiness,
 });
 
 const resetPhases = Object.freeze([
@@ -353,6 +399,17 @@ describe("production disposable reset", () => {
     expect(calls[1].body.query).toContain(
       "groups.cohort_id not in (select id from canonical_cohorts)",
     );
+    for (const [, field] of aggregateReadinessFields) {
+      expect(calls[1].body.query).toContain(`as ${field}`);
+      const aggregateField = field
+        .replace(/^pre_mutation_/, "")
+        .replace(/_ready$/, "");
+      const expected = approvedBefore[aggregateField];
+      const cast = typeof expected === "boolean" ? "boolean" : "int";
+      expect(calls[1].body.query).toContain(
+        `(aggregate ->> '${aggregateField}')::${cast} = ${expected}`,
+      );
+    }
     expect(output).toEqual([`${JSON.stringify({
       ...(expectedPhase ? { phase: expectedPhase } : {}),
       ...expectedDiagnosticReceipt,
@@ -403,6 +460,33 @@ describe("production disposable reset", () => {
     ]);
   });
 
+  it.each(aggregateReadinessFields)(
+    "reports only the safe %s mismatch flag",
+    async (name, field) => {
+      const { fetchImpl } = resetFetch({
+        mutationResponse: phaseFailure("aggregate"),
+        diagnosticResponse: response([{
+          ...safeDiagnostic,
+          [field]: false,
+        }]),
+      });
+      const output = [];
+      await expect(runProductionDisposableReset(environment, {
+        fetchImpl,
+        writeStdout: (value) => output.push(value),
+      })).rejects.toThrow("Production disposable reset failed");
+      const parsed = JSON.parse(output.join(""));
+      expect(parsed).toEqual({
+        phase: "aggregate",
+        ...expectedDiagnosticReceipt,
+        [name]: false,
+      });
+      expect(Object.entries(parsed).filter(
+        ([candidate, value]) => candidate.startsWith("preMutation") && !value,
+      ).map(([candidate]) => candidate)).toEqual([name]);
+    },
+  );
+
   it("never logs provider bodies, thrown values, credentials, identifiers, names, codes, or receipt payloads on mutation failure", async () => {
     const unsafeValues = [
       accessToken,
@@ -446,6 +530,15 @@ describe("production disposable reset", () => {
   it.each([
     ["a non-OK diagnostic response", response({ provider: "secret" }, { status: 500 })],
     ["a malformed diagnostic response", response([{ ...safeDiagnostic, leaked: "secret" }])],
+    ["a malformed readiness value", response([{
+      ...safeDiagnostic,
+      pre_mutation_audit_event_count_ready: "false",
+    }])],
+    ["a missing readiness field", response([Object.fromEntries(
+      Object.entries(safeDiagnostic).filter(
+        ([name]) => name !== "pre_mutation_audit_event_count_ready",
+      ),
+    )])],
     ["a diagnostic network failure", new Error("provider diagnostic secret")],
   ])("fails closed without output after %s", async (_name, diagnosticResponse) => {
     const { fetchImpl } = resetFetch({
