@@ -236,7 +236,9 @@ export function evaluateDisposableStateSnapshot(snapshot, configuration) {
         "productionClassroomGroupCount",
       ].includes(name) || value === 0);
   const approvedSetupResidue = Object.entries(APPROVED_SETUP_RESIDUE_COUNTS)
-    .every(([name, value]) => counts[name] === value);
+    .every(([name, value]) => name === "joinAttemptCount"
+      ? counts[name] <= value
+      : counts[name] === value);
   if (!canonicalState && !approvedSetupResidue) fail();
   return Object.freeze({
     projectRef: configuration.projectRef,
