@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatConceptLabel } from "../../learning/domain/concepts";
 import type { MissedItemAggregate } from "../../shared/api/contracts";
 import { MisconceptionPanel } from "./MisconceptionPanel";
 
@@ -20,7 +21,10 @@ export function MostMissedItems({
             <li key={item.itemId}>
               <div>
                 <strong>{item.shortLabel}</strong>
-                <span>{item.incorrectCount} of {item.responseCount} missed · {item.conceptId}</span>
+                <span>
+                  {item.incorrectCount} of {item.responseCount} missed ·{" "}
+                  {formatConceptLabel(item.conceptId)}
+                </span>
               </div>
               <button
                 className="quest-button quest-button--secondary"

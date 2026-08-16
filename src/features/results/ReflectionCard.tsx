@@ -3,6 +3,7 @@ import type {
   ReflectionChoice,
   ReflectionPrompt,
 } from "../../shared/api/contracts";
+import { formatConceptLabel } from "../../learning/domain/concepts";
 import { Button } from "../../ui/Button";
 import { Card } from "../../ui/Card";
 
@@ -72,7 +73,7 @@ export function ReflectionCard({
   return (
     <Card
       className="reflection-card"
-      eyebrow={`Reflection focus · ${prompt.conceptId}`}
+      eyebrow={`Reflection focus · ${formatConceptLabel(prompt.conceptId)}`}
       title="Carry one idea forward"
     >
       <p className="reflection-prompt">{prompt.prompt}</p>

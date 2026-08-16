@@ -170,7 +170,9 @@ describe("simplified teacher board", () => {
       name: /most-missed concept/i,
     });
     expect(classFocusHeading).toBeVisible();
-    expect(within(classFocusHeading.closest("section")!).getByText("C1"))
+    expect(within(classFocusHeading.closest("section")!).getByText(
+      "C1 — Purposeful technology use",
+    ))
       .toBeVisible();
 
     const teamResults = screen.getByRole("heading", { name: "Team results" })
@@ -179,7 +181,7 @@ describe("simplified teacher board", () => {
       name: /Future Makers/,
     });
     expect(team).toHaveTextContent(/86/);
-    expect(team).toHaveTextContent(/C1/);
+    expect(team).toHaveTextContent(/C1 — Purposeful technology use/);
     expect(team).toHaveTextContent(/3 of 4/);
 
     fireEvent.click(
@@ -212,8 +214,12 @@ describe("simplified teacher board", () => {
     });
     fireEvent.click(within(team).getByRole("button", { name: /review/i }));
 
+    expect(await screen.findByRole("heading", {
+      name: "Missed questions for C1 — Purposeful technology use",
+    })).toBeVisible();
+
     expect(
-      await screen.findByRole("heading", {
+      screen.getByRole("heading", {
         name: "Which action best protects students when an AI tool is used?",
       }),
     ).toBeVisible();

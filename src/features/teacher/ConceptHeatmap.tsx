@@ -3,6 +3,7 @@ import type {
   ConceptId,
   EvidenceCounts,
 } from "../../shared/api/contracts";
+import { formatConceptLabel } from "../../learning/domain/concepts";
 import {
   evidencePercentage,
   heatmapIntensity,
@@ -33,7 +34,7 @@ function EvidenceButton({
       className="heatmap-cell"
       data-intensity={heatmapIntensity(counts)}
       type="button"
-      aria-label={`${conceptId} ${label} evidence: ${readable}; ${counts.needs_support} need support, ${counts.developing} developing, ${counts.secure} secure`}
+      aria-label={`${formatConceptLabel(conceptId)} ${label} evidence: ${readable}; ${counts.needs_support} need support, ${counts.developing} developing, ${counts.secure} secure`}
       onClick={() => onSelect?.(conceptId, label)}
     >
       <strong>{readable}</strong>
@@ -54,7 +55,7 @@ export function ConceptHeatmap({
 }) {
   return (
     <section className="teacher-panel" aria-labelledby="concept-evidence">
-      <p className="eyebrow">C1–C8 evidence</p>
+      <p className="eyebrow">Eight-concept evidence</p>
       <h2 id="concept-evidence">Concept follow-up map</h2>
       <p>
         First and final evidence stay separate. Retry is formative and never
@@ -63,7 +64,7 @@ export function ConceptHeatmap({
       <div className="teacher-table-scroll">
         <table className="concept-heatmap">
           <caption className="sr-only">
-            First, final, and formative retry evidence for C1 through C8
+            First, final, and formative retry evidence for all eight named concepts
           </caption>
           <thead>
             <tr>
@@ -76,7 +77,7 @@ export function ConceptHeatmap({
           <tbody>
             {concepts.map((concept) => (
               <tr key={concept.conceptId}>
-                <th scope="row">{concept.conceptId}</th>
+                <th scope="row">{formatConceptLabel(concept.conceptId)}</th>
                 <td>
                   <EvidenceButton
                     conceptId={concept.conceptId}

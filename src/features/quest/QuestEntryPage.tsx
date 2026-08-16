@@ -10,6 +10,7 @@ import {
   SubmissionQueue,
   type PendingResponseDraft,
 } from "../../learning/offline/submissionQueue";
+import { formatConceptLabel } from "../../learning/domain/concepts";
 import type {
   LearningItemPayload,
   ReflectionPrompt,
@@ -208,7 +209,7 @@ export function QuestEntryPage({
     try {
       const accepted = await gateway.submitResponse(submission);
       setResponse(accepted);
-      setAcknowledgement(`${item.conceptId} response saved.`);
+      setAcknowledgement(`${formatConceptLabel(item.conceptId)} response saved.`);
       return accepted;
     } catch (caught) {
       if (queue) {
@@ -297,7 +298,6 @@ export function QuestEntryPage({
       phase={phase}
       completedPhases={completedPhases(attempt.currentPhase)}
       visitedConcepts={attempt.visitedConcepts}
-      deadline={attempt.phaseDeadlineAt}
       lastAcknowledgement={acknowledgement}
       resumed
     >

@@ -42,7 +42,7 @@ export function TeamLeaderboard({ teams }: { teams: TeamResult[] }) {
         Team score combines <strong>60% mastery</strong>,{" "}
         <strong>25% improvement</strong>,{" "}
         <strong>10% mission completion</strong>, and{" "}
-        <strong>5% reflection</strong>. Speed is not part of the score.
+        <strong>5% reflection</strong>.
       </p>
       {ranked.length ? (
         <div className="leaderboard-scroll">

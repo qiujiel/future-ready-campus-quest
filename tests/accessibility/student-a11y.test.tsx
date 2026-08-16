@@ -137,8 +137,6 @@ it.each(["diagnostic", "mission", "final"] as const)(
         phase={phase === "mission" ? "mission" : phase}
         completedPhases={phase === "diagnostic" ? ["briefing"] : ["briefing", "diagnostic"]}
         visitedConcepts={phase === "diagnostic" ? ["C1"] : ["C1", "C2"]}
-        deadline="2026-07-31T09:00:00.000Z"
-        now={new Date("2026-07-31T08:55:00.000Z")}
       >
         <MissionCard item={syntheticItem(phase)} onSubmit={async () => result} />
       </QuestShell>,

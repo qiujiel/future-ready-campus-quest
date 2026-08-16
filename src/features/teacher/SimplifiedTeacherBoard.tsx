@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { formatConceptLabel } from "../../learning/domain/concepts";
 import type {
   ClassroomReadinessReport,
   TeacherConceptFocus,
@@ -65,7 +66,9 @@ function MissedQuestionReview({
       <div className="teacher-review-panel__header">
         <div>
           <p className="eyebrow">{scope}</p>
-          <h2 id="missed-review-title">Missed questions for {focus.conceptId}</h2>
+          <h2 id="missed-review-title">
+            Missed questions for {formatConceptLabel(focus.conceptId)}
+          </h2>
         </div>
         <Button variant="secondary" onClick={onClose}>Close review</Button>
       </div>
@@ -86,7 +89,7 @@ function MissedQuestionReview({
             return (
               <li key={item.itemId} className="teacher-review-question">
                 <p className="eyebrow">
-                  {item.conceptId} · {count?.incorrectResponses ?? 0} incorrect responses
+                  {formatConceptLabel(item.conceptId)} · {count?.incorrectResponses ?? 0} incorrect responses
                 </p>
                 <h3>{item.stem}</h3>
                 {"options" in item.interaction ? (
@@ -268,7 +271,9 @@ export function SimplifiedTeacherBoard({
           </h2>
           {summary.classFocus ? (
             <>
-              <p className="teacher-class-focus__concept">{summary.classFocus.conceptId}</p>
+              <p className="teacher-class-focus__concept">
+                {formatConceptLabel(summary.classFocus.conceptId)}
+              </p>
               <p>
                 {summary.classFocus.missedStudents} of {summary.classFocus.studentCount} students missed this concept.
               </p>
@@ -321,7 +326,11 @@ export function SimplifiedTeacherBoard({
                     </a>
                   </th>
                   <td>{team.score ?? "Awaiting completion"}</td>
-                  <td>{team.conceptFocus?.conceptId ?? "Not enough evidence"}</td>
+                  <td>
+                    {team.conceptFocus
+                      ? formatConceptLabel(team.conceptFocus.conceptId)
+                      : "Not enough evidence"}
+                  </td>
                   <td>
                     {team.conceptFocus
                       ? `${team.conceptFocus.missedStudents} of ${team.conceptFocus.studentCount}`

@@ -26,6 +26,12 @@ describe("private results experience", () => {
     for (let concept = 1; concept <= 8; concept += 1) {
       expect(screen.getByRole("row", { name: new RegExp(`C${concept}`) })).toBeVisible();
     }
+    expect(
+      screen.getByRole("row", { name: /C1 — Purposeful technology use/i }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("row", { name: /C4 — MOE e-Pedagogy/i }),
+    ).toBeVisible();
     expect(screen.getByText(/ready for a supported retry/i)).toBeVisible();
     expect(screen.queryByText("Peer Person")).not.toBeInTheDocument();
     expect(screen.queryByText("Other Explorer")).not.toBeInTheDocument();
@@ -61,6 +67,9 @@ describe("private results experience", () => {
         onSubmit={submit}
       />,
     );
+    expect(
+      screen.getByText(/Reflection focus · C8 — Collaborative learning/i),
+    ).toBeVisible();
     expect(screen.getByLabelText(/private note/i)).toHaveValue(
       "Use it when planning our next class project.",
     );
@@ -143,13 +152,13 @@ describe("private results experience", () => {
     expect(screen.queryByText("Other Explorer")).not.toBeInTheDocument();
   });
 
-  it("explains the team formula without presenting speed as an input", () => {
+  it("explains the team formula without speed-related language", () => {
     render(<TeamLeaderboard teams={[]} />);
 
     expect(screen.getByText(/60% mastery/i)).toBeVisible();
     expect(screen.getByText(/25% improvement/i)).toBeVisible();
     expect(screen.getByText(/10% mission completion/i)).toBeVisible();
     expect(screen.getByText(/5% reflection/i)).toBeVisible();
-    expect(screen.getByText(/speed is not part of the score/i)).toBeVisible();
+    expect(screen.queryByText(/speed/i)).not.toBeInTheDocument();
   });
 });

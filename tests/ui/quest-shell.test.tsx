@@ -1,7 +1,5 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QuestShell } from "../../src/features/quest/QuestShell";
-
-const now = new Date("2026-07-31T08:00:00.000Z");
 
 describe("Campus Quest shell", () => {
   it("shows the five destinations, phase states, and C1-C8 coverage", () => {
@@ -10,8 +8,6 @@ describe("Campus Quest shell", () => {
         phase="mission"
         completedPhases={["briefing", "diagnostic"]}
         visitedConcepts={["C1", "C2", "C3", "C4", "C5"]}
-        deadline="2026-07-31T08:05:00.000Z"
-        now={now}
       />,
     );
 
@@ -38,52 +34,21 @@ describe("Campus Quest shell", () => {
       "upcoming",
     );
     expect(screen.getByText(/5 of 8 concepts visited/i)).toBeVisible();
-    expect(screen.getByText(/C1 through C8/i)).toBeVisible();
+    expect(screen.getByText(/all eight named concepts/i)).toBeVisible();
   });
 
-  it("uses the server deadline for calm time guidance without speed scoring", () => {
-    const { rerender } = render(
-      <QuestShell
-        phase="diagnostic"
-        completedPhases={["briefing"]}
-        visitedConcepts={["C1"]}
-        deadline="2026-07-31T08:04:30.000Z"
-        now={now}
-      />,
-    );
-
-    expect(screen.getByText("4:30 remaining")).toBeVisible();
-    expect(screen.getByText(/speed does not affect your score/i)).toBeVisible();
-    expect(screen.queryByText(/moving on soon/i)).not.toBeInTheDocument();
-
-    rerender(
-      <QuestShell
-        phase="diagnostic"
-        completedPhases={["briefing"]}
-        visitedConcepts={["C1"]}
-        deadline="2026-07-31T08:00:45.000Z"
-        now={now}
-      />,
-    );
-    expect(screen.getByText(/moving on soon/i)).toBeVisible();
-  });
-
-  it("updates the deadline display while the phase remains active", () => {
-    vi.useFakeTimers();
+  it("does not show countdown or time-pressure guidance", () => {
     render(
       <QuestShell
         phase="diagnostic"
         completedPhases={["briefing"]}
         visitedConcepts={["C1"]}
-        deadline="2026-07-31T08:00:03.000Z"
-        now={now}
       />,
     );
 
-    expect(screen.getByText("0:03 remaining")).toBeVisible();
-    act(() => vi.advanceTimersByTime(2_000));
-    expect(screen.getByText("0:01 remaining")).toBeVisible();
-    vi.useRealTimers();
+    expect(screen.queryByText(/\d+:\d+ remaining/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/moving on soon/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/speed/i)).not.toBeInTheDocument();
   });
 
   it("announces resume and phase changes while preserving the save receipt", () => {
@@ -92,8 +57,6 @@ describe("Campus Quest shell", () => {
         phase="final"
         completedPhases={["briefing", "diagnostic", "mission"]}
         visitedConcepts={["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"]}
-        deadline="2026-07-31T08:06:00.000Z"
-        now={now}
         resumed
         transitionMessage="Challenge Hall is now open."
         lastAcknowledgement="Your C8 mission response was saved."
@@ -112,8 +75,6 @@ describe("Campus Quest shell", () => {
         phase="briefing"
         completedPhases={[]}
         visitedConcepts={[]}
-        deadline="2026-07-31T08:02:00.000Z"
-        now={now}
       />,
     );
     const toggle = screen.getByRole("button", { name: /reduce animation/i });

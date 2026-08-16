@@ -176,6 +176,9 @@ it("runs an authenticated attempt through feedback, reflection, and private resu
   );
   fireEvent.click(screen.getByRole("button", { name: /confirm response/i }));
   expect(await screen.findByText("Correct")).toBeVisible();
+  expect(screen.getByRole("status")).toHaveTextContent(
+    /C1 — Purposeful technology use response saved/i,
+  );
 
   fireEvent.click(
     screen.getByRole("button", { name: /continue campus route/i }),

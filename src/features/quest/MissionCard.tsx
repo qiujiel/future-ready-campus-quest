@@ -3,6 +3,7 @@ import type {
   LearningItemPayload,
   ResponseResult,
 } from "../../shared/api/contracts";
+import { formatConceptLabel } from "../../learning/domain/concepts";
 import { Button } from "../../ui/Button";
 import { ChoiceInteraction } from "./ChoiceInteraction";
 import { FeedbackPanel } from "./FeedbackPanel";
@@ -84,7 +85,7 @@ function MissionCardSession({
       <header className="mission-card__header">
         <p className="eyebrow">
           {item.phase === "mission" ? "Learning Lab mission" : "Campus challenge"} ·{" "}
-          {item.conceptId}
+          {formatConceptLabel(item.conceptId)}
         </p>
         <h2>{item.stem}</h2>
       </header>

@@ -109,6 +109,7 @@ describe("teacher dashboard", () => {
     render(<ConceptHeatmap concepts={concepts} onSelect={select} />);
 
     const c1 = screen.getByRole("row", { name: /C1/i });
+    expect(c1).toHaveTextContent(/C1 — Purposeful technology use/);
     expect(within(c1).getByRole("button", { name: /first.*17% secure/i }))
       .toBeVisible();
     expect(within(c1).getByRole("button", { name: /final.*67% secure/i }))
@@ -159,6 +160,8 @@ describe("teacher dashboard", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /review C1 final patterns/i }),
     );
+    expect(screen.getByText(/C1 — Purposeful technology use patterns/i))
+      .toBeVisible();
     expect(await screen.findByText(/purpose-missing.*4/i)).toBeVisible();
     expect(
       screen.getByRole("link", { name: /view Future Makers/i }),
@@ -174,6 +177,7 @@ describe("teacher dashboard", () => {
     expect(screen.getByText(/first: needs support/i)).toBeVisible();
     expect(screen.getByText(/final: secure/i)).toBeVisible();
     expect(screen.getByText(/retry: 2 of 3 correct/i)).toBeVisible();
+    expect(screen.getByText("C1 — Purposeful technology use")).toBeVisible();
     await waitFor(() =>
       expect(screen.getByText(/private reflection/i)).toBeVisible(),
     );

@@ -1,4 +1,5 @@
 import type { ConceptId, SupportState } from "../../shared/api/contracts";
+import { formatConceptLabel } from "../../learning/domain/concepts";
 import { Card } from "../../ui/Card";
 
 export interface ConceptDebrief {
@@ -40,7 +41,7 @@ export function PersonalDebrief({
       <div className="results-table-scroll">
         <table className="results-table">
           <caption className="sr-only">
-            Your private evidence across concepts C1 to C8
+            Your private evidence across all eight named concepts
           </caption>
           <thead>
             <tr>
@@ -54,7 +55,7 @@ export function PersonalDebrief({
             {concepts.map((concept) => (
               <tr key={concept.conceptId}>
                 <th scope="row" data-label="Concept">
-                  {concept.conceptId}
+                  {formatConceptLabel(concept.conceptId)}
                 </th>
                 <td data-label="First evidence">
                   {evidenceLabels[concept.firstEvidence]}
