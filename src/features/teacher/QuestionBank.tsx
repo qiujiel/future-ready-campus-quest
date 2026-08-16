@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatConceptLabel } from "../../learning/domain/concepts";
 import type { TeacherQuestionBank } from "../../shared/api/contracts";
 import type { TeacherGateway } from "../../teacher/api/teacherClient";
 import { Button } from "../../ui/Button";
@@ -67,7 +68,7 @@ export function QuestionBank({
             {bank.items.map((item) => (
               <li key={item.itemId} className="question-bank-item">
                 <p className="eyebrow">
-                  {item.itemId} · {item.conceptId} · {item.form}
+                  {item.itemId} · {formatConceptLabel(item.conceptId)} · {item.form}
                 </p>
                 <h3>{item.stem}</h3>
                 {"options" in item.interaction ? (

@@ -1,13 +1,19 @@
+import { formatConceptLabel } from "../../learning/domain/concepts";
+import type { ConceptId } from "../../shared/api/contracts";
+
 export function MisconceptionPanel({
   conceptId,
   tags,
 }: {
-  conceptId: string;
+  conceptId: ConceptId;
   tags: Array<{ tag: string; count: number }>;
 }) {
   return (
-    <aside className="misconception-panel" aria-label={`${conceptId} misconception distribution`}>
-      <h3>{conceptId} patterns</h3>
+    <aside
+      className="misconception-panel"
+      aria-label={`${formatConceptLabel(conceptId)} misconception distribution`}
+    >
+      <h3>{formatConceptLabel(conceptId)} patterns</h3>
       {tags.length ? (
         <ul>
           {tags.map((entry) => (

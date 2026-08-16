@@ -1,4 +1,8 @@
 import type { ResponseResult } from "../../shared/api/contracts";
+import {
+  conceptIdFromMisconceptionTag,
+  formatConceptLabel,
+} from "../../learning/domain/concepts";
 
 function readableMisconception(value: string) {
   return value.replace(/[-_]+/g, " ");
@@ -11,6 +15,10 @@ export function FeedbackPanel({
   result: ResponseResult;
   sourcePageLabel?: string;
 }) {
+  const misconceptionConcept = result.misconceptionTag
+    ? conceptIdFromMisconceptionTag(result.misconceptionTag)
+    : null;
+
   return (
     <section
       className={
@@ -26,7 +34,9 @@ export function FeedbackPanel({
       {!result.correct ? (
         <p>
           <strong>Update your reasoning:</strong>{" "}
-          {result.misconceptionTag
+          {misconceptionConcept
+            ? `Reconsider the ${formatConceptLabel(misconceptionConcept)} idea.`
+            : result.misconceptionTag
             ? `Reconsider the idea that ${readableMisconception(result.misconceptionTag)}.`
             : "Try connecting the choice to its effect on people and purpose."}
         </p>

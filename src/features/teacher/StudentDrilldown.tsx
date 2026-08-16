@@ -2,6 +2,7 @@ import type {
   SupportState,
   TeacherStudentDetail,
 } from "../../shared/api/contracts";
+import { formatConceptLabel } from "../../learning/domain/concepts";
 
 function readable(state: SupportState | "no_evidence") {
   return state.replace("_", " ");
@@ -22,7 +23,7 @@ export function StudentDrilldown({
       <ul className="student-concepts">
         {student.concepts.map((concept) => (
           <li key={concept.conceptId}>
-            <strong>{concept.conceptId}</strong>
+            <strong>{formatConceptLabel(concept.conceptId)}</strong>
             <span>First: {readable(concept.first)}</span>
             <span>Final: {readable(concept.final)}</span>
             <span>Retry: {concept.retry}</span>

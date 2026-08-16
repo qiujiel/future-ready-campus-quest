@@ -16,7 +16,7 @@ export function App() {
             Teacher sign in
           </a>
         </div>
-        <p className="score-note">Thoughtful choices matter. Speed does not affect scoring.</p>
+        <p className="score-note">Thoughtful choices matter.</p>
       </section>
       <aside className="campus-preview" aria-label="Quest route preview">
         <span className="route-dot route-dot--one" aria-hidden="true" />

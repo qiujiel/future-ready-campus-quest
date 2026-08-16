@@ -896,17 +896,6 @@ button:disabled {
   gap: 0.45rem;
 }
 
-.quest-timer {
-  margin: 0;
-  border: 2px solid var(--color-ink);
-  border-radius: 999px;
-  padding: 0.35rem 0.7rem;
-  background: var(--color-warning-soft);
-  font-size: 0.82rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 900;
-}
-
 .quest-shell__layout {
   display: grid;
   gap: 1.25rem;
@@ -1008,7 +997,6 @@ button:disabled {
   line-height: 1.5;
 }
 
-.time-warning,
 .resume-note {
   border-radius: var(--radius-control);
   padding: 0.8rem 1rem;

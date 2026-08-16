@@ -41,6 +41,8 @@ describe("mission interactions", () => {
     const submit = vi.fn(async () => correctResult);
     render(<MissionCard item={item} onSubmit={submit} />);
 
+    expect(screen.getByText(/C3 — EdTech Masterplan 2030/i)).toBeVisible();
+
     const option = screen.getByRole("radio", {
       name: "Agree on a purpose and review risks",
     });
@@ -183,6 +185,27 @@ describe("mission interactions", () => {
     expect(screen.getByText(/update your reasoning/i)).toBeVisible();
     expect(screen.getByText(/speed means quality/i)).toBeVisible();
     expect(screen.queryByText("needs_support")).not.toBeInTheDocument();
+  });
+
+  it("pairs a coded misconception with its canonical concept label", async () => {
+    const result: ResponseResult = {
+      ...correctResult,
+      correct: false,
+      misconceptionTag: "C3-M1",
+      conceptState: "needs_support",
+    };
+    render(<MissionCard item={item} onSubmit={async () => result} />);
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Use every available tool immediately",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /confirm response/i }));
+
+    expect(
+      await screen.findByText(/Reconsider the C3 — EdTech Masterplan 2030 idea/i),
+    ).toBeVisible();
+    expect(screen.queryByText(/C3 M1/i)).not.toBeInTheDocument();
   });
 
   it("clears the previous answer and feedback when the assignment changes", async () => {

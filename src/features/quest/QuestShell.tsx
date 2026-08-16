@@ -1,4 +1,4 @@
-import { type PropsWithChildren, useEffect, useState } from "react";
+import { type PropsWithChildren, useState } from "react";
 import type { ConceptId } from "../../shared/api/contracts";
 import { Button } from "../../ui/Button";
 import { QuestGuide } from "../../ui/QuestGuide";
@@ -24,51 +24,23 @@ function readAnimationPreference() {
   }
 }
 
-function formatRemaining(deadline: string, now: Date) {
-  const seconds = Math.max(
-    0,
-    Math.ceil((new Date(deadline).getTime() - now.getTime()) / 1_000),
-  );
-  const minutes = Math.floor(seconds / 60);
-  return {
-    label: `${minutes}:${String(seconds % 60).padStart(2, "0")} remaining`,
-    seconds,
-  };
-}
-
 export function QuestShell({
   children,
   completedPhases,
-  deadline,
   lastAcknowledgement,
-  now,
   phase,
   resumed = false,
   transitionMessage,
   visitedConcepts,
 }: PropsWithChildren<{
   completedPhases: CampusPhase[];
-  deadline?: string;
   lastAcknowledgement?: string;
-  now?: Date;
   phase: CampusPhase;
   resumed?: boolean;
   transitionMessage?: string;
   visitedConcepts: ConceptId[];
 }>) {
   const [reduceAnimation, setReduceAnimation] = useState(readAnimationPreference);
-  const [clock, setClock] = useState(() => now ?? new Date());
-  const remaining = deadline ? formatRemaining(deadline, clock) : null;
-
-  useEffect(() => {
-    if (!deadline) return;
-    const timer = window.setInterval(() => {
-      setClock((current) =>
-        now ? new Date(current.getTime() + 1_000) : new Date(),
-      );
-    }, 1_000);
-    return () => window.clearInterval(timer);
-  }, [deadline, now]);
 
   function toggleAnimation() {
     setReduceAnimation((current) => {
@@ -90,14 +62,6 @@ export function QuestShell({
             Campus Quest
           </a>
           <div className="quest-topbar__tools">
-            <p
-              className="quest-timer"
-              aria-label={
-                remaining ? `Phase time: ${remaining.label}` : "Waiting for teacher"
-              }
-            >
-              {remaining?.label ?? "Waiting for teacher"}
-            </p>
             <Button
               variant="quiet"
               aria-pressed={reduceAnimation}
@@ -115,17 +79,8 @@ export function QuestShell({
             <h1 id="quest-stage-title">{phaseTitles[phase]}</h1>
             <p className="coverage-note">
               <strong>{visitedConcepts.length} of 8 concepts visited.</strong>{" "}
-              Your route will cover C1 through C8.
+              Your route will cover all eight named concepts.
             </p>
-            <p className="score-note">
-              Thoughtful choices matter. Speed does not affect your score.
-            </p>
-            {remaining && remaining.seconds <= 60 ? (
-              <p className="time-warning">
-                Moving on soon. Finish your current thought; your saved work
-                stays with you.
-              </p>
-            ) : null}
             {resumed ? (
               <p className="resume-note">
                 Welcome back. We restored your place from the campus record.

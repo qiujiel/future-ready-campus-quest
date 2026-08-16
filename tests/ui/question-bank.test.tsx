@@ -42,6 +42,11 @@ it("reveals all 24 questions and answers only after the teacher asks", async () 
   );
 
   expect(await screen.findByText(bank.items[0]!.stem)).toBeVisible();
+  expect(
+    screen.getByText(
+      "C1-Q1 · C1 — Purposeful technology use · diagnostic",
+    ),
+  ).toBeVisible();
   expect(screen.getByText(/24 questions across 8 concepts/i)).toBeVisible();
   expect(screen.getAllByText("Correct response:")).toHaveLength(24);
   expect(screen.getAllByText(/teacher-only rationale/i)).toHaveLength(24);

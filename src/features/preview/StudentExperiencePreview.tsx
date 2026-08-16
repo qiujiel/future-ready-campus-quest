@@ -135,9 +135,6 @@ type PreviewStep =
   | "map"
   | "mission"
   | "results";
-const previewNow = new Date("2030-01-01T09:00:00.000Z");
-const previewDeadline = "2030-01-01T09:05:00.000Z";
-
 export function StudentExperiencePreview() {
   const [step, setStep] = useState<PreviewStep>("join");
   const [identity, setIdentity] = useState<JoinCohortOutput["identity"] | null>(
@@ -197,8 +194,6 @@ export function StudentExperiencePreview() {
         phase="briefing"
         completedPhases={[]}
         visitedConcepts={[]}
-        deadline={previewDeadline}
-        now={previewNow}
       >
         <section className="preview-callout">
           <p className="eyebrow">Meet your crew</p>
@@ -221,8 +216,6 @@ export function StudentExperiencePreview() {
         phase="diagnostic"
         completedPhases={["briefing"]}
         visitedConcepts={[]}
-        deadline={previewDeadline}
-        now={previewNow}
       >
         <section className="preview-callout">
           <p className="eyebrow">Route check</p>
@@ -246,8 +239,6 @@ export function StudentExperiencePreview() {
         phase="mission"
         completedPhases={["briefing", "diagnostic"]}
         visitedConcepts={["C1", "C2", "C3"]}
-        deadline={previewDeadline}
-        now={previewNow}
       >
         <section className="preview-callout">
           <p className="eyebrow">Learning Lab 1 of 6</p>
@@ -267,8 +258,6 @@ export function StudentExperiencePreview() {
         phase="mission"
         completedPhases={["briefing", "diagnostic"]}
         visitedConcepts={["C1", "C2", "C3", "C4"]}
-        deadline={previewDeadline}
-        now={previewNow}
       >
         <MissionCard
           item={previewItem}
